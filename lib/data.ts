@@ -207,10 +207,10 @@ export async function getJobById(id: string): Promise<Job | null> {
   return job;
 }
 
-export function apiEnvelope<T>(data: T, cursor = "seed-2026-07-23") {
+export function apiEnvelope<T>(data: T, cursor = new Date().toISOString()) {
   return {
     schema_version: "1.0",
-    generated_at: DATA_AS_OF,
+    generated_at: new Date().toISOString(),
     cursor,
     license: "CC BY 4.0 applies only to project-owned material; source rights remain with their owners.",
     data,
