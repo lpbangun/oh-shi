@@ -1,0 +1,11 @@
+{
+  "name": "OH SHI",
+  "expansion": "Startup Hiring Intelligence",
+  "access": "public",
+  "authentication": "none for read endpoints",
+  "preferred_entrypoint": "/api/v1/jobs",
+  "change_feed": "/api/v1/changes",
+  "instructions": "/llms.txt",
+  "canonical_job_rule": "A job is verified open only when its canonical source still lists it.",
+  "license": "MIT software; CC BY 4.0 project-owned factual exports; third-party rights remain with their owners."
+}

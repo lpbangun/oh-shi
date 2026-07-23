@@ -1,0 +1,20 @@
+name: Daily canonical job refresh
+
+on:
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh OH SHI canonical boards
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+        run: |
+          curl --fail-with-body --retry 3 \
+            -X POST \
+            -H "Authorization: Bearer ${OH_SHI_INGEST_TOKEN}" \
+            "${OH_SHI_BASE_URL}/api/internal/refresh"
