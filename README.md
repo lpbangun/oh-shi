@@ -11,10 +11,20 @@ Requirements: Node.js 22.13 or newer and pnpm.
 ```bash
 pnpm install
 pnpm dev
-pnpm build
+pnpm quality
 ```
 
 The app uses Cloudflare D1 through the Sites runtime. The database initializes with a small verified pilot dataset on first request.
+
+## Evaluation gate
+
+`pnpm quality` runs the release gate in order:
+
+1. strict TypeScript validation;
+2. data-integrity, normalization, agent-contract, and product-hygiene evals;
+3. the production build.
+
+The build does not run if an earlier criterion fails. `pnpm eval:live` separately verifies the deployed public site and API contracts. The complete criteria are documented in `evals/CRITERIA.md`.
 
 ## Public interfaces
 

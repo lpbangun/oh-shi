@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { DATA_AS_OF, seedChanges, seedCompanies, seedJobs } from "./seed";
+import { seedChanges, seedCompanies, seedJobs } from "./seed";
 import type { ChangeEvent, Company, Job } from "./types";
 
 let initialization: Promise<void> | null = null;

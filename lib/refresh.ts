@@ -1,5 +1,10 @@
 import { env } from "cloudflare:workers";
 import { ensureDatabase } from "./data";
+import {
+  classifyRole,
+  isUsEligible,
+  summarizeCanonicalJob,
+} from "./job-normalization";
 
 type AshbyJob = {
   id: string;
@@ -23,28 +28,6 @@ const boards = [
   { companyId: "company_edison", slug: "edison-scientific", board: "Edison Scientific" },
   { companyId: "company_hotplate", slug: "hotplate", board: "hotplate" },
 ];
-
-function isUsEligible(job: AshbyJob) {
-  const country = job.address?.postalAddress?.addressCountry || "";
-  const location = job.location || "";
-  return country === "United States" || job.isRemote === true || /remote|united states|u\.s\.|new york|san francisco|washington|boston|seattle|austin|los angeles/i.test(location);
-}
-
-function roleFamily(title: string, department = "") {
-  const text = `${title} ${department}`.toLowerCase();
-  if (/people|talent|recruit|human resources|\bhr\b|workplace/.test(text)) return "People operations";
-  if (/sales|growth|gtm|marketing|capture|revenue/.test(text)) return "GTM";
-  if (/operations|chief of staff|strategy/.test(text)) return "Operations";
-  if (/research|scient|eval|data|biostat/.test(text)) return "Data and research";
-  if (/engineer|developer|technical|software/.test(text)) return "Engineering";
-  if (/product|design/.test(text)) return "Product";
-  return "Other";
-}
-
-function summary(job: AshbyJob) {
-  const plain = (job.descriptionPlain || "").replace(/\s+/g, " ").trim();
-  return plain ? plain.slice(0, 220) : `Canonical posting for ${job.title}.`;
-}
 
 export async function refreshCanonicalBoards() {
   await ensureDatabase();
@@ -85,7 +68,7 @@ export async function refreshCanonicalBoards() {
           source.companyId,
           job.id,
           job.title,
-          roleFamily(job.title, job.department),
+          classifyRole(job.title, job.department),
           job.location || "Location not specified",
           job.isRemote ? "Remote" : job.workplaceType || "See posting",
           job.employmentType || "See posting",
@@ -93,7 +76,7 @@ export async function refreshCanonicalBoards() {
           job.jobUrl,
           current ? now : job.publishedAt || now,
           now,
-          summary(job)
+          summarizeCanonicalJob(job)
         ).run();
       verified += 1;
       if (statusChanged) {
