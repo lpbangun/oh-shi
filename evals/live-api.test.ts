@@ -5,12 +5,25 @@ const base =
   process.env.OH_SHI_BASE_URL ||
   "https://oh-shi-intelligence.logsam-fans-triple3.chatgpt.site";
 
+const delay = (milliseconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 async function get(path: string) {
-  const response = await fetch(`${base}${path}`, {
-    headers: { "User-Agent": "OH-SHI-Evals/1.0" },
-  });
-  assert.equal(response.status, 200, `${path} must return 200`);
-  return response;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(`${base}${path}`, {
+        headers: { "User-Agent": "OH-SHI-Evals/1.0" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      assert.equal(response.status, 200, `${path} must return 200`);
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await delay(attempt * 500);
+    }
+  }
+  throw lastError;
 }
 
 test("public site and agent discovery surfaces are reachable", async () => {

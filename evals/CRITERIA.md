@@ -34,6 +34,7 @@ The production build is allowed only after the local eval gate passes.
 - MIT and data-license files exist.
 - Sites configuration contains the real project ID and D1 binding.
 - TypeScript passes before evals, and evals pass before the production build.
+- The eval launcher works when WSL inherits a Windows-mounted temporary directory.
 
 ## Live contract
 

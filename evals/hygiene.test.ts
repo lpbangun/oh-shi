@@ -55,4 +55,6 @@ test("quality script enforces the intended gate order", async () => {
   );
   assert.ok(pkg.scripts.eval);
   assert.ok(pkg.scripts["eval:live"]);
+  assert.match(pkg.scripts.eval, /scripts\/run-evals\.mjs/);
+  assert.match(pkg.scripts["eval:live"], /scripts\/run-evals\.mjs/);
 });
