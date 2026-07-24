@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
 import { ensureDatabase } from "./data";
 import {
+  GROWTH_WINDOW_DAYS,
+  computeEvidenceConfidence,
+  computeHiringScore,
+} from "./hiring-score";
+import {
   classifyRole,
   isUsEligible,
   summarizeCanonicalJob,
@@ -102,10 +107,61 @@ export async function refreshCanonicalBoards() {
     closed += 1;
   }
 
-  for (const source of boards) {
-    const count = await env.DB.prepare("SELECT COUNT(*) as count FROM jobs WHERE company_id=? AND status='verified_open'").bind(source.companyId).first<{ count: number }>();
-    await env.DB.prepare("UPDATE companies SET open_job_count=?, last_verified_at=? WHERE id=?").bind(Number(count?.count || 0), now, source.companyId).run();
+  const windowStart = new Date(Date.parse(now) - GROWTH_WINDOW_DAYS * 86_400_000).toISOString();
+  const profiles = await env.DB.prepare(`SELECT
+    id, stage, founded_year as foundedYear, latest_funding_date as latestFundingDate,
+    source_url as sourceUrl, careers_url as careersUrl, last_verified_at as lastVerifiedAt
+    FROM companies`).all<{
+      id: string;
+      stage: string;
+      foundedYear: number | null;
+      latestFundingDate: string | null;
+      sourceUrl: string;
+      careersUrl: string;
+      lastVerifiedAt: string;
+    }>();
+  let scored = 0;
+
+  for (const company of profiles.results) {
+    const stats = await env.DB.prepare(`SELECT
+      SUM(CASE WHEN status='verified_open' THEN 1 ELSE 0 END) AS openCount,
+      SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) AS opened90,
+      SUM(CASE WHEN closed_at IS NOT NULL AND closed_at >= ? THEN 1 ELSE 0 END) AS closed90,
+      SUM(CASE WHEN status='verified_open' AND last_verified_at >= ? THEN 1 ELSE 0 END) AS freshOpen
+      FROM jobs WHERE company_id = ?`)
+      .bind(windowStart, windowStart, now, company.id)
+      .first<{ openCount: number; opened90: number; closed90: number; freshOpen: number }>();
+
+    const boardVerified = observedByCompany.has(company.id);
+    const lastVerifiedAt = boardVerified ? now : company.lastVerifiedAt;
+    const openJobCount = Number(stats?.openCount || 0);
+
+    const hiringScore = computeHiringScore({
+      openJobCount,
+      openedLast90: Number(stats?.opened90 || 0),
+      closedLast90: Number(stats?.closed90 || 0),
+      stage: company.stage,
+      latestFundingDate: company.latestFundingDate,
+      lastVerifiedAt,
+      now,
+    });
+    const evidenceConfidence = computeEvidenceConfidence({
+      openJobCount,
+      freshlyVerifiedOpenCount: Number(stats?.freshOpen || 0),
+      boardVerified,
+      foundedYear: company.foundedYear,
+      latestFundingDate: company.latestFundingDate,
+      sourceUrl: company.sourceUrl,
+      careersUrl: company.careersUrl,
+      lastVerifiedAt,
+      now,
+    });
+
+    await env.DB.prepare(
+      "UPDATE companies SET open_job_count=?, last_verified_at=?, hiring_score=?, evidence_confidence=? WHERE id=?"
+    ).bind(openJobCount, lastVerifiedAt, hiringScore, evidenceConfidence, company.id).run();
+    scored += 1;
   }
 
-  return { refreshed_at: now, boards: boards.length, verified, opened, closed };
+  return { refreshed_at: now, boards: boards.length, verified, opened, closed, scored };
 }

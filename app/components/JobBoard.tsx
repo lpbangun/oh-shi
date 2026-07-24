@@ -31,7 +31,7 @@ export function JobBoard({ companies, jobs, changes }: Props) {
       return queryMatch && roleMatch && locationMatch;
     });
   }, [jobs, location, query, role]);
-  const highSignal = companies.filter((company) => company.hiringScore >= 85);
+  const highSignal = [...companies].sort((a, b) => b.hiringScore - a.hiringScore).slice(0, 3);
 
   return (
     <main>
@@ -96,14 +96,14 @@ export function JobBoard({ companies, jobs, changes }: Props) {
             {filteredJobs.length === 0 && <p className="empty-state">No jobs match those filters.</p>}
           </div>
           <aside className="signal-watch">
-            <div className="aside-heading"><span>S</span><div><strong>Signal watch</strong><small>Likely to hire within 90 days</small></div></div>
+            <div className="aside-heading"><span>S</span><div><strong>Signal watch</strong><small>Highest hiring momentum</small></div></div>
             {highSignal.map((company) => (
               <Link href={`/company/${company.slug}`} className="signal-company" key={company.id}>
                 <div><strong>{company.name}</strong><span>{company.latestFundingLabel}</span></div>
-                <div className="score-ring" style={{ "--score": `${company.hiringScore * 3.6}deg` } as React.CSSProperties}><span>{company.hiringScore}%</span></div>
+                <div className="score-ring" style={{ "--score": `${company.hiringScore * 3.6}deg` } as React.CSSProperties}><span>{company.hiringScore}</span></div>
               </Link>
             ))}
-            <p className="score-disclaimer">Directional probability, not a promise. Every score includes a confidence receipt and evidence trail.</p>
+            <p className="score-disclaimer">A directional 0-100 momentum score, not a probability or a promise. The formula and its inputs are published in the README.</p>
           </aside>
         </div>
       </section>
@@ -116,7 +116,7 @@ export function JobBoard({ companies, jobs, changes }: Props) {
         <div className="company-grid">
           {companies.map((company) => (
             <Link href={`/company/${company.slug}`} className="company-card" key={company.id}>
-              <div className="company-card-top"><span className="company-avatar company-avatar-large">{company.name.slice(0, 2).toUpperCase()}</span><span className="company-score">{company.hiringScore}<small>%</small></span></div>
+              <div className="company-card-top"><span className="company-avatar company-avatar-large">{company.name.slice(0, 2).toUpperCase()}</span><span className="company-score">{company.hiringScore}</span></div>
               <h3>{company.name}</h3><p>{company.description}</p>
               <div className="company-facts"><span>{company.stage}</span><span>{company.employeeRange}</span><span>Founded {company.foundedYear || "?"}</span></div>
               <div className="company-card-footer"><span>{company.openJobCount} open jobs</span><span>View evidence</span></div>

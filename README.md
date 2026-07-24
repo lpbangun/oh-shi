@@ -51,7 +51,18 @@ The included GitHub Actions workflow runs daily when these repository settings e
 
 ## Signal policy
 
-The 90-day hiring probability is directional, not a guarantee. Early scores are transparent heuristics based on stage, funding recency, career-board activity, open-role growth, and evidence confidence. Historical outcomes should be used to calibrate the model before investor identity affects the score.
+`hiringScore` is a directional 0-100 hiring-momentum score. It is **not** a probability and has not been calibrated against hiring outcomes, so it must not be read as "an N% chance of hiring." It is recomputed on every refresh by `computeHiringScore` in `lib/hiring-score.ts` from four published components:
+
+| Component | Max | Input |
+| --- | --- | --- |
+| Open-role volume | 30 | Verified-open roles, log-saturating at 12 |
+| Open-role growth | 30 | Net opens minus closes over the trailing 90 days, saturating at ±6; a board with no observed activity scores 9 |
+| Funding and stage | 25 | Stage weight (Seed 0.6 → Growth 1.0) times funding recency (full ≤180 days, decaying to 0.4 at 540 days, 0.6 when the funding date is unknown) |
+| Board freshness | 15 | Days since the canonical board was last verified: full ≤2 days, reaching 0 at 30 days |
+
+`evidenceConfidence` is a separate 0-100 score measuring how well-evidenced the record is, not how attractive the company is: verification recency (40), share of open roles re-verified in the latest refresh (30), record completeness (20), and an independent-source check where the company domain differs from the careers domain (10).
+
+Both scores are deterministic functions of stored data and carry no hand-tuning per company. Companies whose canonical board is not in the refresh list are still rescored, and their board-freshness and verification-recency components decay over time. Historical outcomes should be used to calibrate the model before investor identity affects the score.
 
 ## Licensing and source rights
 

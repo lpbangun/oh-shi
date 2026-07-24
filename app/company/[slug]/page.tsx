@@ -19,7 +19,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
           <span className="eyebrow">{company.industry}</span><h1>{company.name}</h1><p>{company.description}</p>
           <div className="detail-actions"><a href={company.careersUrl} target="_blank" rel="noreferrer" className="primary-cta">Canonical careers</a><Link href={`/api/v1/companies/${company.id}`} className="secondary-cta">JSON record</Link></div>
         </div>
-        <div className="big-signal"><strong>{company.hiringScore}%</strong><span>90-day hiring probability</span><small>{company.evidenceConfidence}% evidence confidence</small></div>
+        <div className="big-signal"><strong>{company.hiringScore}</strong><span>Hiring momentum score (0-100)</span><small>Evidence confidence {company.evidenceConfidence}/100</small></div>
       </section>
       <section className="fact-strip">
         <div><span>Stage</span><strong>{company.stage}</strong></div>
