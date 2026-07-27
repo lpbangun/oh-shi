@@ -43,9 +43,9 @@ const DESCENDING = new Set<SortId>(["signal", "title_desc", "company_desc", "com
 /** Lowest quoted figure in a compensation string; unquoted ranges sort last. */
 function compensationFloor(value: string) {
   const match = value.match(/\$\s?([\d.]+)\s?([km])?/i);
-  if (!match) return Number.POSITIVE_INFINITY;
+  if (!match) return -1;
   const amount = Number.parseFloat(match[1]);
-  if (!Number.isFinite(amount)) return Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(amount)) return -1;
   const unit = (match[2] || "").toLowerCase();
   return unit === "m" ? amount * 1_000_000 : unit === "k" ? amount * 1_000 : amount;
 }
