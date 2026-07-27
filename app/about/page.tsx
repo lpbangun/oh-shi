@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "About — OH SHI",
   description:
-    "How OH SHI verifies startup jobs: what we fetch, what we record, and the one number on the site that is a forecast rather than an observation.",
+    "How OH SHI verifies startup jobs and computes its directional hiring-momentum and evidence-confidence scores.",
 };
 
 export default async function AboutPage() {
@@ -41,12 +41,12 @@ export default async function AboutPage() {
       </section>
 
       <section style={{ marginTop: 50 }}>
-        <div className="section-heading compact"><h2>The one number that is a guess</h2></div>
+        <div className="section-heading compact"><h2>How the two scores work</h2></div>
         <p style={{ fontSize: 15, lineHeight: 1.65, maxWidth: "62ch", color: "var(--ink2)" }}>
-          Hiring signal is a 0–100 forecast that a company opens a new role within 90 days. Everything else
-          on this site is something we observed. Each score carries an evidence-confidence figure so you can
-          tell how much is behind it, and a high signal with zero open roles usually means a recent raise
-          and nothing posted yet.
+          Hiring signal is a directional 0–100 measure of observed hiring momentum, not a probability or
+          calibrated forecast. It combines open-role volume, net openings over 90 days, funding stage and
+          recency, and canonical-board freshness. Evidence confidence is separate: it measures verification
+          recency, coverage, company-record completeness, and independent-source corroboration.
         </p>
         <p style={{ fontSize: 15, lineHeight: 1.65, maxWidth: "62ch", color: "var(--ink2)", marginTop: 12 }}>
           The 30-day change shown beside each company counts roles opened minus roles closed in the change

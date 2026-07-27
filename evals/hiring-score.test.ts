@@ -4,7 +4,9 @@ import {
   boardFreshnessPoints,
   computeEvidenceConfidence,
   computeHiringScore,
+  evidenceConfidenceReceipt,
   fundingStagePoints,
+  hiringScoreReceipt,
   openRoleGrowthPoints,
   openRoleVolumePoints,
 } from "../lib/hiring-score";
@@ -142,4 +144,50 @@ test("hiring score and evidence confidence move independently", () => {
     computeHiringScore(hiringInput({ lastVerifiedAt: "2026-06-01T00:00:00.000Z" })) <
       computeHiringScore(hiringInput())
   );
+});
+
+test("published score receipts are complete, versioned, and sum to their totals", () => {
+  for (const receipt of [
+    hiringScoreReceipt(hiringInput()),
+    evidenceConfidenceReceipt(evidenceInput()),
+  ]) {
+    assert.match(receipt.methodologyVersion, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(receipt.components.length, 4);
+    assert.equal(
+      Math.round(receipt.components.reduce((sum, component) => sum + component.points, 0) * 100) /
+        100,
+      receipt.value
+    );
+    assert.equal(
+      receipt.components.reduce((sum, component) => sum + component.max, 0),
+      100
+    );
+    for (const component of receipt.components) {
+      assert.ok(component.name.length > 5);
+      assert.ok(component.points >= 0);
+      assert.ok(component.points <= component.max);
+      assert.ok(Object.keys(component.input).length > 0);
+    }
+  }
+});
+
+test("receipt rounding never pushes a saturated component over its maximum", () => {
+  const result = hiringScoreReceipt(
+    hiringInput({
+      openJobCount: 2,
+      openedLast90: 0,
+      closedLast90: 0,
+      stage: "Seed",
+      latestFundingDate: "2025-12-18",
+      lastVerifiedAt: "2026-07-23T07:30:00.000Z",
+      now: "2026-07-23T07:30:00.000Z",
+    })
+  );
+  assert.equal(
+    result.components.reduce((sum, component) => sum + component.points, 0),
+    result.value
+  );
+  for (const component of result.components) {
+    assert.ok(component.points <= component.max);
+  }
 });

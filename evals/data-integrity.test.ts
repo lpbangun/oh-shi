@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { seedChanges, seedCompanies, seedJobs } from "../lib/seed";
+import { companyScoreReceipts } from "../lib/hiring-score";
 
 const currentYear = new Date().getUTCFullYear();
 const validJobStates = new Set(["verified_open", "verified_closed"]);
@@ -15,7 +16,7 @@ function validDate(value: string | null, label: string) {
 }
 
 test("seed companies meet the intelligence contract", () => {
-  assert.ok(seedCompanies.length >= 5, "pilot must include at least five companies");
+  assert.ok(seedCompanies.length >= 12, "tracked coverage must include at least twelve companies");
   unique(seedCompanies.map((company) => company.id), "company ids");
   unique(seedCompanies.map((company) => company.slug), "company slugs");
   unique(seedCompanies.map((company) => company.domain), "company domains");
@@ -28,12 +29,30 @@ test("seed companies meet the intelligence contract", () => {
     assert.ok(company.stage.length > 0);
     assert.ok(company.fundingMode.length > 0);
     assert.ok(company.latestFundingLabel.length > 0);
+    assert.ok(company.sector.length > 0);
     assert.ok(company.hiringScore >= 0 && company.hiringScore <= 100);
     assert.ok(company.evidenceConfidence >= 0 && company.evidenceConfidence <= 100);
     assert.match(company.careersUrl, /^https:\/\//);
     assert.match(company.sourceUrl, /^https:\/\//);
     validDate(company.latestFundingDate, `${company.name} funding date`);
     validDate(company.lastVerifiedAt, `${company.name} verification date`);
+  }
+  assert.ok(
+    new Set(seedCompanies.map((company) => company.sector)).size >= 8,
+    "tracked companies must span at least eight normalized sectors"
+  );
+});
+
+test("seed counts and published scores are computed from canonical facts", () => {
+  for (const company of seedCompanies) {
+    const receipts = companyScoreReceipts(
+      company,
+      seedJobs,
+      seedChanges,
+      company.lastVerifiedAt
+    );
+    assert.equal(company.hiringScore, receipts.hiring.value);
+    assert.equal(company.evidenceConfidence, receipts.evidence.value);
   }
 });
 

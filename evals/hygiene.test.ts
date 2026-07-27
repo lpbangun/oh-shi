@@ -58,3 +58,38 @@ test("quality script enforces the intended gate order", async () => {
   assert.match(pkg.scripts.eval, /scripts\/run-evals\.mjs/);
   assert.match(pkg.scripts["eval:live"], /scripts\/run-evals\.mjs/);
 });
+
+test("CI enforces frozen quality and browser gates on pushes and pull requests", async () => {
+  const pkg = JSON.parse(await read("package.json"));
+  const workflow = await read(".github/workflows/ci.yml");
+
+  assert.equal(pkg.dependencies.next, "16.2.12");
+  assert.equal(pkg.devDependencies["eslint-config-next"], "16.2.12");
+  assert.equal(pkg.packageManager, "pnpm@11.17.0");
+  assert.ok(pkg.devDependencies["@playwright/test"]);
+  assert.ok(pkg.devDependencies["@axe-core/playwright"]);
+  for (const command of ["lint", "typecheck", "eval", "build", "e2e"]) {
+    assert.match(pkg.scripts["quality:ci"], new RegExp(`pnpm run ${command}\\b`));
+  }
+  assert.match(workflow, /\n\s+push:/);
+  assert.match(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /permissions:\s*\n\s+contents: read/);
+  assert.match(workflow, /concurrency:/);
+  assert.match(workflow, /pnpm install --frozen-lockfile/);
+  for (const command of ["lint", "typecheck", "eval", "build", "e2e"]) {
+    assert.match(workflow, new RegExp(`pnpm run ${command}\\b`));
+  }
+});
+
+test("daily refresh schedule matches product copy and proves API freshness", async () => {
+  const workflow = await read(".github/workflows/daily-refresh.yml");
+  const refreshRunner = await read("scripts/run-canonical-refresh.mjs");
+
+  assert.match(workflow, /cron: "30 7 \* \* \*"/);
+  assert.match(workflow, /OH_SHI_BASE_URL/);
+  assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
+  assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
+  assert.match(refreshRunner, /Preflight failed/);
+  assert.match(refreshRunner, /refresh_run/);
+  assert.match(refreshRunner, /lastVerifiedAt/);
+});

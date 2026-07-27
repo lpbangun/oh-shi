@@ -14,11 +14,13 @@ pnpm dev
 pnpm quality
 ```
 
-The app uses Cloudflare D1 through the Sites runtime. The database initializes with a small verified pilot dataset on first request.
+The app uses Cloudflare D1 through the Sites runtime. The database initializes with
+12 source-verified companies across a normalized sector taxonomy, then the canonical
+daily refresh replaces seed hiring facts with current Ashby board records.
 
 ## Evaluation gate
 
-`pnpm quality` runs the release gate in order:
+`pnpm quality` runs the local release gate in order:
 
 1. strict TypeScript validation;
 2. data-integrity, normalization, agent-contract, and product-hygiene evals;
@@ -26,9 +28,16 @@ The app uses Cloudflare D1 through the Sites runtime. The database initializes w
 
 The build does not run if an earlier criterion fails. `pnpm eval:live` separately verifies the deployed public site and API contracts. The complete criteria are documented in `evals/CRITERIA.md`.
 
+`pnpm quality:ci` adds lint and Playwright coverage for desktop, 320px mobile,
+keyboard navigation, reduced motion, pagination, agent contracts, and accessibility.
+The push/PR workflow also performs a frozen install and rejects high-severity
+production dependency advisories.
+
 ## Public interfaces
 
-- `GET /api/v1/companies`
+- `GET /api/v1/intelligence` (preferred; capability discovery)
+- `GET /api/v1/intelligence?view=jobs|companies|movements|sectors`
+- `GET /api/v1/companies` (compatibility)
 - `GET /api/v1/companies/:id`
 - `GET /api/v1/jobs`
 - `GET /api/v1/jobs/:id`
@@ -39,6 +48,9 @@ The build does not run if an earlier criterion fails. `pnpm eval:live` separatel
 - `GET /llms.txt`
 
 Pass `?include_closed=true` to the jobs endpoint to retain closed history.
+The preferred intelligence endpoint validates filters, returns HTTP 400 for unknown
+parameters, and provides deterministic cursor pagination. See `/llms.txt` for exact
+filters and natural-language request recipes.
 
 ## Daily refresh
 

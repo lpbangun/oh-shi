@@ -7,7 +7,10 @@ The production build is allowed only after the local eval gate passes.
 - Company, job, and change identifiers are unique.
 - Every job references a known company.
 - Every change references a known company or job.
-- Hiring probability and evidence confidence remain within 0-100.
+- Hiring signal and evidence confidence remain within 0-100.
+- Stored score totals equal their structured calculation receipts.
+- At least 12 tracked companies cover at least eight normalized sectors.
+- Company/day and sector/day movement aggregates preserve underlying evidence.
 - Seed open-job counts match the actual seed records.
 - Canonical URLs are HTTPS and verified-open jobs do not have a closed timestamp.
 - Company records include stage, founding year, funding context, source evidence, and verification time.
@@ -20,7 +23,9 @@ The production build is allowed only after the local eval gate passes.
 
 ## Agent contract
 
-- Public read routes exist for companies, jobs, changes, JSONL exports, and `llms.txt`.
+- The preferred intelligence route discovers and serves jobs, companies, movements,
+  and sectors with validated filters and deterministic cursor pagination.
+- Compatibility routes remain available for companies, jobs, changes, and JSONL exports.
 - Read endpoints do not require authentication.
 - Agent policy is valid JSON and declares public read access.
 - API envelopes expose schema version, generation time, cursor, license, and data.
@@ -35,7 +40,12 @@ The production build is allowed only after the local eval gate passes.
 - Sites configuration contains the real project ID and D1 binding.
 - TypeScript passes before evals, and evals pass before the production build.
 - The eval launcher works when WSL inherits a Windows-mounted temporary directory.
+- Desktop and 320px browser flows pass keyboard, pagination, reduced-motion, and
+  automated accessibility checks.
+- CI performs frozen install, lint, typecheck, evals, build, E2E, and a
+  high-severity production dependency audit.
 
 ## Live contract
 
-The separate live eval checks the deployed public URL, JSON contracts, embedded company context, canonical URLs, current timestamps, and core agent discovery files.
+The separate live eval checks discovery, real record freshness, canonical URLs,
+validated filters, company pagination, movement evidence, and score-receipt parity.

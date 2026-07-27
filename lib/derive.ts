@@ -1,4 +1,15 @@
-import type { ChangeEvent, Company, Job } from "./types";
+import {
+  normalizeSector,
+  type ChangeEvent,
+  type Company,
+  type Job,
+  type MarketMovement,
+  type MovementJobEvidence,
+  type SectorName,
+} from "./types";
+
+export { normalizeSector } from "./types";
+export type { MarketMovement } from "./types";
 
 /**
  * Values the homepage needs that are not columns on any table.
@@ -79,7 +90,7 @@ export function sectorStats(
   const buckets = new Map<string, Company[]>();
 
   for (const company of companies) {
-    const name = company.industry || "Unclassified";
+    const name = company.sector || normalizeSector(company.industry);
     const bucket = buckets.get(name);
     if (bucket) bucket.push(company);
     else buckets.set(name, [company]);
@@ -112,5 +123,226 @@ export function facetValues(jobs: Job[]) {
     departments: collect((job) => job.roleFamily),
     locations: collect((job) => job.location),
     employmentTypes: collect((job) => job.employmentType),
+    sectors: Array.from(
+      new Set(
+        jobs
+          .map((job) =>
+            job.company
+              ? job.company.sector || normalizeSector(job.company.industry)
+              : ""
+          )
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b)),
   };
+}
+
+type MovementBucket = {
+  date: string;
+  sector: SectorName;
+  company: Company | null;
+  evidence: MovementJobEvidence[];
+};
+
+function movementDay(occurredAt: string) {
+  const parsed = Date.parse(occurredAt);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : null;
+}
+
+function roleSummary(jobs: MovementJobEvidence[], limit = 3) {
+  const titles = jobs.map((job) => job.title);
+  if (titles.length <= limit) return titles.join(", ");
+  return `${titles.slice(0, limit).join(", ")} +${titles.length - limit} more`;
+}
+
+function movementCounts(evidence: MovementJobEvidence[]) {
+  const openedCount = evidence.filter((item) => item.changeType === "job_opened").length;
+  const closedCount = evidence.filter((item) => item.changeType === "job_closed").length;
+  return { openedCount, closedCount, netChange: openedCount - closedCount };
+}
+
+function movementDescription(evidence: MovementJobEvidence[]) {
+  const { openedCount, closedCount } = movementCounts(evidence);
+  if (openedCount > 0 && closedCount > 0) {
+    return `${openedCount} opened and ${closedCount} closed: ${roleSummary(evidence)}.`;
+  }
+  if (openedCount > 0) return `${openedCount} opened: ${roleSummary(evidence)}.`;
+  return `${closedCount} closed: ${roleSummary(evidence)}.`;
+}
+
+function companyMovementTitle(company: Company, evidence: MovementJobEvidence[]) {
+  const { openedCount, closedCount } = movementCounts(evidence);
+  if (openedCount > 0 && closedCount === 0) {
+    return `${company.name} opened ${openedCount} ${openedCount === 1 ? "role" : "roles"}`;
+  }
+  if (closedCount > 0 && openedCount === 0) {
+    return `${company.name} closed ${closedCount} ${closedCount === 1 ? "role" : "roles"}`;
+  }
+  return `${company.name} changed ${evidence.length} ${evidence.length === 1 ? "role" : "roles"}`;
+}
+
+function sectorMovementTitle(sector: SectorName, evidence: MovementJobEvidence[]) {
+  const { openedCount, closedCount } = movementCounts(evidence);
+  if (openedCount > 0 && closedCount === 0) {
+    return `${openedCount} new ${sector} ${openedCount === 1 ? "posting" : "postings"}`;
+  }
+  if (closedCount > 0 && openedCount === 0) {
+    return `${closedCount} ${sector} ${closedCount === 1 ? "posting" : "postings"} closed`;
+  }
+  return `${sector} hiring changed across ${evidence.length} roles`;
+}
+
+function movementEvidence(
+  companies: Company[],
+  jobs: Job[],
+  changes: ChangeEvent[]
+) {
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  const jobById = new Map(jobs.map((job) => [job.id, job]));
+  const seen = new Set<string>();
+  const result: Array<{
+    date: string;
+    company: Company;
+    evidence: MovementJobEvidence;
+  }> = [];
+
+  for (const change of changes) {
+    if (change.changeType !== "job_opened" && change.changeType !== "job_closed") continue;
+    const job = jobById.get(change.entityId);
+    const company = job ? companyById.get(job.companyId) : undefined;
+    const date = movementDay(change.occurredAt);
+    if (!job || !company || !date) continue;
+
+    // One canonical job can only open or close once per UTC day. This prevents
+    // refresh retries from inflating movement totals even if event ids differ.
+    const evidenceKey = `${date}:${job.id}:${change.changeType}`;
+    if (seen.has(evidenceKey)) continue;
+    seen.add(evidenceKey);
+    result.push({
+      date,
+      company,
+      evidence: {
+        id: job.id,
+        title: job.title,
+        changeType: change.changeType,
+        canonicalUrl: job.canonicalUrl,
+        sourceUrl: change.sourceUrl,
+      },
+    });
+  }
+
+  return result;
+}
+
+function sortMovements(movements: MarketMovement[]) {
+  return movements.sort(
+    (a, b) =>
+      b.date.localeCompare(a.date) ||
+      Math.abs(b.netChange) - Math.abs(a.netChange) ||
+      a.id.localeCompare(b.id)
+  );
+}
+
+/** Aggregate canonical job changes into one movement per company per UTC day. */
+export function companyDayMovements(
+  companies: Company[],
+  jobs: Job[],
+  changes: ChangeEvent[]
+): MarketMovement[] {
+  const buckets = new Map<string, MovementBucket>();
+  for (const item of movementEvidence(companies, jobs, changes)) {
+    const key = `${item.date}:${item.company.id}`;
+    const bucket = buckets.get(key) || {
+      date: item.date,
+      sector: item.company.sector || normalizeSector(item.company.industry),
+      company: item.company,
+      evidence: [],
+    };
+    bucket.evidence.push(item.evidence);
+    buckets.set(key, bucket);
+  }
+
+  return sortMovements(
+    Array.from(buckets.values()).map((bucket) => {
+      const company = bucket.company as Company;
+      const jobs = bucket.evidence.sort(
+        (a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
+      );
+      const counts = movementCounts(jobs);
+      return {
+        id: `movement:company:${bucket.date}:${company.id}`,
+        group: "company" as const,
+        date: bucket.date,
+        title: companyMovementTitle(company, jobs),
+        description: movementDescription(jobs),
+        sector: bucket.sector,
+        companyId: company.id,
+        companySlug: company.slug,
+        ...counts,
+        jobs,
+        evidenceCount: jobs.length,
+        sourceUrls: Array.from(new Set(jobs.map((job) => job.sourceUrl))).sort(),
+        href: `/companies/${encodeURIComponent(company.slug)}`,
+      };
+    })
+  );
+}
+
+/** Aggregate canonical job changes into one movement per normalized sector/day. */
+export function sectorDayMovements(
+  companies: Company[],
+  jobs: Job[],
+  changes: ChangeEvent[]
+): MarketMovement[] {
+  const buckets = new Map<string, MovementBucket>();
+  for (const item of movementEvidence(companies, jobs, changes)) {
+    const sector = item.company.sector || normalizeSector(item.company.industry);
+    const key = `${item.date}:${sector}`;
+    const bucket = buckets.get(key) || {
+      date: item.date,
+      sector,
+      company: null,
+      evidence: [],
+    };
+    bucket.evidence.push(item.evidence);
+    buckets.set(key, bucket);
+  }
+
+  return sortMovements(
+    Array.from(buckets.values()).map((bucket) => {
+      const jobs = bucket.evidence.sort(
+        (a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
+      );
+      const counts = movementCounts(jobs);
+      return {
+        id: `movement:sector:${bucket.date}:${sectorKey(bucket.sector)}`,
+        group: "sector" as const,
+        date: bucket.date,
+        title: sectorMovementTitle(bucket.sector, jobs),
+        description: movementDescription(jobs),
+        sector: bucket.sector,
+        companyId: null,
+        companySlug: null,
+        ...counts,
+        jobs,
+        evidenceCount: jobs.length,
+        sourceUrls: Array.from(new Set(jobs.map((job) => job.sourceUrl))).sort(),
+        href: `/?sector=${encodeURIComponent(bucket.sector)}`,
+      };
+    })
+  );
+}
+
+export function deriveMarketMovements(
+  companies: Company[],
+  jobs: Job[],
+  changes: ChangeEvent[],
+  group: "company" | "sector" | "all" = "all"
+): MarketMovement[] {
+  if (group === "company") return companyDayMovements(companies, jobs, changes);
+  if (group === "sector") return sectorDayMovements(companies, jobs, changes);
+  return sortMovements([
+    ...companyDayMovements(companies, jobs, changes),
+    ...sectorDayMovements(companies, jobs, changes),
+  ]);
 }

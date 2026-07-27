@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SectorStat } from "@/lib/derive";
+import type { MarketMovement, SectorStat } from "@/lib/derive";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
@@ -14,6 +14,7 @@ type Props = {
   jobs: Job[];
   changes: ChangeEvent[];
   sectors: SectorStat[];
+  movements: MarketMovement[];
   deltas: Record<string, number>;
   facets: { departments: string[]; locations: string[]; employmentTypes: string[] };
   dataAsOf: string;
@@ -69,7 +70,30 @@ const PHONE_SORTS: { id: string; label: string; key: TableKey; dir: 1 | -1 }[] =
   { id: "confidence-desc", label: "Confidence, high → low", key: "confidence", dir: -1 },
 ];
 
-export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, dataAsOf }: Props) {
+const COMPANY_PAGE_SIZE = 10;
+const CHANGE_PAGE_SIZE = 25;
+
+function InfoExplainer({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <details
+      className="info-explainer"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }}
+    >
+      <summary role="button" aria-label={`${label} explainer`}>i</summary>
+      <div className="info-popover">
+        <b>{label}</b>
+        {children}
+      </div>
+    </details>
+  );
+}
+
+export function JobBoard({ companies, jobs, changes, sectors, movements, deltas, facets, dataAsOf }: Props) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
@@ -81,6 +105,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({ key: "score", dir: -1 });
   const [tablePage, setTablePage] = useState(0);
+  const [changePage, setChangePage] = useState(0);
 
   const [modal, setModal] = useState<{ kind: "job" | "company"; id: string; backTo?: string } | null>(null);
   const [tab, setTab] = useState<"humans" | "agents">("humans");
@@ -92,7 +117,6 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
     const apply = () => {
       setPerPage(media.matches ? 20 : 50);
       setPage(0);
-      setTablePage(0);
     };
     apply();
     media.addEventListener("change", apply);
@@ -100,12 +124,15 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
   }, []);
 
   const jobsSection = useRef<HTMLElement>(null);
-  const marketSection = useRef<HTMLElement>(null);
+  const movementsSection = useRef<HTMLDivElement>(null);
+  const sectorSection = useRef<HTMLDivElement>(null);
+  const companiesSection = useRef<HTMLDivElement>(null);
+  const changesSection = useRef<HTMLDivElement>(null);
 
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
   const companyBySlug = useMemo(() => new Map(companies.map((c) => [c.slug, c])), [companies]);
   const sectorOf = useCallback(
-    (job: Job) => companyById.get(job.companyId)?.industry || "Unclassified",
+    (job: Job) => companyById.get(job.companyId)?.sector || "Other",
     [companyById]
   );
   const scoreOf = useCallback(
@@ -118,7 +145,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
     const rows = jobs.filter((job) => {
       const company = companyById.get(job.companyId);
       if (needle) {
-        const haystack = `${job.title} ${company?.name || ""} ${job.roleFamily} ${job.location} ${job.employmentType} ${company?.industry || ""}`.toLowerCase();
+        const haystack = `${job.title} ${company?.name || ""} ${job.roleFamily} ${job.location} ${job.employmentType} ${company?.sector || ""} ${company?.industry || ""}`.toLowerCase();
         if (!haystack.includes(needle)) return false;
       }
       if (status === "open" && job.status !== "verified_open") return false;
@@ -189,7 +216,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
     const pick = (company: Company): string | number => {
       switch (tableSort.key) {
         case "name": return company.name;
-        case "sector": return company.industry;
+        case "sector": return company.sector;
         case "stage": return company.stage;
         case "funding": return company.latestFundingLabel;
         case "size": return Number.parseInt(company.employeeRange, 10) || 0;
@@ -207,11 +234,17 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
     });
   }, [companies, deltas, tableSort]);
 
-  const tablePages = Math.max(1, Math.ceil(sortedCompanies.length / perPage));
+  const tablePages = Math.max(1, Math.ceil(sortedCompanies.length / COMPANY_PAGE_SIZE));
   const safeTablePage = Math.min(tablePage, tablePages - 1);
-  const tableStart = safeTablePage * perPage;
-  const tableRows = sortedCompanies.slice(tableStart, tableStart + perPage);
-  const tableEnd = Math.min(tableStart + perPage, sortedCompanies.length);
+  const tableStart = safeTablePage * COMPANY_PAGE_SIZE;
+  const tableRows = sortedCompanies.slice(tableStart, tableStart + COMPANY_PAGE_SIZE);
+  const tableEnd = Math.min(tableStart + COMPANY_PAGE_SIZE, sortedCompanies.length);
+
+  const changePages = Math.max(1, Math.ceil(changes.length / CHANGE_PAGE_SIZE));
+  const safeChangePage = Math.min(changePage, changePages - 1);
+  const changeStart = safeChangePage * CHANGE_PAGE_SIZE;
+  const changeRows = changes.slice(changeStart, changeStart + CHANGE_PAGE_SIZE);
+  const changeEnd = Math.min(changeStart + CHANGE_PAGE_SIZE, changes.length);
 
   function sortTable(key: TableKey) {
     const textual = key === "name" || key === "sector" || key === "stage" || key === "funding";
@@ -226,6 +259,16 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
       <button type="button" className={tableSort.key === key ? "on" : undefined} onClick={() => sortTable(key)}>
         {label}<span className="arrow">{tableSort.dir === -1 ? "↓" : "↑"}</span>
       </button>
+      {key === "confidence" ? (
+        <InfoExplainer label="Confidence">
+          <p>Verification recency (40), coverage of verified open roles (30), profile completeness (20), and independent source corroboration (10).</p>
+        </InfoExplainer>
+      ) : null}
+      {key === "score" ? (
+        <InfoExplainer label="Hiring signal">
+          <p>Open-role volume (30), 90-day net growth (30), funding stage and recency (25), and board freshness (15).</p>
+        </InfoExplainer>
+      ) : null}
     </th>
   );
 
@@ -234,7 +277,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
   const totalOpenRoles = companies.reduce((sum, company) => sum + company.openJobCount, 0);
   const drilldown = sectors.find((item) => item.name === selectedSector) || null;
   const drilldownCompanies = useMemo(
-    () => companies.filter((company) => company.industry === selectedSector).sort((a, b) => b.hiringScore - a.hiringScore),
+    () => companies.filter((company) => company.sector === selectedSector).sort((a, b) => b.hiringScore - a.hiringScore),
     [companies, selectedSector]
   );
 
@@ -266,7 +309,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
           <div className="section-heading">
             <div>
               <h2>Open jobs</h2>
-              <p>Found on the company&apos;s own board, not a repost. Click a row for the full record; click a company for everything they&apos;re hiring.</p>
+              <p>Found on the company&apos;s own board, not a repost. Click a role for the full record; click a company for everything they&apos;re hiring.</p>
             </div>
             <Link href="/api/v1/jobs" className="api-link">GET /api/v1/jobs</Link>
           </div>
@@ -363,20 +406,16 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                   <div
                     key={job.id}
                     className={`job-row job-cols${isOpen ? "" : " closed"}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${job.title} at ${company?.name}, ${isOpen ? "verified open" : "verified closed"}`}
-                    onClick={() => setModal({ kind: "job", id: job.id })}
-                    onKeyDown={(event) => {
-                      if (event.target !== event.currentTarget) return;
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setModal({ kind: "job", id: job.id });
-                      }
-                    }}
                   >
                     <span className="state" aria-hidden="true">{isOpen ? "■" : "□"}</span>
-                    <span className="title">{job.title}</span>
+                    <button
+                      type="button"
+                      className="title"
+                      aria-label={`${job.title} at ${company?.name}, ${isOpen ? "verified open" : "verified closed"}`}
+                      onClick={() => setModal({ kind: "job", id: job.id })}
+                    >
+                      {job.title}
+                    </button>
                     <span className="job-meta">
                       <button
                         type="button"
@@ -388,7 +427,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                       >
                         {company?.name}
                       </button>
-                      <span className="sector">{company?.industry}</span>
+                      <span className="sector" title={company?.industry}>{company?.sector}</span>
                       <span className="dept">{job.roleFamily}</span>
                       <span className="loc">{job.location}</span>
                       <span className="comp">{job.compensation}</span>
@@ -414,7 +453,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
       </section>
 
       {/* ══ HIRING SIGNAL ══ */}
-      <section className="section" id="signal" ref={marketSection}>
+      <section className="section" id="signal">
         <div className="wrap">
           <div className="section-heading">
             <div><h2>Hiring signal</h2></div>
@@ -422,10 +461,74 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
           </div>
 
           <div className="signal-definition">
-            <p><b>Hiring signal is a 0–100 estimate that a company opens a new role in the next 90 days</b> — from funding stage, how recently they raised, board activity, and how fast their open-role count is growing.</p>
-            <p>It is a forecast, not a fact — the only number on this site that isn&apos;t. Every score ships with a confidence figure. Green is up over the last 30 days and red is down; that change counts roles opened minus roles closed in the change feed, so a company with no recorded movement reads flat.</p>
+            <div className="signal-line">
+              <b>Hiring signal is a 0–100 directional measure of observed hiring momentum.</b>{" "}
+              <InfoExplainer label="Hiring signal">
+                <p>Open-role volume contributes up to 30 points, net open-role growth over 90 days up to 30, funding stage and recency up to 25, and board freshness up to 15. The total is capped at 100.</p>
+              </InfoExplainer>
+            </div>
+            <div className="signal-line">
+              It is a comparative indicator, not a probability. Confidence describes evidence quality, not the chance a prediction is right.{" "}
+              <InfoExplainer label="Confidence">
+                <p>Confidence combines verification recency (40 points), coverage of verified open roles (30), profile completeness (20), and an independent corroborating source (10).</p>
+              </InfoExplainer>
+              {" "}Green is net growth over the last 30 days and red is net contraction.
+            </div>
           </div>
 
+          <div
+            className="market-movements"
+            id="market-movements"
+            ref={movementsSection}
+            data-testid="market-movements"
+          >
+            <div className="market-movements-head">
+              <div>
+                <h3>Market movements</h3>
+                <p>Verified openings and closures bundled into company and sector-level activity.</p>
+              </div>
+              <span>{movements.length} movement{movements.length === 1 ? "" : "s"}</span>
+            </div>
+            <div className="movement-list">
+              {movements.length ? movements.map((movement) => (
+                <button
+                  key={movement.id}
+                  type="button"
+                  className="market-movement"
+                  data-testid="market-movement"
+                  onClick={() => {
+                    if (movement.companySlug) {
+                      setModal({ kind: "company", id: movement.companySlug });
+                      return;
+                    }
+                    setSelectedSector(movement.sector);
+                    sectorSection.current?.scrollIntoView({ block: "start" });
+                  }}
+                >
+                  <time dateTime={movement.date}>{movement.date}</time>
+                  <span className="movement-copy">
+                    <b>{movement.title}</b>
+                    <span>{movement.description}</span>
+                    {movement.jobs.length ? (
+                      <span className="movement-roles">
+                        {movement.jobs.slice(0, 3).map((job) => job.title).join(" · ")}
+                        {movement.jobs.length > 3 ? ` · +${movement.jobs.length - 3} more` : ""}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className={`movement-net ${directionOf(movement.netChange)}`}>
+                    {arrowOf(movement.netChange)} {signed(movement.netChange)}
+                    <small>{movement.evidenceCount} source{movement.evidenceCount === 1 ? "" : "s"}</small>
+                  </span>
+                  <span className="movement-open" aria-hidden="true">→</span>
+                </button>
+              )) : (
+                <p className="movement-empty">No verified market movement in the current feed.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="sector-block" id="sector-map" ref={sectorSection}>
           <div className="map-bar">
             <span>Sector map · sized by open roles · 30-day change</span>
             <span>{sectors.length} sector{sectors.length === 1 ? "" : "s"} · {companies.length} companies · {totalOpenRoles} open roles</span>
@@ -479,28 +582,21 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
               </div>
             </div>
           ) : null}
-
-          <div className="changes" id="changes">
-            <div className="changes-head">
-              <span>What changed</span>
-              <Link href="/exports/daily-changes.json" className="api-link">daily-changes.json</Link>
-            </div>
-            {changes.map((change) => {
-              const date = change.occurredAt.slice(0, 10);
-              return (
-                <div className={`change ${change.changeType}`} key={change.id}>
-                  <time dateTime={date}>
-                    <span className="full-date">{date}</span>
-                    <span className="short-date">{date.slice(5)}</span>
-                  </time>
-                  <span className="kind">{change.changeType.replaceAll("_", " ")}</span>
-                  <span className="title">{change.title}</span>
-                  <a className="source" href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a>
-                </div>
-              );
-            })}
           </div>
 
+          <div
+            className="companies-block"
+            id="companies"
+            ref={companiesSection}
+            data-testid="companies-list"
+          >
+          <div className="companies-head">
+            <div>
+              <h3>Companies and funding</h3>
+              <p>All tracked companies, sorted by the selected measure. Ten records per page.</p>
+            </div>
+            <span>{sortedCompanies.length} companies</span>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -512,7 +608,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                   {tableHeader("size", "Headcount")}
                   {tableHeader("open", "Open", true)}
                   {tableHeader("delta", "Δ 30d", true)}
-                  {tableHeader("confidence", "Conf.", true)}
+                  {tableHeader("confidence", "Confidence", true)}
                   {tableHeader("score", "Signal", true)}
                 </tr>
               </thead>
@@ -532,7 +628,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                           <b>{company.name}</b>
                         </span>
                       </td>
-                      <td className="dim">{company.industry}</td>
+                      <td className="dim" title={company.industry}>{company.sector}</td>
                       <td className="dim">{company.stage}</td>
                       <td className="mono">{company.latestFundingLabel}</td>
                       <td className="mono">{company.employeeRange}</td>
@@ -572,6 +668,20 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
             />
             <span className="current">{TABLE_LABELS[tableSort.key]} {tableSort.dir === -1 ? "↓" : "↑"}</span>
           </div>
+          <div className="company-mobile-explainers" aria-label="Company score explanations">
+            <span>
+              Signal{" "}
+              <InfoExplainer label="Hiring signal">
+                <p>Open-role volume (30), 90-day net growth (30), funding stage and recency (25), and board freshness (15).</p>
+              </InfoExplainer>
+            </span>
+            <span>
+              Confidence{" "}
+              <InfoExplainer label="Confidence">
+                <p>Verification recency (40), coverage of verified open roles (30), profile completeness (20), and independent source corroboration (10).</p>
+              </InfoExplainer>
+            </span>
+          </div>
           <div className="company-list">
             {tableRows.map((company) => {
               const delta = deltas[company.id] || 0;
@@ -580,29 +690,93 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                   <CompanyLogo domain={company.domain} name={company.name} />
                   <span className="names">
                     <b>{company.name}</b>
-                    <span className="sub">{company.industry} · {company.stage} · {company.employeeRange}</span>
+                    <span className="sub" title={`Source industry: ${company.industry}`}>{company.sector} · {company.stage} · {company.employeeRange}</span>
                   </span>
                   <span className="right">
-                    <span className="score">{company.hiringScore}</span>
+                    <span className="score" aria-label={`Hiring signal ${company.hiringScore}`}>
+                      <small>signal</small>{company.hiringScore}
+                    </span>
                     <span className={`delta ${directionOf(delta)}`}>{arrowOf(delta)} {signed(delta)}</span>
                   </span>
-                  <span className="foot">{company.openJobCount} open · conf {company.evidenceConfidence} · {company.latestFundingLabel}</span>
+                  <span className="foot">{company.openJobCount} open · confidence {company.evidenceConfidence} · {company.latestFundingLabel}</span>
                 </button>
               );
             })}
           </div>
 
           <div className="pager">
-            <span className="pager-status">Showing {tableStart + 1}–{tableEnd} of {sortedCompanies.length} companies</span>
+            <span className="pager-status">
+              {sortedCompanies.length ? `Showing ${tableStart + 1}–${tableEnd} of ${sortedCompanies.length} companies` : "0 companies"}
+            </span>
             <div className="pager-buttons">
-              <button type="button" disabled={safeTablePage === 0} onClick={() => { setTablePage(safeTablePage - 1); marketSection.current?.scrollIntoView({ block: "start" }); }}>← Prev</button>
+              <button type="button" disabled={safeTablePage === 0} onClick={() => { setTablePage(safeTablePage - 1); companiesSection.current?.scrollIntoView({ block: "start" }); }}>← Prev</button>
               <span className="pager-page">Page {safeTablePage + 1} / {tablePages}</span>
-              <button type="button" className="primary" disabled={tableEnd >= sortedCompanies.length} onClick={() => { setTablePage(safeTablePage + 1); marketSection.current?.scrollIntoView({ block: "start" }); }}>Next →</button>
+              <button type="button" className="primary" disabled={tableEnd >= sortedCompanies.length} onClick={() => { setTablePage(safeTablePage + 1); companiesSection.current?.scrollIntoView({ block: "start" }); }}>Next →</button>
             </div>
           </div>
           <div className="result-count">
             <span>Sorted by {TABLE_LABELS[tableSort.key]}, {tableSort.dir === -1 ? "high to low" : "low to high"}</span>
             <span>Click any row for the company record</span>
+          </div>
+          </div>
+
+          <div
+            className="changes"
+            id="changes"
+            ref={changesSection}
+            data-testid="changes-list"
+          >
+            <div className="changes-head">
+              <span>What changed</span>
+              <Link href="/exports/daily-changes.json" className="api-link">daily-changes.json</Link>
+            </div>
+            {changeRows.map((change) => {
+              const date = change.occurredAt.slice(0, 10);
+              return (
+                <div
+                  className={`change ${change.changeType}`}
+                  key={change.id}
+                  data-testid="change-item"
+                >
+                  <time dateTime={date}>
+                    <span className="full-date">{date}</span>
+                    <span className="short-date">{date.slice(5)}</span>
+                  </time>
+                  <span className="kind">{change.changeType.replaceAll("_", " ")}</span>
+                  <span className="title">{change.title}</span>
+                  <a className="source" href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a>
+                </div>
+              );
+            })}
+            <div className="pager">
+              <span className="pager-status">
+                {changes.length ? `Showing ${changeStart + 1}–${changeEnd} of ${changes.length} changes` : "0 changes"}
+              </span>
+              <div className="pager-buttons">
+                <button
+                  type="button"
+                  disabled={safeChangePage === 0}
+                  onClick={() => {
+                    setChangePage(safeChangePage - 1);
+                    changesSection.current?.scrollIntoView({ block: "start" });
+                  }}
+                >
+                  ← Prev
+                </button>
+                <span className="pager-page">Page {safeChangePage + 1} / {changePages}</span>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={changeEnd >= changes.length}
+                  onClick={() => {
+                    setChangePage(safeChangePage + 1);
+                    changesSection.current?.scrollIntoView({ block: "start" });
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -659,7 +833,7 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                     <div><dt>No estimates</dt><dd>Compensation is quoted, or it says &ldquo;see posting&rdquo;</dd></div>
                     <div><dt>No deletions</dt><dd>Closed roles stay visible with the date they closed</dd></div>
                     <div><dt>No fees</dt><dd>Nobody can pay to move up this list</dd></div>
-                    <div><dt>One guess only</dt><dd>Hiring signal — labelled as a forecast everywhere it appears</dd></div>
+                    <div><dt>One indicator</dt><dd>Hiring signal — a reproducible measure built from observed activity and company facts</dd></div>
                   </dl>
                 </div>
               </div>
@@ -680,13 +854,16 @@ export function JobBoard({ companies, jobs, changes, sectors, deltas, facets, da
                 </div>
                 <div className="point">
                   <span className="number">03</span><h4>No scraping required</h4>
-                  <p>Public JSON and JSONL, no key, no rate-limit games. <span className="mn">llms.txt</span> describes the shape of it.</p>
+                  <p>One public intelligence endpoint covers discovery and filtered reads; JSONL remains available for bulk copies. <span className="mn">llms.txt</span> describes the contract.</p>
                 </div>
               </div>
               <div className="row-split">
                 <div>
-                  <div className="block-head">Endpoints</div>
+                  <div className="block-head">Preferred endpoint</div>
                   <div className="endpoints">
+                    <Link className="endpoint preferred" href="/api/v1/intelligence"><span className="verb">GET</span><span>/api/v1/intelligence</span><span className="format">CAPS</span></Link>
+                    <p className="endpoint-note">Use <span className="mn">view=jobs|companies|movements|sectors</span> with documented filters and cursors.</p>
+                    <div className="compatibility-label">Compatibility and bulk exports</div>
                     <Link className="endpoint" href="/api/v1/companies"><span className="verb">GET</span><span>/api/v1/companies</span><span className="format">JSON</span></Link>
                     <Link className="endpoint" href="/api/v1/jobs"><span className="verb">GET</span><span>/api/v1/jobs</span><span className="format">JSON</span></Link>
                     <Link className="endpoint" href="/api/v1/changes"><span className="verb">GET</span><span>/api/v1/changes</span><span className="format">FEED</span></Link>

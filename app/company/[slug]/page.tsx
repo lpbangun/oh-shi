@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getChangesForCompany, getCompanyBySlug, getJobsForCompany } from "@/lib/data";
+import { companyScoreReceipts } from "@/lib/hiring-score";
+import { isBoardTracked } from "@/lib/tracked-boards";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
   const company = await getCompanyBySlug(slug);
   if (!company) notFound();
   const [jobs, changes] = await Promise.all([getJobsForCompany(company.id), getChangesForCompany(company.id)]);
+  const receipts = companyScoreReceipts(
+    company,
+    jobs,
+    changes,
+    new Date().toISOString(),
+    isBoardTracked(company.id)
+  );
 
   return (
     <main className="detail-page">
@@ -19,7 +28,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
           <span className="eyebrow">{company.industry}</span><h1>{company.name}</h1><p>{company.description}</p>
           <div className="detail-actions"><a href={company.careersUrl} target="_blank" rel="noreferrer" className="primary-cta">Canonical careers</a><Link href={`/api/v1/companies/${company.id}`} className="secondary-cta">JSON record</Link></div>
         </div>
-        <div className="big-signal"><strong>{company.hiringScore}</strong><span>Hiring momentum score (0-100)</span><small>Evidence confidence {company.evidenceConfidence}/100</small></div>
+        <div className="big-signal"><strong>{receipts.hiring.value}</strong><span>Hiring momentum score (0-100)</span><small>Evidence confidence {receipts.evidence.value}/100</small></div>
       </section>
       <section className="fact-strip">
         <div><span>Stage</span><strong>{company.stage}</strong></div>
@@ -37,8 +46,30 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
           </div>
         </section>
         <aside className="evidence-card">
-          <span className="eyebrow">EVIDENCE RECEIPT</span><h2>Why this score?</h2><p>Funding, careers-page activity, company stage, and observed open roles are combined into a transparent directional signal.</p>
-          <dl><div><dt>Status</dt><dd>{company.lifecycleStatus}</dd></div><div><dt>Funding mode</dt><dd>{company.fundingMode}</dd></div><div><dt>Source</dt><dd><a href={company.sourceUrl} target="_blank" rel="noreferrer">{company.domain}</a></dd></div></dl>
+          <span className="eyebrow">EVIDENCE RECEIPT</span>
+          <h2>Why these scores?</h2>
+          <p>Every point is derived from the records below. Hiring signal measures momentum; confidence measures the evidence behind it.</p>
+          <dl>
+            {receipts.hiring.components.map((component) => (
+              <div key={component.name}>
+                <dt>{component.name}</dt>
+                <dd>{component.points}/{component.max}</dd>
+              </div>
+            ))}
+            <div><dt>Hiring signal total</dt><dd><b>{receipts.hiring.value}/100</b></dd></div>
+          </dl>
+          <dl style={{ marginTop: 18 }}>
+            {receipts.evidence.components.map((component) => (
+              <div key={component.name}>
+                <dt>{component.name}</dt>
+                <dd>{component.points}/{component.max}</dd>
+              </div>
+            ))}
+            <div><dt>Confidence total</dt><dd><b>{receipts.evidence.value}/100</b></dd></div>
+            <div><dt>Status</dt><dd>{company.lifecycleStatus}</dd></div>
+            <div><dt>Funding mode</dt><dd>{company.fundingMode}</dd></div>
+            <div><dt>Source</dt><dd><a href={company.sourceUrl} target="_blank" rel="noreferrer">{company.domain}</a></dd></div>
+          </dl>
         </aside>
       </div>
       <section className="company-timeline"><div className="section-heading compact"><h2>Evidence trail</h2></div>{changes.map((change) => <article key={change.id}><time>{new Date(change.occurredAt).toLocaleDateString("en-US", { timeZone: "UTC" })}</time><div><strong>{change.title}</strong><p>{change.description}</p></div><a href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a></article>)}</section>

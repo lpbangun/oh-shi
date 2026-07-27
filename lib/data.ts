@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
+import { companyScoreReceipts } from "./hiring-score";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
-import type { ChangeEvent, Company, Job } from "./types";
+import { isBoardTracked } from "./tracked-boards";
+import { normalizeSector, type ChangeEvent, type Company, type Job } from "./types";
 
 let initialization: Promise<void> | null = null;
 
 const companyColumns = `
   id, slug, name, domain, description, founded_year as foundedYear,
-  headquarters, employee_range as employeeRange, industry, stage,
+  headquarters, employee_range as employeeRange, industry, sector, stage,
   funding_mode as fundingMode, lifecycle_status as lifecycleStatus,
   hiring_score as hiringScore, evidence_confidence as evidenceConfidence,
   latest_funding_label as latestFundingLabel, latest_funding_date as latestFundingDate,
@@ -41,6 +43,7 @@ async function initializeDatabase() {
       headquarters TEXT NOT NULL,
       employee_range TEXT NOT NULL,
       industry TEXT NOT NULL,
+      sector TEXT NOT NULL,
       stage TEXT NOT NULL,
       funding_mode TEXT NOT NULL,
       lifecycle_status TEXT NOT NULL,
@@ -85,26 +88,61 @@ async function initializeDatabase() {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS changes_occurred_idx ON changes(occurred_at DESC)"),
   ]);
 
-  const existing = await env.DB.prepare("SELECT COUNT(*) as count FROM companies").first<{ count: number }>();
-  if (Number(existing?.count || 0) > 0) return;
+  // D1 databases created before normalized sectors existed need a safe,
+  // forward-only additive migration before any company SELECT runs.
+  const companyInfo = await env.DB.prepare("PRAGMA table_info(companies)")
+    .all<{ name: string }>();
+  if (!companyInfo.results.some((column) => column.name === "sector")) {
+    await env.DB.prepare(
+      "ALTER TABLE companies ADD COLUMN sector TEXT NOT NULL DEFAULT 'Other'"
+    ).run();
+  }
+  const sectors = await env.DB.prepare(
+    "SELECT id, industry, sector FROM companies"
+  ).all<{ id: string; industry: string; sector: string }>();
+  for (const company of sectors.results) {
+    const normalized = normalizeSector(company.industry);
+    if (company.sector !== normalized) {
+      await env.DB.prepare("UPDATE companies SET sector = ? WHERE id = ?")
+        .bind(normalized, company.id)
+        .run();
+    }
+  }
 
-  const companyStatements = seedCompanies.map((company) =>
-    env.DB.prepare(`INSERT OR IGNORE INTO companies (
+  const existing = await env.DB.prepare("SELECT COUNT(*) as count FROM companies").first<{ count: number }>();
+  const hadCompanies = Number(existing?.count || 0) > 0;
+
+  const profileStatements = seedCompanies.map((company) =>
+    env.DB.prepare(`INSERT INTO companies (
       id, slug, name, domain, description, founded_year, headquarters, employee_range,
-      industry, stage, funding_mode, lifecycle_status, hiring_score, evidence_confidence,
+      industry, sector, stage, funding_mode, lifecycle_status, hiring_score, evidence_confidence,
       latest_funding_label, latest_funding_date, careers_url, source_url, open_job_count,
       last_verified_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      slug=excluded.slug, name=excluded.name, domain=excluded.domain,
+      description=excluded.description, founded_year=excluded.founded_year,
+      headquarters=excluded.headquarters, employee_range=excluded.employee_range,
+      industry=excluded.industry, sector=excluded.sector, stage=excluded.stage,
+      funding_mode=excluded.funding_mode, lifecycle_status=excluded.lifecycle_status,
+      latest_funding_label=excluded.latest_funding_label,
+      latest_funding_date=excluded.latest_funding_date,
+      careers_url=excluded.careers_url, source_url=excluded.source_url`).bind(
       company.id, company.slug, company.name, company.domain, company.description,
       company.foundedYear, company.headquarters, company.employeeRange, company.industry,
-      company.stage, company.fundingMode, company.lifecycleStatus, company.hiringScore,
-      company.evidenceConfidence, company.latestFundingLabel, company.latestFundingDate,
-      company.careersUrl, company.sourceUrl, company.openJobCount, company.lastVerifiedAt
+      company.sector, company.stage, company.fundingMode, company.lifecycleStatus,
+      company.hiringScore, company.evidenceConfidence, company.latestFundingLabel,
+      company.latestFundingDate, company.careersUrl, company.sourceUrl,
+      company.openJobCount, company.lastVerifiedAt
     )
   );
 
-  const jobStatements = seedJobs.map((job) =>
-    env.DB.prepare(`INSERT OR IGNORE INTO jobs (
+  // Profiles are always upserted so a deployment expands an existing D1
+  // without resetting live counts, scores, or verification timestamps.
+  await env.DB.batch(profileStatements);
+  if (!hadCompanies) {
+    const jobStatements = seedJobs.map((job) =>
+      env.DB.prepare(`INSERT OR IGNORE INTO jobs (
       id, company_id, external_id, title, role_family, location, remote_status,
       employment_type, compensation, canonical_url, source, status, first_seen_at,
       last_verified_at, closed_at, summary
@@ -113,18 +151,51 @@ async function initializeDatabase() {
       job.remoteStatus, job.employmentType, job.compensation, job.canonicalUrl,
       job.source, job.status, job.firstSeenAt, job.lastVerifiedAt, job.closedAt, job.summary
     )
-  );
+    );
 
-  const changeStatements = seedChanges.map((change) =>
-    env.DB.prepare(`INSERT OR IGNORE INTO changes (
+    const changeStatements = seedChanges.map((change) =>
+      env.DB.prepare(`INSERT OR IGNORE INTO changes (
       id, entity_type, entity_id, change_type, title, description, occurred_at, source_url
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(
       change.id, change.entityType, change.entityId, change.changeType,
       change.title, change.description, change.occurredAt, change.sourceUrl
     )
-  );
+    );
 
-  await env.DB.batch([...companyStatements, ...jobStatements, ...changeStatements]);
+    // Company rows already exist from the profile upsert above.
+    await env.DB.batch([...jobStatements, ...changeStatements]);
+  }
+
+  // Existing deployments may contain scores from an older methodology or seed
+  // snapshot. Recompute them from the same stored facts used by public receipts
+  // before serving any request, so totals and explanations cannot disagree.
+  const [storedCompanies, storedJobs, storedChanges] = await Promise.all([
+    env.DB.prepare(`SELECT ${companyColumns} FROM companies`).all<Company>(),
+    env.DB.prepare(`SELECT ${jobColumns} FROM jobs`).all<Job>(),
+    env.DB.prepare(`SELECT ${changeColumns} FROM changes`).all<ChangeEvent>(),
+  ]);
+  const calculationTime = new Date().toISOString();
+  const scoreStatements = storedCompanies.results.map((company) => {
+    const receipts = companyScoreReceipts(
+      company,
+      storedJobs.results,
+      storedChanges.results,
+      calculationTime,
+      isBoardTracked(company.id)
+    );
+    const openJobCount = storedJobs.results.filter(
+      (job) => job.companyId === company.id && job.status === "verified_open"
+    ).length;
+    return env.DB.prepare(
+      "UPDATE companies SET open_job_count=?, hiring_score=?, evidence_confidence=? WHERE id=?"
+    ).bind(
+      openJobCount,
+      receipts.hiring.value,
+      receipts.evidence.value,
+      company.id
+    );
+  });
+  if (scoreStatements.length) await env.DB.batch(scoreStatements);
 }
 
 export async function ensureDatabase() {

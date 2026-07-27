@@ -10,6 +10,7 @@ export const companies = sqliteTable("companies", {
   headquarters: text("headquarters").notNull(),
   employeeRange: text("employee_range").notNull(),
   industry: text("industry").notNull(),
+  sector: text("sector").notNull(),
   stage: text("stage").notNull(),
   fundingMode: text("funding_mode").notNull(),
   lifecycleStatus: text("lifecycle_status").notNull(),

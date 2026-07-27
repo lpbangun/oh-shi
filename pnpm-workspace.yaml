@@ -3,5 +3,8 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   workerd: true
+overrides:
+  postcss: 8.5.18
+  sharp: 0.35.3
 minimumReleaseAgeExclude:
   - '@cloudflare/workers-types@5.20260723.1'

@@ -3,7 +3,14 @@
   "expansion": "Startup Hiring Intelligence",
   "access": "public",
   "authentication": "none for read endpoints",
-  "preferred_entrypoint": "/api/v1/jobs",
+  "preferred_entrypoint": "/api/v1/intelligence",
+  "capabilities": {
+    "jobs": "/api/v1/intelligence?view=jobs",
+    "companies": "/api/v1/intelligence?view=companies",
+    "movements": "/api/v1/intelligence?view=movements",
+    "sectors": "/api/v1/intelligence?view=sectors"
+  },
+  "pagination": "Pass page.next_cursor unchanged with the same view and filters.",
   "change_feed": "/api/v1/changes",
   "instructions": "/llms.txt",
   "canonical_job_rule": "A job is verified open only when its canonical source still lists it.",

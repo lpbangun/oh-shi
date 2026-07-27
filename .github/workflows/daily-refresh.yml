@@ -2,19 +2,31 @@ name: Daily canonical job refresh
 
 on:
   schedule:
-    - cron: "17 11 * * *"
+    - cron: "30 7 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-canonical-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Refresh OH SHI canonical boards
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Preflight, refresh, and verify freshness
         env:
           OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
           OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
-        run: |
-          curl --fail-with-body --retry 3 \
-            -X POST \
-            -H "Authorization: Bearer ${OH_SHI_INGEST_TOKEN}" \
-            "${OH_SHI_BASE_URL}/api/internal/refresh"
+        run: node scripts/run-canonical-refresh.mjs

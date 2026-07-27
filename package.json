@@ -2,6 +2,7 @@
   "name": "oh-shi",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.17.0",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -12,20 +13,26 @@
     "typecheck": "tsc --noEmit",
     "eval": "node scripts/run-evals.mjs evals/run.ts",
     "eval:live": "node scripts/run-evals.mjs evals/live-api.test.ts",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium",
+    "e2e:ui": "playwright test --ui",
     "quality": "pnpm run typecheck && pnpm run eval && pnpm run build",
+    "quality:ci": "pnpm run lint && pnpm run typecheck && pnpm run eval && pnpm run build && pnpm run e2e",
     "test": "pnpm run eval",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern playwright-report --ignore-pattern test-results",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
+    "next": "16.2.12",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "5.20260723.1",
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.62.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -34,7 +41,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.12",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "tsx": "4.20.6",

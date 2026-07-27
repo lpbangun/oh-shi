@@ -82,7 +82,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <span className="long">, shown here to identify the employer whose posting we link to</span>
                 <span className="long"><i>/</i>Third-party job descriptions and source content remain with their owners</span>
                 <span className="long"><i>/</i>Nothing on this page is an endorsement by, or affiliation with, the companies named</span>
-                <i>/</i>Hiring signal is a forecast, not a statement of fact.
+                <i>/</i>Hiring signal is a directional momentum score, not a probability.
               </p>
             </div>
           </div>
