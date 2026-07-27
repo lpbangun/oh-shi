@@ -1,6 +1,6 @@
 # OH SHI
 
-OH SHI means Startup Hiring Intelligence: a public, lightweight source of truth for startup companies, hiring signals, canonical job status, and recent changes.
+OH SHI is the Operational Headquarters for Startup Hiring Intelligence: a public, lightweight source of truth for startup companies, hiring signals, canonical job status, and recent changes.
 
 It is designed for both people and AI agents. Humans get a fast searchable job board. Agents get stable JSON, JSONL, incremental change feeds, evidence URLs, and explicit `verified_open` / `verified_closed` states.
 

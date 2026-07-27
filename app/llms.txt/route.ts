@@ -2,7 +2,7 @@ export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const body = `# OH SHI - Startup Hiring Intelligence
 
-OH SHI is a public source of startup hiring facts for humans and AI agents.
+OH SHI, the Operational Headquarters for Startup Hiring Intelligence, is a public source of startup hiring facts for humans and AI agents.
 
 ## Canonical machine-readable endpoints
 - Companies: ${origin}/api/v1/companies
