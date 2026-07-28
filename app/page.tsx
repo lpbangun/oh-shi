@@ -6,16 +6,17 @@ import {
   sectorDayMovements,
   sectorStats,
 } from "@/lib/derive";
-import { listChanges, listCompanies, listJobs } from "@/lib/data";
+import { getCoverageMetrics, listChanges, listCompanies, listJobs } from "@/lib/data";
 import { JobBoard } from "./components/JobBoard";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [companies, jobs, changes] = await Promise.all([
+  const [companies, jobs, changes, coverage] = await Promise.all([
     listCompanies(),
     listJobs(true),
     listChanges(),
+    getCoverageMetrics(),
   ]);
 
   const deltaMap = companyDeltas(companies, jobs, changes);
@@ -47,8 +48,13 @@ export default async function Home() {
       sectors={sectors}
       movements={movements}
       deltas={Object.fromEntries(deltaMap)}
-      facets={facetValues(jobs)}
+      facets={facetValues(jobs.map((job) => ({
+        ...job,
+        company: companies.find((company) => company.id === job.companyId),
+      })))}
       dataAsOf={DATA_AS_OF}
+      coverage={coverage}
+      generatedAt={new Date().toISOString()}
     />
   );
 }

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MarketMovement, SectorStat } from "@/lib/derive";
-import type { ChangeEvent, Company, Job } from "@/lib/types";
+import { companyDiverseJobs, type MarketMovement, type SectorStat } from "@/lib/derive";
+import type { ChangeEvent, Company, CoverageMetrics, Job } from "@/lib/types";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
 import { CompanyModal, JobModal } from "./RecordModal";
@@ -16,8 +16,13 @@ type Props = {
   sectors: SectorStat[];
   movements: MarketMovement[];
   deltas: Record<string, number>;
-  facets: { departments: string[]; locations: string[]; employmentTypes: string[] };
+  facets: {
+    departments: string[]; locations: string[]; employmentTypes: string[];
+    providers: string[]; companies: string[]; investors: string[]; sectors: string[];
+  };
   dataAsOf: string;
+  coverage: CoverageMetrics;
+  generatedAt: string;
 };
 
 type SortId =
@@ -94,12 +99,16 @@ function InfoExplainer({ label, children }: { label: string; children: React.Rea
   );
 }
 
-export function JobBoard({ companies, jobs, changes, sectors, movements, deltas, facets, dataAsOf }: Props) {
+export function JobBoard({ companies, jobs, changes, sectors, movements, deltas, facets, dataAsOf, coverage, generatedAt }: Props) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
   const [dept, setDept] = useState("");
   const [loc, setLoc] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [investor, setInvestor] = useState("");
+  const [provider, setProvider] = useState("");
+  const [newOnly, setNewOnly] = useState(false);
   const [sort, setSort] = useState<SortId>("signal");
   const [page, setPage] = useState(0);
 
@@ -155,6 +164,10 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
       if (sector && sectorOf(job) !== sector) return false;
       if (dept && job.roleFamily !== dept) return false;
       if (loc && job.location !== loc) return false;
+      if (companyFilter && company?.name !== companyFilter) return false;
+      if (investor && !company?.investors?.includes(investor)) return false;
+      if (provider && (job.provider || job.source).toLowerCase() !== provider.toLowerCase()) return false;
+      if (newOnly && Date.parse(job.firstSeenAt) < Date.parse(generatedAt) - 86_400_000) return false;
       return true;
     });
 
@@ -174,8 +187,10 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
       recent: (a, b) => b.lastVerifiedAt.localeCompare(a.lastVerifiedAt) || scoreOf(b) - scoreOf(a),
       oldest: (a, b) => a.lastVerifiedAt.localeCompare(b.lastVerifiedAt) || scoreOf(b) - scoreOf(a),
     };
-    return rows.sort(comparators[sort]);
-  }, [companyById, dept, jobs, loc, query, scoreOf, sector, sectorOf, sort, status]);
+    return sort === "signal"
+      ? companyDiverseJobs(rows, companies)
+      : rows.sort(comparators[sort]);
+  }, [companies, companyById, companyFilter, dept, generatedAt, investor, jobs, loc, newOnly, provider, query, scoreOf, sector, sectorOf, sort, status]);
 
   const pageCount = Math.max(1, Math.ceil(visibleJobs.length / perPage));
   const safePage = Math.min(page, pageCount - 1);
@@ -183,10 +198,12 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
   const pageRows = visibleJobs.slice(pageStart, pageStart + perPage);
   const pageEnd = Math.min(pageStart + perPage, visibleJobs.length);
   const uniqueCompanies = new Set(pageRows.map((job) => job.companyId)).size;
-  const filtersActive = Boolean(query || status || sector || dept || loc) || sort !== "signal";
+  const filtersActive = Boolean(query || status || sector || dept || loc || companyFilter || investor || provider || newOnly) || sort !== "signal";
 
   const clearFilters = useCallback(() => {
-    setQuery(""); setStatus(""); setSector(""); setDept(""); setLoc(""); setSort("signal"); setPage(0);
+    setQuery(""); setStatus(""); setSector(""); setDept(""); setLoc("");
+    setCompanyFilter(""); setInvestor(""); setProvider(""); setNewOnly(false);
+    setSort("signal"); setPage(0);
   }, []);
 
   function applyMenu(optionId: string) {
@@ -308,14 +325,32 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
       <div className="strip">
         <div className="wrap">
           <div className="strip-top">
-            <h1>Startup jobs, <em>verified every day.</em></h1>
+            <h1>Startup jobs, <em>verified every six hours.</em></h1>
             <Link href="/about" className="strip-more">How this works →</Link>
           </div>
-          <p>We recheck every company&apos;s own board once a day and write down exactly what moved.</p>
+          <p>We recheck each active canonical board every six hours and write down exactly what moved.</p>
         </div>
       </div>
 
       <Ticker companies={companies} deltas={deltas} />
+
+      <section className="coverage-strip" aria-label="Database coverage">
+        <div className="wrap coverage-grid">
+          <div><b>{coverage.verifiedOpenJobs}</b><span>verified-open jobs</span></div>
+          <div><b>{coverage.activeCompanies}</b><span>companies hiring</span></div>
+          <div><b>{coverage.companiesAddedLast7Days}</b><span>companies added · 7d</span></div>
+          <div><b>{coverage.jobsAddedLast24Hours}</b><span>jobs added · 24h</span></div>
+          <div><b>{Object.keys(coverage.investors).length}</b><span>investor sources</span></div>
+          <div><b>{Object.keys(coverage.providers).length}</b><span>ATS providers</span></div>
+        </div>
+        <div className="wrap coverage-freshness">
+          Last canonical refresh: {coverage.lastCanonicalRefresh
+            ? new Date(coverage.lastCanonicalRefresh).toISOString()
+              .replace("T", " ")
+              .replace(/\.\d{3}Z$/, " UTC")
+            : "awaiting first scheduled run"}
+        </div>
+      </section>
 
       {/* ══ OPEN JOBS ══ */}
       <section className="section" id="jobs" ref={jobsSection}>
@@ -342,9 +377,34 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
             {query ? <button className="search-clear" type="button" onClick={() => { setQuery(""); setPage(0); }}>Clear</button> : null}
           </div>
 
+          <div className="breadth-filters" aria-label="Job breadth filters">
+            <label>Company
+              <select value={companyFilter} onChange={(event) => { setCompanyFilter(event.target.value); setPage(0); }}>
+                <option value="">All companies</option>
+                {facets.companies.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>Investor
+              <select value={investor} onChange={(event) => { setInvestor(event.target.value); setPage(0); }}>
+                <option value="">All investors</option>
+                {facets.investors.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>ATS
+              <select value={provider} onChange={(event) => { setProvider(event.target.value); setPage(0); }}>
+                <option value="">All providers</option>
+                {facets.providers.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="new-filter">
+              <input type="checkbox" checked={newOnly} onChange={(event) => { setNewOnly(event.target.checked); setPage(0); }} />
+              Added in 24h
+            </label>
+          </div>
+
           <div className="result-count">
             <span>
-              <b>{visibleJobs.length}</b> role{visibleJobs.length === 1 ? "" : "s"} · {uniqueCompanies} compan{uniqueCompanies === 1 ? "y" : "ies"} on this page
+              <b>{visibleJobs.length}</b> role{visibleJobs.length === 1 ? "" : "s"} across {new Set(visibleJobs.map((job) => job.companyId)).size} compan{new Set(visibleJobs.map((job) => job.companyId)).size === 1 ? "y" : "ies"} · {uniqueCompanies} on this page
               {filtersActive ? <button className="clear-filters" type="button" onClick={clearFilters}>Clear filters ✕</button> : null}
             </span>
             <span>Sorted by {SORT_LABELS[sort]}</span>

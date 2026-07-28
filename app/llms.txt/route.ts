@@ -10,6 +10,7 @@ OH SHI, the Operational Headquarters for Startup Hiring Intelligence, is a publi
 - Companies: ${origin}/api/v1/intelligence?view=companies
 - Market movements: ${origin}/api/v1/intelligence?view=movements
 - Sector totals: ${origin}/api/v1/intelligence?view=sectors
+- Coverage and freshness: ${origin}/api/v1/coverage
 
 Call the capabilities URL first. It lists every supported filter. Unknown filters,
 invalid values, and malformed cursors return HTTP 400 rather than silently returning
@@ -41,6 +42,7 @@ records include underlying jobs, stable record IDs, and source URLs.
 - Companies: ${origin}/api/v1/companies
 - Jobs: ${origin}/api/v1/jobs
 - Changes: ${origin}/api/v1/changes
+- Coverage: ${origin}/api/v1/coverage
 - Company JSONL: ${origin}/exports/companies.jsonl
 - Job JSONL: ${origin}/exports/jobs.jsonl
 - Daily changes: ${origin}/exports/daily-changes.json

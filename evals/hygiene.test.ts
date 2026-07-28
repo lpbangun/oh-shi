@@ -81,15 +81,65 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   }
 });
 
-test("daily refresh schedule matches product copy and proves API freshness", async () => {
+test("six-hour discovery and refresh schedule proves source attempts and API freshness", async () => {
   const workflow = await read(".github/workflows/daily-refresh.yml");
   const refreshRunner = await read("scripts/run-canonical-refresh.mjs");
+  const homepage = await read("app/components/JobBoard.tsx");
+  const ticker = await read("app/components/Ticker.tsx");
+  const readme = await read("README.md");
 
-  assert.match(workflow, /cron: "30 7 \* \* \*"/);
+  assert.match(workflow, /cron: "30 \*\/6 \* \* \*"/);
   assert.match(workflow, /OH_SHI_BASE_URL/);
   assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
   assert.match(refreshRunner, /Preflight failed/);
   assert.match(refreshRunner, /refresh_run/);
   assert.match(refreshRunner, /lastVerifiedAt/);
+  assert.match(refreshRunner, /investor_sources_attempted/);
+  assert.match(refreshRunner, /companiesAddedLast1Day/);
+  assert.match(refreshRunner, /jobsAddedLast24Hours/);
+  assert.match(refreshRunner, /Canonical source failure/);
+  assert.match(refreshRunner, /Company growth warning/);
+  assert.match(homepage, /verified every six hours/);
+  assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 6\)/);
+  assert.match(readme, /minute 30 every six hours/);
+  assert.doesNotMatch(homepage, /once a day|verified every day/);
+});
+
+test("terminal review candidates cannot starve newly discovered queue work", async () => {
+  const discovery = await read("lib/discovery.ts");
+  assert.match(discovery, /q\.status IN \('discovered','canonical_source_found'\)/);
+  assert.doesNotMatch(
+    discovery,
+    /q\.status IN \('discovered','needs_review','canonical_source_found'\)/
+  );
+  assert.match(discovery, /discovery_cursor as discoveryCursor/);
+});
+
+test("runtime, migration, and Drizzle discovery schemas stay aligned", async () => {
+  const [schema, runtime, migration, refreshRoute] = await Promise.all([
+    read("db/schema.ts"),
+    read("lib/data.ts"),
+    read("drizzle/0001_discovery_pipeline.sql"),
+    read("app/api/internal/refresh/route.ts"),
+  ]);
+  for (const table of [
+    "discovery_queue_investors",
+    "ingestion_source_results",
+  ]) {
+    assert.ok(schema.includes(`sqliteTable("${table}"`), `Drizzle schema is missing ${table}`);
+    assert.ok(runtime.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+    assert.ok(migration.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+  }
+  assert.match(schema, /company_sources_provider_board_unique/);
+  assert.match(schema, /primaryKey\(\{ columns: \[table\.candidateId, table\.investorSourceId\] \}\)/);
+  assert.match(schema, /discovery_queue_status_check/);
+  assert.match(runtime, /status TEXT NOT NULL CHECK\(status IN/);
+  assert.equal(
+    (runtime.match(/WHERE s\.company_id=jobs\.company_id ORDER BY s\.id LIMIT 1/g) || []).length,
+    2,
+    "legacy provider and source id must select the same deterministic source row"
+  );
+  assert.match(refreshRoute, /attemptWithFallback/);
+  assert.match(refreshRoute, /const refresh = await refreshCanonicalBoards\(\)/);
 });

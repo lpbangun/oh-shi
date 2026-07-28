@@ -1,15 +1,15 @@
-name: Daily canonical job refresh
+name: Six-hour discovery and canonical refresh
 
 on:
   schedule:
-    - cron: "30 7 * * *"
+    - cron: "30 */6 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: daily-canonical-refresh
+  group: scheduled-discovery-refresh
   cancel-in-progress: false
 
 jobs:

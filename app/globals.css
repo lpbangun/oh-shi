@@ -98,6 +98,29 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--acc); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.2; } }
 .ticker-viewport { flex: 1; min-width: 0; overflow: hidden; position: relative; height: 38px; }
+
+/* ── breadth and freshness ─────────────────────────── */
+.coverage-strip { border-bottom: 1px solid var(--line); background: var(--bg); }
+.coverage-grid { display: grid; grid-template-columns: repeat(6, 1fr); padding-top: 14px; padding-bottom: 11px; }
+.coverage-grid > div { min-width: 0; padding: 0 14px; border-left: 1px solid var(--line); }
+.coverage-grid > div:first-child { padding-left: 0; border-left: 0; }
+.coverage-grid b { display: block; font: 600 21px/1 var(--font-plex-mono), monospace; }
+.coverage-grid span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.coverage-freshness { padding-bottom: 12px; color: var(--muted); font: 10.5px var(--font-plex-mono), monospace; }
+.breadth-filters { display: flex; flex-wrap: wrap; gap: 9px; margin: 10px 0 4px; }
+.breadth-filters label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.breadth-filters select { min-width: 138px; padding: 6px 25px 6px 8px; color: var(--ink); background: var(--bg); border: 1px solid var(--line2); border-radius: 2px; text-transform: none; }
+.breadth-filters .new-filter { min-height: 32px; padding: 0 8px; border: 1px solid var(--line2); color: var(--ink2); cursor: pointer; }
+.breadth-filters input { accent-color: var(--acc); }
+
+/* Required market narrative: movements, sector map, companies, raw changes. */
+#signal > .wrap { display: flex; flex-direction: column; }
+#signal > .wrap > .section-heading { order: 0; }
+#signal > .wrap > .signal-definition { order: 1; }
+#signal .market-movements { order: 2; }
+#signal .sector-block { order: 3; }
+#signal .companies-block { order: 4; }
+#signal .changes { order: 5; }
 .ticker-track {
   position: absolute; top: 0; left: 0; height: 100%; display: flex; align-items: center;
   white-space: nowrap; will-change: transform; animation: marquee 90s linear infinite;
@@ -659,6 +682,8 @@ pre b { color: var(--ink); font-weight: 600; }
   .detail-grid, .job-detail-hero { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {
+  .coverage-grid { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+  .coverage-grid > div:nth-child(4) { padding-left: 0; border-left: 0; }
   .row-split { grid-template-columns: 1fr; gap: 38px; margin-top: 38px; }
   /* the header stops being a grid and becomes a row of filter/sort chips */
   .job-head.job-cols { display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 0 12px; }
@@ -701,6 +726,17 @@ pre b { color: var(--ink); font-weight: 600; }
   .ticker, .ticker-viewport { height: 32px; }
   .ticker-item { font-size: 10.5px; padding: 0 13px; }
   .ticker-label { padding: 0 11px; font-size: 9px; }
+  .coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 12px; }
+  .coverage-grid > div { padding: 0 8px; }
+  .coverage-grid > div:nth-child(odd) { padding-left: 0; border-left: 0; }
+  .coverage-grid > div:nth-child(4) { padding-left: 8px; border-left: 1px solid var(--line); }
+  .coverage-grid b { font-size: 18px; }
+  .coverage-grid span { font-size: 8.5px; }
+  .coverage-freshness { font-size: 9px; }
+  .breadth-filters { display: grid; grid-template-columns: 1fr 1fr; }
+  .breadth-filters label { min-width: 0; display: block; }
+  .breadth-filters select { display: block; width: 100%; min-width: 0; margin-top: 3px; }
+  .breadth-filters .new-filter { display: flex; grid-column: 1 / -1; }
 
   .section { padding: 26px 0 30px; }
   .section-heading { margin-bottom: 14px; gap: 10px; }
