@@ -79,7 +79,7 @@ test.describe("desktop hiring intelligence", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("market content follows the required order", async ({ page }) => {
+  test("market content follows sector map, companies, movements, changes order", async ({ page }) => {
     const signal = page.locator("#signal");
     const movements = signal.getByTestId("market-movements");
     const sectorMap = signal.locator(".sector-map");
@@ -94,7 +94,7 @@ test.describe("desktop hiring intelligence", () => {
     await expect(changes).toBeVisible();
 
     const boxes = await Promise.all(
-      [movements, sectorMap, companies, changes].map((locator) => locator.boundingBox())
+      [sectorMap, companies, movements, changes].map((locator) => locator.boundingBox())
     );
     const ordered = boxes.map((box) => {
       expect(box).not.toBeNull();
