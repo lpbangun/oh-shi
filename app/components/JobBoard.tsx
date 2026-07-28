@@ -72,6 +72,7 @@ const PHONE_SORTS: { id: string; label: string; key: TableKey; dir: 1 | -1 }[] =
 
 const COMPANY_PAGE_SIZE = 10;
 const CHANGE_PAGE_SIZE = 25;
+const MARKET_MOVEMENT_PAGE_SIZE = 5;
 
 function InfoExplainer({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -105,6 +106,7 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({ key: "score", dir: -1 });
   const [tablePage, setTablePage] = useState(0);
+  const [movementPage, setMovementPage] = useState(0);
   const [changePage, setChangePage] = useState(0);
 
   const [modal, setModal] = useState<{ kind: "job" | "company"; id: string; backTo?: string } | null>(null);
@@ -240,11 +242,23 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
   const tableRows = sortedCompanies.slice(tableStart, tableStart + COMPANY_PAGE_SIZE);
   const tableEnd = Math.min(tableStart + COMPANY_PAGE_SIZE, sortedCompanies.length);
 
+  const movementPages = Math.max(1, Math.ceil(movements.length / MARKET_MOVEMENT_PAGE_SIZE));
+  const safeMovementPage = Math.min(movementPage, movementPages - 1);
+  const movementStart = safeMovementPage * MARKET_MOVEMENT_PAGE_SIZE;
+  const movementRows = movements.slice(movementStart, movementStart + MARKET_MOVEMENT_PAGE_SIZE);
+  const movementEnd = Math.min(movementStart + MARKET_MOVEMENT_PAGE_SIZE, movements.length);
+
   const changePages = Math.max(1, Math.ceil(changes.length / CHANGE_PAGE_SIZE));
   const safeChangePage = Math.min(changePage, changePages - 1);
   const changeStart = safeChangePage * CHANGE_PAGE_SIZE;
   const changeRows = changes.slice(changeStart, changeStart + CHANGE_PAGE_SIZE);
   const changeEnd = Math.min(changeStart + CHANGE_PAGE_SIZE, changes.length);
+  const companyForChange = (change: ChangeEvent) => {
+    const companyId = change.entityType === "company"
+      ? change.entityId
+      : jobs.find((job) => job.id === change.entityId)?.companyId;
+    return companyId ? companyById.get(companyId) : undefined;
+  };
 
   function sortTable(key: TableKey) {
     const textual = key === "name" || key === "sector" || key === "stage" || key === "funding";
@@ -476,58 +490,6 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
             </div>
           </div>
 
-          <div
-            className="market-movements"
-            id="market-movements"
-            ref={movementsSection}
-            data-testid="market-movements"
-          >
-            <div className="market-movements-head">
-              <div>
-                <h3>Market movements</h3>
-                <p>Verified openings and closures bundled into company and sector-level activity.</p>
-              </div>
-              <span>{movements.length} movement{movements.length === 1 ? "" : "s"}</span>
-            </div>
-            <div className="movement-list">
-              {movements.length ? movements.map((movement) => (
-                <button
-                  key={movement.id}
-                  type="button"
-                  className="market-movement"
-                  data-testid="market-movement"
-                  onClick={() => {
-                    if (movement.companySlug) {
-                      setModal({ kind: "company", id: movement.companySlug });
-                      return;
-                    }
-                    setSelectedSector(movement.sector);
-                    sectorSection.current?.scrollIntoView({ block: "start" });
-                  }}
-                >
-                  <time dateTime={movement.date}>{movement.date}</time>
-                  <span className="movement-copy">
-                    <b>{movement.title}</b>
-                    <span>{movement.description}</span>
-                    {movement.jobs.length ? (
-                      <span className="movement-roles">
-                        {movement.jobs.slice(0, 3).map((job) => job.title).join(" · ")}
-                        {movement.jobs.length > 3 ? ` · +${movement.jobs.length - 3} more` : ""}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className={`movement-net ${directionOf(movement.netChange)}`}>
-                    {arrowOf(movement.netChange)} {signed(movement.netChange)}
-                    <small>{movement.evidenceCount} source{movement.evidenceCount === 1 ? "" : "s"}</small>
-                  </span>
-                  <span className="movement-open" aria-hidden="true">→</span>
-                </button>
-              )) : (
-                <p className="movement-empty">No verified market movement in the current feed.</p>
-              )}
-            </div>
-          </div>
-
           <div className="sector-block" id="sector-map" ref={sectorSection}>
           <div className="map-bar">
             <span>Sector map · sized by open roles · 30-day change</span>
@@ -721,6 +683,68 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
           </div>
 
           <div
+            className="market-movements"
+            id="market-movements"
+            ref={movementsSection}
+            data-testid="market-movements"
+          >
+            <div className="market-movements-head">
+              <div>
+                <h3>Market movements</h3>
+                <p>Verified openings and closures bundled into company and sector-level activity.</p>
+              </div>
+              <span>{movements.length} movement{movements.length === 1 ? "" : "s"}</span>
+            </div>
+            <div className="movement-list">
+              {movementRows.length ? movementRows.map((movement) => (
+                <button
+                  key={movement.id}
+                  type="button"
+                  className="market-movement"
+                  data-testid="market-movement"
+                  onClick={() => {
+                    if (movement.companySlug) {
+                      setModal({ kind: "company", id: movement.companySlug });
+                      return;
+                    }
+                    setSelectedSector(movement.sector);
+                    sectorSection.current?.scrollIntoView({ block: "start" });
+                  }}
+                >
+                  <time dateTime={movement.date}>{movement.date}</time>
+                  <span className="movement-copy">
+                    <b>{movement.title}</b>
+                    <span>{movement.description}</span>
+                    {movement.jobs.length ? (
+                      <span className="movement-roles">
+                        {movement.jobs.slice(0, 3).map((job) => job.title).join(" · ")}
+                        {movement.jobs.length > 3 ? ` · +${movement.jobs.length - 3} more` : ""}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className={`movement-net ${directionOf(movement.netChange)}`}>
+                    {arrowOf(movement.netChange)} {signed(movement.netChange)}
+                    <small>{movement.evidenceCount} source{movement.evidenceCount === 1 ? "" : "s"}</small>
+                  </span>
+                  <span className="movement-open" aria-hidden="true">→</span>
+                </button>
+              )) : (
+                <p className="movement-empty">No verified market movement in the current feed.</p>
+              )}
+            </div>
+            {movements.length > MARKET_MOVEMENT_PAGE_SIZE ? (
+              <div className="pager">
+                <span className="pager-status">Showing {movementStart + 1}–{movementEnd} of {movements.length} movements</span>
+                <div className="pager-buttons">
+                  <button type="button" disabled={safeMovementPage === 0} onClick={() => { setMovementPage(safeMovementPage - 1); movementsSection.current?.scrollIntoView({ block: "start" }); }}>← Prev</button>
+                  <span className="pager-page">Page {safeMovementPage + 1} / {movementPages}</span>
+                  <button type="button" className="primary" disabled={movementEnd >= movements.length} onClick={() => { setMovementPage(safeMovementPage + 1); movementsSection.current?.scrollIntoView({ block: "start" }); }}>Next →</button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div
             className="changes"
             id="changes"
             ref={changesSection}
@@ -732,20 +756,27 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
             </div>
             {changeRows.map((change) => {
               const date = change.occurredAt.slice(0, 10);
+              const company = companyForChange(change);
+              const companyName = company?.name || "Company unavailable";
               return (
-                <div
+                <a
                   className={`change ${change.changeType}`}
                   key={change.id}
                   data-testid="change-item"
+                  href={change.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open source for ${change.title} at ${companyName}`}
                 >
                   <time dateTime={date}>
                     <span className="full-date">{date}</span>
                     <span className="short-date">{date.slice(5)}</span>
                   </time>
                   <span className="kind">{change.changeType.replaceAll("_", " ")}</span>
+                  <span className="company">{companyName}</span>
                   <span className="title">{change.title}</span>
-                  <a className="source" href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a>
-                </div>
+                  <span className="source">Open source ↗</span>
+                </a>
               );
             })}
             <div className="pager">
