@@ -23,7 +23,7 @@ import {
   validateParameters,
   type IntelligenceView,
 } from "@/lib/intelligence-query";
-import { listChanges, listCompanies, listJobs } from "@/lib/data";
+import { getCoverageMetrics, listChanges, listCompanies, listJobs } from "@/lib/data";
 import { isBoardTracked } from "@/lib/tracked-boards";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
 
@@ -50,13 +50,16 @@ const capabilities = {
         "role_family",
         "location",
         "remote_status",
+        "provider",
+        "investor",
+        "new_since",
         "limit",
         "cursor",
       ],
     },
     companies: {
       default_limit: 10,
-      filters: ["q", "sector", "min_signal", "min_confidence", "limit", "cursor"],
+      filters: ["q", "sector", "investor", "provider", "min_signal", "min_confidence", "limit", "cursor"],
     },
     movements: {
       default_limit: 25,
@@ -80,6 +83,7 @@ const capabilities = {
   },
   cursor: "Pass page.next_cursor unchanged to the same view and filters.",
   compatibility_endpoints: ["/api/v1/jobs", "/api/v1/companies", "/api/v1/changes"],
+  coverage_endpoint: "/api/v1/coverage",
 };
 
 const lower = (value: string | null | undefined) => value?.trim().toLowerCase() || "";
@@ -201,10 +205,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const [companies, jobs, changes] = await Promise.all([
+    const [companies, jobs, changes, coverage] = await Promise.all([
       listCompanies(),
       listJobs(true),
       listChanges(),
+      getCoverageMetrics(),
     ]);
     const dataAsOf = latestTimestamp(companies, jobs, changes);
     const calculationTime = new Date().toISOString();
@@ -223,6 +228,9 @@ export async function GET(request: Request) {
       const roleFamily = stringFilter(url.searchParams, "role_family");
       const location = stringFilter(url.searchParams, "location");
       const remoteStatus = stringFilter(url.searchParams, "remote_status");
+      const provider = stringFilter(url.searchParams, "provider");
+      const investor = stringFilter(url.searchParams, "investor");
+      const newSince = parseIsoFilter(url.searchParams, "new_since");
       Object.assign(appliedFilters, {
         status,
         company: companyFilter,
@@ -230,6 +238,9 @@ export async function GET(request: Request) {
         role_family: roleFamily,
         location,
         remote_status: remoteStatus,
+        provider,
+        investor,
+        new_since: newSince,
       });
       rows = jobs
         .filter((job) => {
@@ -240,9 +251,12 @@ export async function GET(request: Request) {
             ![company?.id, company?.slug, company?.name].some((value) => contains(value, companyFilter))
           ) return false;
           if (sector && lower(company?.sector || normalizeSector(company?.industry || "")) !== lower(sector)) return false;
-          if (!contains(job.roleFamily, roleFamily)) return false;
+          if (roleFamily && lower(job.roleFamily) !== lower(roleFamily)) return false;
           if (!contains(job.location, location)) return false;
           if (!contains(job.remoteStatus, remoteStatus)) return false;
+          if (provider && lower(job.provider || job.source) !== lower(provider)) return false;
+          if (investor && !company?.investors?.some((value) => lower(value) === lower(investor))) return false;
+          if (newSince && job.firstSeenAt < newSince) return false;
           if (
             q &&
             ![job.title, job.roleFamily, job.location, company?.name, company?.sector, company?.industry]
@@ -255,10 +269,14 @@ export async function GET(request: Request) {
       const sector = stringFilter(url.searchParams, "sector");
       const minSignal = parseNumberFilter(url.searchParams, "min_signal");
       const minConfidence = parseNumberFilter(url.searchParams, "min_confidence");
+      const investor = stringFilter(url.searchParams, "investor");
+      const provider = stringFilter(url.searchParams, "provider");
       Object.assign(appliedFilters, {
         sector,
         min_signal: minSignal,
         min_confidence: minConfidence,
+        investor,
+        provider,
       });
       rows = companies
         .map((company) => {
@@ -274,6 +292,8 @@ export async function GET(request: Request) {
           if (sector && lower(company.sector || normalizeSector(company.industry)) !== lower(sector)) return false;
           if (minSignal !== null && company.hiringScore < minSignal) return false;
           if (minConfidence !== null && company.evidenceConfidence < minConfidence) return false;
+          if (investor && !company.investors?.some((value) => lower(value) === lower(investor))) return false;
+          if (provider && !company.providers?.some((value) => lower(value) === lower(provider))) return false;
           return !q || [company.name, company.sector, company.industry, company.stage]
             .some((value) => contains(value, q));
         })
@@ -330,7 +350,10 @@ export async function GET(request: Request) {
 
     const paged = pageData(rows, view, offset, limit);
     return Response.json(
-      responseEnvelope(view, dataAsOf, appliedFilters, paged.data, paged.page),
+      {
+        ...responseEnvelope(view, dataAsOf, appliedFilters, paged.data, paged.page),
+        coverage,
+      },
       { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } }
     );
   } catch (error) {

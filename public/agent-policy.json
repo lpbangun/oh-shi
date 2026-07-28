@@ -10,6 +10,7 @@
     "movements": "/api/v1/intelligence?view=movements",
     "sectors": "/api/v1/intelligence?view=sectors"
   },
+  "coverage": "/api/v1/coverage",
   "pagination": "Pass page.next_cursor unchanged with the same view and filters.",
   "change_feed": "/api/v1/changes",
   "instructions": "/llms.txt",

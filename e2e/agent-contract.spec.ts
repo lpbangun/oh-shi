@@ -181,4 +181,30 @@ test.describe("unified agent contract", () => {
       )
     ).toBe(true);
   });
+
+  test("coverage totals reconcile with compatibility records", async ({ request }) => {
+    const [coverageResponse, jobsResponse] = await Promise.all([
+      request.get("/api/v1/coverage"),
+      request.get("/api/v1/jobs"),
+    ]);
+    expect(coverageResponse.status()).toBe(200);
+    expect(jobsResponse.status()).toBe(200);
+    const coverage = await coverageResponse.json();
+    const jobs = await jobsResponse.json();
+    const openJobs = jobs.data.filter(
+      (job: { status: string }) => job.status === "verified_open"
+    );
+    expect(
+      openJobs.every(
+        (job: { provider?: string; sourceId?: string }) =>
+          Boolean(job.provider) && Boolean(job.sourceId) && job.sourceId !== "legacy"
+      )
+    ).toBe(true);
+    expect(coverage.data.verifiedOpenJobs).toBe(openJobs.length);
+    expect(coverage.data.activeCompanies).toBe(
+      new Set(openJobs.map((job: { companyId: string }) => job.companyId)).size
+    );
+    expect(coverage.data.investors).toBeTruthy();
+    expect(coverage.data.providers).toBeTruthy();
+  });
 });

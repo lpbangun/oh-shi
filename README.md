@@ -14,9 +14,17 @@ pnpm dev
 pnpm quality
 ```
 
+To exercise protected ingestion locally, start the development runtime with a
+throwaway token, then send the same value as a bearer credential:
+
+```bash
+INGEST_TOKEN=local-only-token pnpm dev
+```
+
 The app uses Cloudflare D1 through the Sites runtime. The database initializes with
-12 source-verified companies across a normalized sector taxonomy, then the canonical
-daily refresh replaces seed hiring facts with current Ashby board records.
+12 source-verified companies across a normalized sector taxonomy. A bounded
+six-hour discovery and canonical-refresh run then expands coverage and replaces
+seed hiring facts with current ATS records.
 
 ## Evaluation gate
 
@@ -42,6 +50,7 @@ production dependency advisories.
 - `GET /api/v1/jobs`
 - `GET /api/v1/jobs/:id`
 - `GET /api/v1/changes`
+- `GET /api/v1/coverage`
 - `GET /exports/companies.jsonl`
 - `GET /exports/jobs.jsonl`
 - `GET /exports/daily-changes.json`
@@ -52,14 +61,42 @@ The preferred intelligence endpoint validates filters, returns HTTP 400 for unkn
 parameters, and provides deterministic cursor pagination. See `/llms.txt` for exact
 filters and natural-language request recipes.
 
-## Daily refresh
+## Discovery and refresh
 
-`POST /api/internal/refresh` rechecks configured canonical Ashby boards, upserts live roles, records new openings, and marks roles absent from their canonical board as closed. It requires `Authorization: Bearer <INGEST_TOKEN>`.
+`POST /api/internal/refresh` first attempts every configured investor source,
+processes at most 25 discovery candidates, activates at most 10 companies after
+canonical verification, and then rechecks active Ashby, Greenhouse, Lever, and
+supported Workable sources. It upserts live roles, records new openings, and
+marks roles absent from a successful complete response from the same source as
+closed. It requires `Authorization: Bearer <INGEST_TOKEN>`.
 
-The included GitHub Actions workflow runs daily when these repository settings exist:
+The included GitHub Actions workflow runs at minute 30 every six hours when
+these repository settings exist:
 
 - variable `OH_SHI_BASE_URL`
 - secret `OH_SHI_INGEST_TOKEN`
+
+The same bearer credential protects `POST /api/internal/discovery/import`, the
+licensed/manual intake for sources where automated discovery is not permitted.
+See [docs/discovery-sources.md](docs/discovery-sources.md) for source policy,
+access status, limits, and the import record shape.
+
+## Database and release operations
+
+`drizzle/0001_discovery_pipeline.sql` is an additive, forward-only D1 migration.
+The runtime also applies the same idempotent `CREATE TABLE`, `CREATE INDEX`, and
+safe column additions before reading data, so an existing Sites D1 binding can
+upgrade without dropping records. A release operator should:
+
+1. preserve the existing Sites project and `DB` binding;
+2. configure the deployment secret `INGEST_TOKEN`;
+3. deploy the saved source version;
+4. call `GET /api/v1/coverage` and confirm existing counts remain present; and
+5. trigger the refresh workflow once, then confirm its freshness receipt.
+
+No third-party API key is required for the public ATS adapters. Sources that
+require permission or a licensed feed remain in manual status instead of being
+scraped.
 
 ## Signal policy
 

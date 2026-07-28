@@ -11,6 +11,7 @@ const publicRoutes = [
   "app/api/v1/jobs/route.ts",
   "app/api/v1/changes/route.ts",
   "app/api/v1/intelligence/route.ts",
+  "app/api/v1/coverage/route.ts",
   "app/exports/companies.jsonl/route.ts",
   "app/exports/jobs.jsonl/route.ts",
   "app/exports/daily-changes.json/route.ts",
@@ -35,6 +36,7 @@ test("agent discovery files advertise every stable public surface", async () => 
     "/api/v1/jobs",
     "/api/v1/changes",
     "/api/v1/intelligence",
+    "/api/v1/coverage",
     "/exports/companies.jsonl",
     "/exports/jobs.jsonl",
     "/exports/daily-changes.json",
@@ -82,6 +84,14 @@ test("API envelopes remain versioned, incremental, and licensed", async () => {
 
 test("canonical refresh is protected", async () => {
   const source = await read("app/api/internal/refresh/route.ts");
+  assert.match(source, /export async function POST/);
+  assert.match(source, /authorization/i);
+  assert.match(source, /INGEST_TOKEN/);
+  assert.match(source, /status:\s*401/);
+});
+
+test("manual discovery import is protected by the ingestion credential", async () => {
+  const source = await read("app/api/internal/discovery/import/route.ts");
   assert.match(source, /export async function POST/);
   assert.match(source, /authorization/i);
   assert.match(source, /INGEST_TOKEN/);
