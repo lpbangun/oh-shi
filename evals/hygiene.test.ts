@@ -81,15 +81,37 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   }
 });
 
-test("daily refresh schedule matches product copy and proves API freshness", async () => {
+test("six-hour discovery and refresh schedule proves source attempts and API freshness", async () => {
   const workflow = await read(".github/workflows/daily-refresh.yml");
   const refreshRunner = await read("scripts/run-canonical-refresh.mjs");
+  const homepage = await read("app/components/JobBoard.tsx");
+  const ticker = await read("app/components/Ticker.tsx");
+  const readme = await read("README.md");
 
-  assert.match(workflow, /cron: "30 7 \* \* \*"/);
+  assert.match(workflow, /cron: "30 \*\/6 \* \* \*"/);
   assert.match(workflow, /OH_SHI_BASE_URL/);
   assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
   assert.match(refreshRunner, /Preflight failed/);
   assert.match(refreshRunner, /refresh_run/);
   assert.match(refreshRunner, /lastVerifiedAt/);
+  assert.match(refreshRunner, /investor_sources_attempted/);
+  assert.match(refreshRunner, /companiesAddedLast1Day/);
+  assert.match(refreshRunner, /jobsAddedLast24Hours/);
+  assert.match(refreshRunner, /Canonical source failure/);
+  assert.match(refreshRunner, /Company growth warning/);
+  assert.match(homepage, /verified every six hours/);
+  assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 6\)/);
+  assert.match(readme, /minute 30 every six hours/);
+  assert.doesNotMatch(homepage, /once a day|verified every day/);
+});
+
+test("terminal review candidates cannot starve newly discovered queue work", async () => {
+  const discovery = await read("lib/discovery.ts");
+  assert.match(discovery, /q\.status IN \('discovered','canonical_source_found'\)/);
+  assert.doesNotMatch(
+    discovery,
+    /q\.status IN \('discovered','needs_review','canonical_source_found'\)/
+  );
+  assert.match(discovery, /discovery_cursor as discoveryCursor/);
 });

@@ -83,12 +83,17 @@ export type Company = {
   sourceUrl: string;
   openJobCount: number;
   lastVerifiedAt: string;
+  firstDiscoveredAt?: string | null;
+  investors?: string[];
+  providers?: string[];
 };
 
 export type Job = {
   id: string;
   companyId: string;
   externalId: string;
+  provider?: string;
+  sourceId?: string;
   title: string;
   roleFamily: string;
   location: string;
@@ -99,10 +104,37 @@ export type Job = {
   source: string;
   status: string;
   firstSeenAt: string;
+  publishedAt?: string | null;
   lastVerifiedAt: string;
   closedAt: string | null;
   summary: string;
   company?: Company;
+};
+
+export type CoverageMetrics = {
+  verifiedOpenJobs: number;
+  activeCompanies: number;
+  companiesAddedLast7Days: number;
+  companiesAddedLast1Day: number;
+  jobsAddedLast24Hours: number;
+  lastDiscoveryRun: string | null;
+  lastCanonicalRefresh: string | null;
+  consecutiveDaysWithoutCompanyGrowth: number;
+  companyGrowthWarning: boolean;
+  investors: Record<string, number>;
+  providers: Record<string, number>;
+  sourceFailures: Array<{
+    sourceId: string;
+    provider: string;
+    lastError: string;
+    consecutiveFailures: number;
+    lastSuccessfulAt: string | null;
+  }>;
+  discoverySourceFailures: Array<{
+    sourceId: string;
+    lastError: string;
+    lastSuccessfulAt: string | null;
+  }>;
 };
 
 export type ChangeEvent = {

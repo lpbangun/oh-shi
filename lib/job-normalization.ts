@@ -8,15 +8,17 @@ export type CanonicalJobInput = {
 };
 
 export function isUsEligible(job: CanonicalJobInput) {
-  const country = job.address?.postalAddress?.addressCountry || "";
-  const location = job.location || "";
-  return (
-    country === "United States" ||
-    job.isRemote === true ||
-    /remote|united states|u\.s\.|new york|san francisco|washington|boston|seattle|austin|los angeles/i.test(
-      location
-    )
-  );
+  const country = (job.address?.postalAddress?.addressCountry || "").trim();
+  const location = (job.location || "").trim();
+  const usSignal =
+    /\b(?:united states|usa|u\.s\.|us only|remote \(us|remote - us|new york|san francisco|washington(?:,? dc)?|boston|seattle|austin|los angeles|chicago|denver|atlanta|miami|portland|philadelphia|palo alto|mountain view|brooklyn)\b/i;
+  if (/^(?:united states|us|usa)$/i.test(country) || usSignal.test(location)) return true;
+  if (country && !/^(?:worldwide|global|anywhere)$/i.test(country)) return false;
+  if (job.isRemote !== true) return false;
+  // A bare/global remote designation is US-eligible. A location naming another
+  // country is not treated as US evidence merely because the role is remote.
+  return !location ||
+    /^(?:remote|remote[- /](?:global|worldwide)|global|worldwide|anywhere)$/i.test(location);
 }
 
 export function classifyRole(title: string, department = "") {

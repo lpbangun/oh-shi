@@ -123,6 +123,9 @@ export function facetValues(jobs: Job[]) {
     departments: collect((job) => job.roleFamily),
     locations: collect((job) => job.location),
     employmentTypes: collect((job) => job.employmentType),
+    providers: collect((job) => job.provider || job.source),
+    companies: Array.from(new Set(jobs.map((job) => job.company?.name || "").filter(Boolean))).sort(),
+    investors: Array.from(new Set(jobs.flatMap((job) => job.company?.investors || []))).sort(),
     sectors: Array.from(
       new Set(
         jobs
@@ -135,6 +138,49 @@ export function facetValues(jobs: Job[]) {
       )
     ).sort((a, b) => a.localeCompare(b)),
   };
+}
+
+/**
+ * Default ordering uses ranked round-robin passes through company buckets.
+ * This preserves hiring-signal priority while preventing a large board from
+ * filling the first page. Explicit user sorts bypass this function.
+ */
+export function companyDiverseJobs(
+  jobs: Job[],
+  companies: Company[]
+) {
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  const buckets = new Map<string, Job[]>();
+  for (const job of jobs) {
+    const bucket = buckets.get(job.companyId) || [];
+    bucket.push(job);
+    buckets.set(job.companyId, bucket);
+  }
+  for (const bucket of buckets.values()) {
+    bucket.sort((a, b) =>
+      b.firstSeenAt.localeCompare(a.firstSeenAt) ||
+      a.title.localeCompare(b.title) ||
+      a.id.localeCompare(b.id)
+    );
+  }
+  const companyIds = [...buckets.keys()].sort((a, b) =>
+    (companyById.get(b)?.hiringScore || 0) - (companyById.get(a)?.hiringScore || 0) ||
+    (companyById.get(a)?.name || a).localeCompare(companyById.get(b)?.name || b) ||
+    a.localeCompare(b)
+  );
+  const output: Job[] = [];
+  for (let round = 0; output.length < jobs.length; round += 1) {
+    let added = false;
+    for (const companyId of companyIds) {
+      const job = buckets.get(companyId)?.[round];
+      if (job) {
+        output.push(job);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+  return output;
 }
 
 type MovementBucket = {

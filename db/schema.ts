@@ -28,6 +28,8 @@ export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(),
   companyId: text("company_id").notNull(),
   externalId: text("external_id").notNull(),
+  provider: text("provider").notNull().default("ashby"),
+  sourceId: text("source_id").notNull().default("legacy"),
   title: text("title").notNull(),
   roleFamily: text("role_family").notNull(),
   location: text("location").notNull(),
@@ -38,9 +40,69 @@ export const jobs = sqliteTable("jobs", {
   source: text("source").notNull(),
   status: text("status").notNull(),
   firstSeenAt: text("first_seen_at").notNull(),
+  publishedAt: text("published_at"),
   lastVerifiedAt: text("last_verified_at").notNull(),
   closedAt: text("closed_at"),
   summary: text("summary").notNull(),
+});
+
+export const investorSources = sqliteTable("investor_sources", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull(),
+  portfolioUrl: text("portfolio_url").notNull(),
+  jobsUrl: text("jobs_url"),
+  accessMode: text("access_mode").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  mandatory: integer("mandatory", { mode: "boolean" }).notNull(),
+  reviewNotes: text("review_notes").notNull(),
+  discoveryCursor: integer("discovery_cursor").notNull().default(0),
+  lastAttemptedAt: text("last_attempted_at"),
+  lastSuccessfulAt: text("last_successful_at"),
+  lastError: text("last_error"),
+});
+
+export const companySources = sqliteTable("company_sources", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  provider: text("provider").notNull(),
+  boardId: text("board_id").notNull(),
+  careersUrl: text("careers_url").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  discoveryStatus: text("discovery_status").notNull(),
+  firstDiscoveredAt: text("first_discovered_at").notNull(),
+  lastAttemptedAt: text("last_attempted_at"),
+  lastSuccessfulAt: text("last_successful_at"),
+  lastError: text("last_error"),
+  consecutiveFailures: integer("consecutive_failures").notNull(),
+  reviewNotes: text("review_notes").notNull(),
+});
+
+export const companyInvestors = sqliteTable("company_investors", {
+  companyId: text("company_id").notNull(),
+  investorSourceId: text("investor_source_id").notNull(),
+  firstDiscoveredAt: text("first_discovered_at").notNull(),
+  evidenceUrl: text("evidence_url").notNull(),
+});
+
+export const discoveryQueue = sqliteTable("discovery_queue", {
+  id: text("id").primaryKey(),
+  normalizedDomain: text("normalized_domain").notNull(),
+  companyName: text("company_name").notNull(),
+  websiteUrl: text("website_url").notNull(),
+  status: text("status").notNull(),
+  firstDiscoveredAt: text("first_discovered_at").notNull(),
+  lastAttemptedAt: text("last_attempted_at"),
+  lastError: text("last_error"),
+  reviewNotes: text("review_notes").notNull(),
+});
+
+export const ingestionRuns = sqliteTable("ingestion_runs", {
+  id: text("id").primaryKey(),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  status: text("status").notNull(),
+  metricsJson: text("metrics_json").notNull(),
 });
 
 export const changes = sqliteTable("changes", {

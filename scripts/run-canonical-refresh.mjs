@@ -21,11 +21,11 @@ const startedAt = Date.now();
 const delay = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function fetchWithTimeout(url, init = {}) {
+async function fetchWithTimeout(url, init = {}, timeoutMs = 60_000) {
   return fetch(url, {
     ...init,
     cache: "no-store",
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -41,7 +41,8 @@ async function refresh() {
             Authorization: `Bearer ${ingestToken}`,
             "User-Agent": "OH-SHI-GitHub-Refresh/1.0",
           },
-        }
+        },
+        240_000
       );
       const body = await response.text();
       if (!response.ok) {
@@ -57,6 +58,24 @@ async function refresh() {
         Date.parse(result.refreshed_at) < startedAt - 120_000
       ) {
         throw new Error("Refresh response did not prove that a canonical board was refreshed.");
+      }
+      if (
+        !result.discovery ||
+        typeof result.discovery.completed_at !== "string" ||
+        !Number.isInteger(result.discovery.investor_sources_attempted) ||
+        result.discovery.investor_sources_attempted < 10
+      ) {
+        throw new Error("Refresh response did not prove that all configured investor sources were attempted.");
+      }
+      if (
+        !result.coverage ||
+        !Number.isInteger(result.coverage.activeCompanies) ||
+        !Number.isInteger(result.coverage.companiesAddedLast1Day) ||
+        !Number.isInteger(result.coverage.companiesAddedLast7Days) ||
+        !Number.isInteger(result.coverage.jobsAddedLast24Hours) ||
+        !Array.isArray(result.sources)
+      ) {
+        throw new Error("Refresh response did not include complete coverage and per-source receipts.");
       }
       return result;
     } catch (error) {
@@ -105,6 +124,27 @@ async function verifyFreshness(refreshedAt) {
 const result = await refresh();
 const freshRecords = await verifyFreshness(result.refreshed_at);
 console.log(
-  `Refresh verified: ${result.boards} boards, ${result.verified} roles checked, ` +
+  `Discovery attempted ${result.discovery.investor_sources_attempted} investor sources; ` +
+    `refresh verified ${result.successful_sources}/${result.boards} boards, ${result.verified} roles checked, ` +
     `${result.opened} opened, ${result.closed} closed, ${freshRecords} fresh API records.`
 );
+console.log(
+  `Coverage: ${result.coverage.activeCompanies} companies with verified-open jobs; ` +
+    `${result.coverage.companiesAddedLast1Day} companies added in 1d, ` +
+    `${result.coverage.companiesAddedLast7Days} in 7d, ` +
+    `${result.coverage.jobsAddedLast24Hours} jobs added in 24h.`
+);
+for (const source of result.sources.filter((item) => item.status === "failed")) {
+  console.warn(
+    `Canonical source failure: ${source.provider}/${source.sourceId} (${source.error || "unknown error"}).`
+  );
+}
+for (const source of result.discovery.failed_sources || []) {
+  console.warn(`Discovery source failure: ${source.id} (${source.error || "unknown error"}).`);
+}
+if (result.coverage.companyGrowthWarning) {
+  console.warn(
+    `Company growth warning: below 50 active companies with ` +
+      `${result.coverage.consecutiveDaysWithoutCompanyGrowth} consecutive days without growth.`
+  );
+}
