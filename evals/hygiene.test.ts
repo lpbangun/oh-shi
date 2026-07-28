@@ -115,3 +115,31 @@ test("terminal review candidates cannot starve newly discovered queue work", asy
   );
   assert.match(discovery, /discovery_cursor as discoveryCursor/);
 });
+
+test("runtime, migration, and Drizzle discovery schemas stay aligned", async () => {
+  const [schema, runtime, migration, refreshRoute] = await Promise.all([
+    read("db/schema.ts"),
+    read("lib/data.ts"),
+    read("drizzle/0001_discovery_pipeline.sql"),
+    read("app/api/internal/refresh/route.ts"),
+  ]);
+  for (const table of [
+    "discovery_queue_investors",
+    "ingestion_source_results",
+  ]) {
+    assert.ok(schema.includes(`sqliteTable("${table}"`), `Drizzle schema is missing ${table}`);
+    assert.ok(runtime.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+    assert.ok(migration.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+  }
+  assert.match(schema, /company_sources_provider_board_unique/);
+  assert.match(schema, /primaryKey\(\{ columns: \[table\.candidateId, table\.investorSourceId\] \}\)/);
+  assert.match(schema, /discovery_queue_status_check/);
+  assert.match(runtime, /status TEXT NOT NULL CHECK\(status IN/);
+  assert.equal(
+    (runtime.match(/WHERE s\.company_id=jobs\.company_id ORDER BY s\.id LIMIT 1/g) || []).length,
+    2,
+    "legacy provider and source id must select the same deterministic source row"
+  );
+  assert.match(refreshRoute, /attemptWithFallback/);
+  assert.match(refreshRoute, /const refresh = await refreshCanonicalBoards\(\)/);
+});

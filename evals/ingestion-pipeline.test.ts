@@ -15,7 +15,9 @@ import {
   jobsToCloseAfterFetch,
   mergeDiscoveryCandidates,
   portfolioWindow,
+  processSequentiallyIsolated,
   refreshOutcome,
+  attemptWithFallback,
 } from "../lib/ingestion-core";
 import { INVESTOR_SOURCE_SEEDS, normalizeDomain } from "../lib/source-registry";
 import type { Company, Job } from "../lib/types";
@@ -40,7 +42,12 @@ test("Ashby, Greenhouse, Lever, and Workable normalize canonical US jobs", () =>
     location: { location_str: "Austin, TX" }, url: "https://apply.workable.com/acme/j/w4/",
     published_on: "2026-07-03",
   }] });
-  for (const jobs of [ashby, greenhouse, lever, workable]) {
+  const workableResults = normalizeWorkable({ results: [{
+    shortcode: "w5", title: "Customer Success Manager", department: "Operations",
+    location: { location_str: "Remote - US" }, remote: true,
+    url: "https://apply.workable.com/acme/j/w5/",
+  }] });
+  for (const jobs of [ashby, greenhouse, lever, workable, workableResults]) {
     assert.equal(jobs.length, 1);
     assert.match(jobs[0].canonicalUrl, /^https:\/\//);
     assert.ok(jobs[0].externalId);
@@ -91,6 +98,13 @@ test("malformed successful responses are incomplete and cannot prove absence", (
   assert.equal(isCompleteProviderPayload("greenhouse", { jobs: [] }), true);
   assert.equal(isCompleteProviderPayload("lever", []), true);
   assert.equal(isCompleteProviderPayload("workable", { jobs: [] }), true);
+  assert.equal(isCompleteProviderPayload("workable", { results: [{
+    shortcode: "ROLE2", title: "Engineer", url: "https://apply.workable.com/acme/j/ROLE2/",
+  }] }), true);
+  assert.equal(isCompleteProviderPayload("workable", {
+    jobs: [],
+    results: [{ malformed: true }],
+  }), true, "an explicit empty jobs array is a complete board and must not fall through");
 });
 
 test("company domains normalize and cross-investor discovery is idempotent", () => {
@@ -117,6 +131,39 @@ test("portfolio discovery advances through durable bounded windows", () => {
   assert.deepEqual(third.items, links.slice(40));
   assert.equal(third.nextCursor, 0);
   assert.deepEqual(portfolioWindow(links, 999).items, links.slice(0, 20));
+});
+
+test("candidate failures are isolated and discovery failures do not block later work", async () => {
+  const attempted: number[] = [];
+  const failureBookkeeping: number[] = [];
+  const processed = await processSequentiallyIsolated(
+    [1, 2, 3],
+    async (value) => {
+      attempted.push(value);
+      if (value === 2) throw new Error("transient D1 failure");
+      return value * 10;
+    },
+    async (value) => {
+      failureBookkeeping.push(value);
+    }
+  );
+  assert.deepEqual(attempted, [1, 2, 3]);
+  assert.deepEqual(processed.results, [10, 30]);
+  assert.equal(processed.failures.length, 1);
+  assert.deepEqual(failureBookkeeping, [2]);
+
+  let refreshRan = false;
+  const discovery = await attemptWithFallback(
+    async () => { throw new Error("discovery unavailable"); },
+    () => ({ overall_status: "failed" as const })
+  );
+  const refresh = await (async () => {
+    refreshRan = true;
+    return { overall_status: "success" as const };
+  })();
+  assert.equal(discovery.overall_status, "failed");
+  assert.equal(refresh.overall_status, "success");
+  assert.equal(refreshRan, true);
 });
 
 test("provider/source identity and closing are strictly scoped", () => {

@@ -82,6 +82,39 @@ export function portfolioWindow<T>(values: T[], cursor: number, limit = 20) {
   };
 }
 
+export async function processSequentiallyIsolated<T, R>(
+  values: T[],
+  work: (value: T) => Promise<R>,
+  onFailure?: (value: T, error: unknown) => Promise<void>
+) {
+  const results: R[] = [];
+  const failures: Array<{ value: T; error: unknown }> = [];
+  for (const value of values) {
+    try {
+      results.push(await work(value));
+    } catch (error) {
+      failures.push({ value, error });
+      try {
+        await onFailure?.(value, error);
+      } catch {
+        // Failure bookkeeping must not prevent the remaining work from running.
+      }
+    }
+  }
+  return { results, failures };
+}
+
+export async function attemptWithFallback<T>(
+  work: () => Promise<T>,
+  fallback: (error: unknown) => T
+) {
+  try {
+    return await work();
+  } catch (error) {
+    return fallback(error);
+  }
+}
+
 export function changeEventId(kind: "open" | "close", jobId: string, occurredAt: string) {
   return `change_${kind}_${jobId}_${occurredAt.slice(0, 10)}`;
 }

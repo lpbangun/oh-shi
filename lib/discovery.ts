@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { detectAtsFromLinks, fetchCanonicalBoard } from "./ats-adapters";
 import { ensureDatabase } from "./data";
-import { portfolioWindow } from "./ingestion-core";
+import { portfolioWindow, processSequentiallyIsolated } from "./ingestion-core";
 import { normalizeDomain, sourceKey } from "./source-registry";
 
 type Candidate = {
@@ -352,35 +352,62 @@ export async function runDiscovery(options: {
     q.company_name as companyName, q.website_url as websiteUrl, q.status,
     qi.investor_source_id as investorSourceId, qi.evidence_url as evidenceUrl
     FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
-    WHERE q.status IN ('discovered','canonical_source_found') GROUP BY q.id
+    WHERE q.status IN ('discovered','canonical_source_found')
+      OR (q.status='resolving' AND (
+        q.last_attempted_at IS NULL OR q.last_attempted_at < ?
+      ))
+    GROUP BY q.id
     ORDER BY q.first_discovered_at, q.id LIMIT ?`)
-    .bind(options.processLimit || 25).all<Candidate>();
+    .bind(
+      new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
+      options.processLimit || 25
+    ).all<Candidate>();
   let canonicalBoardsDetected = 0;
   let companiesActivated = 0;
-  for (const candidate of queued.results) {
-    const result = await processCandidate(
-      candidate,
-      fetcher,
-      new Date().toISOString(),
-      companiesActivated < (options.activationLimit || 10)
-    );
-    if (result.boardDetected) canonicalBoardsDetected += 1;
-    if (result.activated) companiesActivated += 1;
-  }
+  const processed = await processSequentiallyIsolated(
+    queued.results,
+    async (candidate) => {
+      const result = await processCandidate(
+        candidate, fetcher, new Date().toISOString(),
+        companiesActivated < (options.activationLimit || 10)
+      );
+      if (result.boardDetected) canonicalBoardsDetected += 1;
+      if (result.activated) companiesActivated += 1;
+      return result;
+    },
+    async (candidate, error) => {
+      const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+      await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
+        last_error=?, review_notes='Transient candidate processing failure; queued for retry.'
+        WHERE id=?`).bind(message, candidate.id).run();
+    }
+  );
+  const failedCandidates = processed.failures.map(({ value, error }) => ({
+    id: value.id,
+    error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+  }));
   const completedAt = new Date().toISOString();
+  const allSourcesFailed =
+    configured.results.length > 0 && failedSources.length === configured.results.length;
+  const overallStatus = allSourcesFailed
+    ? "failed"
+    : failedSources.length || failedCandidates.length
+      ? "partial_success"
+      : "success";
   const metrics = {
+    overall_status: overallStatus,
     investor_sources_attempted: configured.results.length,
     candidates_discovered: candidatesDiscovered,
     candidates_processed: Math.min(queued.results.length, options.processLimit || 25),
     canonical_boards_detected: canonicalBoardsDetected,
     companies_activated: companiesActivated,
     failed_sources: failedSources,
+    failed_candidates: failedCandidates,
     blocked_sources: blockedSources,
   };
   await env.DB.prepare(`UPDATE ingestion_runs SET completed_at=?, status=?,
     metrics_json=? WHERE id=?`).bind(
-    completedAt, failedSources.length === configured.results.length ? "failed" :
-      failedSources.length ? "partial_success" : "success",
+    completedAt, overallStatus,
     JSON.stringify(metrics), runId
   ).run();
   return { run_id: runId, completed_at: completedAt, ...metrics };

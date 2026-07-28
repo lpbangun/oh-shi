@@ -201,7 +201,12 @@ export function normalizeProvider(provider: AtsProvider, payload: unknown) {
 }
 
 export function isCompleteProviderPayload(provider: AtsProvider, payload: unknown) {
-  const records = provider === "lever" ? payload : object(payload).jobs;
+  const root = object(payload);
+  const records = provider === "lever"
+    ? payload
+    : provider === "workable" && !Array.isArray(root.jobs)
+      ? root.results
+      : root.jobs;
   if (!Array.isArray(records)) return false;
   return records.every((raw) => {
     const job = object(raw);

@@ -108,7 +108,10 @@ async function initializeDatabase() {
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS discovery_queue (
       id TEXT PRIMARY KEY, normalized_domain TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL,
-      website_url TEXT NOT NULL, status TEXT NOT NULL, first_discovered_at TEXT NOT NULL,
+      website_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN (
+        'discovered','resolving','canonical_source_found','active',
+        'needs_review','unsupported','rejected'
+      )), first_discovered_at TEXT NOT NULL,
       last_attempted_at TEXT, last_error TEXT, review_notes TEXT NOT NULL DEFAULT ''
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS discovery_queue_investors (
@@ -260,8 +263,10 @@ async function initializeDatabase() {
   // Backfill before enforcing source identity. This preserves existing rows
   // while avoiding collisions between identical external ids on different boards.
   await env.DB.prepare(`UPDATE jobs SET
-    provider=COALESCE((SELECT provider FROM company_sources s WHERE s.company_id=jobs.company_id LIMIT 1), provider),
-    source_id=COALESCE((SELECT id FROM company_sources s WHERE s.company_id=jobs.company_id LIMIT 1), source_id)
+    provider=COALESCE((SELECT provider FROM company_sources s
+      WHERE s.company_id=jobs.company_id ORDER BY s.id LIMIT 1), provider),
+    source_id=COALESCE((SELECT id FROM company_sources s
+      WHERE s.company_id=jobs.company_id ORDER BY s.id LIMIT 1), source_id)
     WHERE source_id='legacy'`).run();
   await env.DB.prepare(
     "CREATE UNIQUE INDEX IF NOT EXISTS jobs_provider_identity_idx ON jobs(provider, source_id, external_id)"
