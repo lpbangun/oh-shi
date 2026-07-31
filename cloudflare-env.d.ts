@@ -4,3 +4,5 @@ declare namespace Cloudflare {
     INGEST_TOKEN?: string;
   }
 }
+
+declare const __DEPLOYED_SHA__: string;

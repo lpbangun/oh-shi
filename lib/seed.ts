@@ -277,8 +277,18 @@ const makeJob = (
   source: "Ashby",
   status: "verified_open",
   firstSeenAt: DATA_AS_OF,
+  lastSeenAt: DATA_AS_OF,
+  sourceUpdatedAt: DATA_AS_OF,
   lastVerifiedAt: DATA_AS_OF,
   closedAt: null,
+  rawUrl: canonicalUrl,
+  discoveryChannel: "public_ats",
+  evidenceUrl: canonicalUrl,
+  parserVersion: "seed-1.0",
+  snapshotRunId: "seed-2026-07-23",
+  linkedInPresenceState: "unknown",
+  linkedInEvidenceUrl: null,
+  linkedInCheckedAt: null,
   summary,
 });
 

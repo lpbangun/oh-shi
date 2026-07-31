@@ -1,3 +1,8 @@
+import {
+  REFRESH_CONTRACT_VERSION,
+  runVersionedRefresh,
+} from "../lib/refresh-client.mjs";
+
 const baseUrlValue = process.env.OH_SHI_BASE_URL?.trim();
 const ingestToken = process.env.OH_SHI_INGEST_TOKEN?.trim();
 
@@ -18,8 +23,14 @@ if (baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) {
 baseUrl.pathname = baseUrl.pathname.replace(/\/+$/, "");
 
 const startedAt = Date.now();
-const delay = (milliseconds) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
+const runKey = process.env.OH_SHI_RUN_KEY?.trim() ||
+  (process.env.GITHUB_RUN_ID
+    ? `github-${process.env.GITHUB_RUN_ID}`
+    : `manual-${startedAt}-${crypto.randomUUID()}`);
+const headers = {
+  Authorization: `Bearer ${ingestToken}`,
+  "User-Agent": `OH-SHI-GitHub-Refresh/${REFRESH_CONTRACT_VERSION}`,
+};
 
 async function fetchWithTimeout(url, init = {}, timeoutMs = 60_000) {
   return fetch(url, {
@@ -29,62 +40,16 @@ async function fetchWithTimeout(url, init = {}, timeoutMs = 60_000) {
   });
 }
 
-async function refresh() {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetchWithTimeout(
-        new URL("/api/internal/refresh", baseUrl),
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ingestToken}`,
-            "User-Agent": "OH-SHI-GitHub-Refresh/1.0",
-          },
-        },
-        240_000
-      );
-      const body = await response.text();
-      if (!response.ok) {
-        throw new Error(`Refresh returned HTTP ${response.status}: ${body.slice(0, 500)}`);
-      }
-      const result = JSON.parse(body);
-      if (
-        typeof result.refreshed_at !== "string" ||
-        !Number.isInteger(result.boards) ||
-        result.boards < 1 ||
-        !Number.isInteger(result.verified) ||
-        result.verified < 1 ||
-        Date.parse(result.refreshed_at) < startedAt - 120_000
-      ) {
-        throw new Error("Refresh response did not prove that a canonical board was refreshed.");
-      }
-      if (
-        !result.discovery ||
-        typeof result.discovery.completed_at !== "string" ||
-        !Number.isInteger(result.discovery.investor_sources_attempted) ||
-        result.discovery.investor_sources_attempted < 10
-      ) {
-        throw new Error("Refresh response did not prove that all configured investor sources were attempted.");
-      }
-      if (
-        !result.coverage ||
-        !Number.isInteger(result.coverage.activeCompanies) ||
-        !Number.isInteger(result.coverage.companiesAddedLast1Day) ||
-        !Number.isInteger(result.coverage.companiesAddedLast7Days) ||
-        !Number.isInteger(result.coverage.jobsAddedLast24Hours) ||
-        !Array.isArray(result.sources)
-      ) {
-        throw new Error("Refresh response did not include complete coverage and per-source receipts.");
-      }
-      return result;
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) await delay(attempt * 1_000);
-    }
+const refreshUrl = new URL("/api/internal/refresh", baseUrl);
+const { preflight, result } = await runVersionedRefresh(
+  refreshUrl,
+  headers,
+  runKey,
+  {
+    attempts: 3,
+    fetchImpl: (url, init) => fetchWithTimeout(url, init, 240_000),
   }
-  throw lastError;
-}
+);
 
 async function verifyFreshness(refreshedAt) {
   let lastReason = "No response received.";
@@ -92,9 +57,9 @@ async function verifyFreshness(refreshedAt) {
     try {
       const url = new URL("/api/v1/jobs", baseUrl);
       url.searchParams.set("include_closed", "true");
-      url.searchParams.set("refresh_run", `${startedAt}-${attempt}`);
+      url.searchParams.set("refresh_run", `${runKey}-${attempt}`);
       const response = await fetchWithTimeout(url, {
-        headers: { "User-Agent": "OH-SHI-GitHub-Refresh/1.0" },
+        headers: { "User-Agent": `OH-SHI-GitHub-Refresh/${REFRESH_CONTRACT_VERSION}` },
       });
       if (!response.ok) {
         lastReason = `jobs endpoint returned HTTP ${response.status}`;
@@ -106,27 +71,34 @@ async function verifyFreshness(refreshedAt) {
             typeof record.lastVerifiedAt === "string" &&
             Date.parse(record.lastVerifiedAt) >= startedAt - 120_000
         );
-        if (freshRecords.length > 0) {
-          return freshRecords.length;
-        }
+        if (freshRecords.length > 0) return freshRecords.length;
         lastReason = `${records.length} records returned, but none were freshly verified`;
       }
     } catch (error) {
       lastReason = error instanceof Error ? error.message : String(error);
     }
-    if (attempt < 6) await delay(10_000);
+    if (attempt < 6) await new Promise((resolve) => setTimeout(resolve, 10_000));
   }
   throw new Error(
     `Post-refresh freshness check failed after refresh ${refreshedAt}: ${lastReason}.`
   );
 }
 
-const result = await refresh();
-const freshRecords = await verifyFreshness(result.refreshed_at);
+const freshRecords = await verifyFreshness(result.canonical.refreshed_at);
+const discoveryCounts = result.discovery.source_counts;
 console.log(
-  `Discovery attempted ${result.discovery.investor_sources_attempted} investor sources; ` +
-    `refresh verified ${result.successful_sources}/${result.boards} boards, ${result.verified} roles checked, ` +
-    `${result.opened} opened, ${result.closed} closed, ${freshRecords} fresh API records.`
+  `Contract ${preflight.contract_version} at ${preflight.deployed_sha}; run ${result.run_key}.`
+);
+console.log(
+  `Discovery sources: ${discoveryCounts.configured} configured, ` +
+    `${discoveryCounts.fetched} fetched, ${discoveryCounts.manual} manual, ` +
+    `${discoveryCounts.blocked} blocked, ${discoveryCounts.failed} failed, ` +
+    `${discoveryCounts.completed} completed.`
+);
+console.log(
+  `Refresh verified ${result.canonical.successful_sources}/${result.canonical.boards} boards, ` +
+    `${result.canonical.verified} roles checked, ${result.canonical.opened} opened, ` +
+    `${result.canonical.closed} closed, ${freshRecords} fresh API records.`
 );
 console.log(
   `Coverage: ${result.coverage.activeCompanies} companies with verified-open jobs; ` +
@@ -134,13 +106,13 @@ console.log(
     `${result.coverage.companiesAddedLast7Days} in 7d, ` +
     `${result.coverage.jobsAddedLast24Hours} jobs added in 24h.`
 );
-for (const source of result.sources.filter((item) => item.status === "failed")) {
+for (const source of result.source_receipts.canonical.filter((item) => item.status === "failed")) {
   console.warn(
     `Canonical source failure: ${source.provider}/${source.sourceId} (${source.error || "unknown error"}).`
   );
 }
-for (const source of result.discovery.failed_sources || []) {
-  console.warn(`Discovery source failure: ${source.id} (${source.error || "unknown error"}).`);
+for (const source of result.source_receipts.discovery.filter((item) => item.status === "failed")) {
+  console.warn(`Discovery source failure: ${source.source_id} (${source.error || "unknown error"}).`);
 }
 if (result.coverage.companyGrowthWarning) {
   console.warn(

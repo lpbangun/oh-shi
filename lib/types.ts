@@ -104,16 +104,81 @@ export type Job = {
   source: string;
   status: string;
   firstSeenAt: string;
+  lastSeenAt: string;
+  sourceUpdatedAt: string | null;
   publishedAt?: string | null;
   lastVerifiedAt: string;
   closedAt: string | null;
+  rawUrl: string;
+  discoveryChannel: string;
+  evidenceUrl: string;
+  parserVersion: string;
+  snapshotRunId: string;
+  linkedInPresenceState: "confirmed" | "not_observed" | "unknown";
+  linkedInEvidenceUrl: string | null;
+  linkedInCheckedAt: string | null;
   summary: string;
   company?: Company;
 };
 
+export const HIRING_SIGNAL_SOURCE_KINDS = [
+  "company_blog",
+  "rss",
+  "github",
+  "hacker_news",
+  "authorized_api",
+  "submission",
+] as const;
+
+export type HiringSignalSourceKind = (typeof HIRING_SIGNAL_SOURCE_KINDS)[number];
+
+export type HiringSignal = {
+  id: string;
+  companyId: string | null;
+  companyName: string;
+  companyDomain: string;
+  roleFunction: string;
+  summary: string;
+  sourceKind: HiringSignalSourceKind;
+  sourceUrl: string;
+  evidenceUrl: string;
+  sourceRightsUrl: string;
+  applicationUrl: string | null;
+  permissionStatus: "permitted" | "authorized" | "manual_reviewed";
+  confidence: number;
+  status: "active" | "expired" | "unverifiable" | "promoted";
+  observedAt: string;
+  lastVerifiedAt: string;
+  expiresAt: string;
+  promotedJobId: string | null;
+};
+
+export type OffBoardVerifiedOpening = {
+  signalId: string;
+  jobId: string;
+  companyId: string;
+  companyName: string;
+  companyDomain: string;
+  title: string;
+  location: string;
+  employmentType: string;
+  canonicalUrl: string;
+  evidenceUrl: string;
+  sourceRightsUrl: string;
+  discoverySourceKind: HiringSignalSourceKind;
+  verifiedAt: string;
+};
+
 export type CoverageMetrics = {
   verifiedOpenJobs: number;
+  activeHiringSignals: number;
+  offBoardVerifiedOpenings: number;
+  offBoardVerifiedCompanies: number;
   activeCompanies: number;
+  startupDomains: number;
+  pilotStartupDomains: number;
+  pendingStartupDomains: number;
+  verifiedActiveStartupDomains: number;
   companiesAddedLast7Days: number;
   companiesAddedLast1Day: number;
   jobsAddedLast24Hours: number;
