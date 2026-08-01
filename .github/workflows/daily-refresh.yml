@@ -1,8 +1,10 @@
-name: Six-hour discovery and canonical refresh
+name: Two-hour discovery and canonical refresh
 
 on:
   schedule:
-    - cron: "30 */6 * * *"
+    # Small batches run often drain the registry faster than large rare runs,
+    # and a failed run costs one slot instead of six hours.
+    - cron: "30 */2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -15,15 +17,32 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Keeps the company universe growing on its own. Evidence only: this step
+      # never activates a company, so a directory change cannot publish a job.
+      - name: Sync the public startup directory into the domain registry
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+        run: pnpm exec tsx scripts/sync-startup-directory.ts
 
       - name: Preflight, refresh, and verify freshness
         env:

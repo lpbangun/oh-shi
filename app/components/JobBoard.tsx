@@ -347,10 +347,10 @@ export function JobBoard({
       <div className="strip">
         <div className="wrap">
           <div className="strip-top">
-            <h1>Startup jobs, <em>verified every six hours.</em></h1>
+            <h1>Startup jobs, <em>verified every two hours.</em></h1>
             <Link href="/about" className="strip-more">How this works →</Link>
           </div>
-          <p>We recheck each active canonical board every six hours and write down exactly what moved.</p>
+          <p>We recheck each active canonical board every two hours and write down exactly what moved.</p>
         </div>
       </div>
 

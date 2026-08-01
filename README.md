@@ -23,7 +23,7 @@ INGEST_TOKEN=local-only-token pnpm dev
 
 The app uses Cloudflare D1 through the Sites runtime. The database initializes with
 12 source-verified companies across a normalized sector taxonomy. A bounded
-six-hour discovery and canonical-refresh run then expands coverage and replaces
+two-hour discovery and canonical-refresh run then expands coverage and replaces
 seed hiring facts with current ATS records.
 
 ## Evaluation gate
@@ -68,14 +68,31 @@ compatibility API, and human interface.
 ## Discovery and refresh
 
 `POST /api/internal/refresh` first attempts every configured investor source,
-processes at most 25 discovery candidates, activates at most 10 companies after
+promotes up to 150 permitted domains from the registry onto the discovery queue,
+processes at most 30 discovery candidates, activates at most 25 companies after
 canonical verification, and then rechecks active Ashby, Greenhouse, Lever, and
 supported Workable sources. It upserts live roles, records new openings, and
 marks roles absent from a successful complete response from the same source as
 closed. It requires `Authorization: Bearer <INGEST_TOKEN>`.
 
-The included GitHub Actions workflow runs at minute 30 every six hours when
-these repository settings exist:
+Candidates reach the queue from two places: the investor-portfolio crawl, and
+promotion from the startup domain registry. Registry promotion ranks
+directory-sourced domains first because an entry that exists to describe a
+startup detects a board far more often than an encyclopedia entry that merely
+mentions a company.
+
+A candidate's board is resolved by crawling its official site for a link to a
+supported ATS. When that finds nothing — the common case for a client-rendered
+or bot-protected careers page — discovery falls back to probing the public
+Greenhouse, Lever, and Ashby board APIs by slug. A Greenhouse match must be
+corroborated by the board's own published employer name, and a Lever or Ashby
+match must use a slug equal to the registrable-domain label, so a slug
+collision cannot activate the wrong employer.
+
+The included GitHub Actions workflow runs at minute 30 every two hours. It first
+syncs the public startup directory into the domain registry
+(`scripts/sync-startup-directory.ts`, evidence only — it never activates a
+company), then runs the refresh. It needs these repository settings:
 
 - variable `OH_SHI_BASE_URL`
 - secret `OH_SHI_INGEST_TOKEN`

@@ -314,3 +314,66 @@ export async function auditDataQuality(
     rows,
   };
 }
+
+/**
+ * Inventory concentration guard. Production previously allowed a single employer
+ * (Harvey) to hold nearly half of verified-open jobs; discovery yield and default
+ * ordering must keep any one company below a share threshold.
+ */
+export type EmployerJobCount = {
+  companyId: string;
+  jobCount: number;
+};
+
+export type EmployerShare = {
+  companyId: string;
+  jobCount: number;
+  share: number;
+};
+
+export type EmployerConcentration = {
+  totalJobs: number;
+  companyCount: number;
+  largest: EmployerShare | null;
+  shares: EmployerShare[];
+};
+
+export function employerJobConcentration(
+  counts: EmployerJobCount[]
+): EmployerConcentration {
+  const totals = new Map<string, number>();
+  for (const item of counts) {
+    const companyId = String(item.companyId || "").trim();
+    const jobCount = Math.max(0, Math.trunc(Number(item.jobCount) || 0));
+    if (!companyId || jobCount <= 0) continue;
+    totals.set(companyId, (totals.get(companyId) || 0) + jobCount);
+  }
+  const totalJobs = [...totals.values()].reduce((sum, count) => sum + count, 0);
+  const shares = [...totals.entries()]
+    .map(([companyId, jobCount]) => ({
+      companyId,
+      jobCount,
+      share: totalJobs ? jobCount / totalJobs : 0,
+    }))
+    .sort((left, right) =>
+      right.jobCount - left.jobCount ||
+      left.companyId.localeCompare(right.companyId)
+    );
+  return {
+    totalJobs,
+    companyCount: totals.size,
+    largest: shares[0] || null,
+    shares,
+  };
+}
+
+/** True when no single employer exceeds maxShare of the inventory (exclusive). */
+export function largestEmployerShareWithinLimit(
+  counts: EmployerJobCount[],
+  maxShare: number
+) {
+  if (!(maxShare > 0) || !Number.isFinite(maxShare)) return false;
+  const { largest, totalJobs } = employerJobConcentration(counts);
+  if (!totalJobs || !largest) return true;
+  return largest.share <= maxShare;
+}

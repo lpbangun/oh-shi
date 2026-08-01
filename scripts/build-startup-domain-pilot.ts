@@ -5,10 +5,17 @@ import {
   registrableDomain,
   type StartupDomainEvidenceInput,
 } from "../lib/domain-registry";
+import {
+  YC_SOURCE_KIND,
+  fetchYcDirectory,
+  ycEvidenceInputs,
+} from "../lib/startup-directory";
 
 const ENDPOINT = "https://query.wikidata.org/sparql";
 const TERMS_URL = "https://www.wikidata.org/wiki/Wikidata:Copyright";
-const COHORT = "wikidata-2026-07-30";
+const COHORT = "startup-directory-2026-08-01";
+const TARGET_DOMAINS = 25_000;
+const MINIMUM_DOMAINS = 2_000;
 const USER_AGENT = "OH-SHI/1.0 startup-domain-pilot (https://ohshi.work/about)";
 
 const QUERIES = [
@@ -129,9 +136,19 @@ async function main() {
       reviewStatus: "pending",
     });
   }
-  const pilot = buildStartupDomainPilot(inputs, 500, COHORT);
-  if (pilot.entries.length !== 500) {
-    throw new Error(`Expected 500 distinct domains, received ${pilot.entries.length}`);
+  // Wikidata alone yields a cohort of large, long-established companies. The YC
+  // directory supplies the actual startup universe, so it is the primary source
+  // and Wikidata is retained only as supplementary evidence.
+  const ycCompanies = await fetchYcDirectory();
+  const ycInputs = ycEvidenceInputs(ycCompanies, observedAt);
+  sourceReceipts.push({ id: YC_SOURCE_KIND, rows: ycInputs.length });
+  inputs.push(...ycInputs);
+
+  const pilot = buildStartupDomainPilot(inputs, TARGET_DOMAINS, COHORT);
+  if (pilot.entries.length < MINIMUM_DOMAINS) {
+    throw new Error(
+      `Expected at least ${MINIMUM_DOMAINS} distinct domains, received ${pilot.entries.length}`
+    );
   }
   const records: StartupDomainEvidenceInput[] = pilot.entries.flatMap((entry) =>
     entry.evidence.map((evidence, index) => ({
@@ -161,7 +178,8 @@ async function main() {
     schemaVersion: "1.0",
     cohort: COHORT,
     generatedAt: observedAt,
-    license: "Wikidata structured-data evidence is CC0; linked websites retain their own rights.",
+    license:
+      "Wikidata structured-data evidence is CC0; the YC directory mirror is MIT-licensed; linked websites retain their own rights.",
     activation: "none",
     source: {
       endpoint: ENDPOINT,

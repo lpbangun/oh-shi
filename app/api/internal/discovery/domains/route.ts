@@ -132,9 +132,11 @@ export async function POST(request: Request) {
   if (records.some((record) => record === null)) {
     return Response.json({ error: "One or more evidence records are invalid." }, { status: 400 });
   }
+  // Callers batch large registries across requests, so the per-request limit
+  // only has to cover the 1,000-record body cap enforced above.
   const pilot = buildStartupDomainPilot(
     records as StartupDomainEvidenceInput[],
-    500,
+    rawRecords.length,
     cohort
   );
   if (
