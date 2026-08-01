@@ -11,7 +11,7 @@ export function isUsEligible(job: CanonicalJobInput) {
   const country = (job.address?.postalAddress?.addressCountry || "").trim();
   const location = (job.location || "").trim();
   const usSignal =
-    /\b(?:united states|usa|u\.s\.|us only|remote \(us|remote - us|new york|san francisco|washington(?:,? dc)?|boston|seattle|austin|los angeles|chicago|denver|atlanta|miami|portland|philadelphia|palo alto|mountain view|brooklyn)\b/i;
+    /\b(?:united states|usa|u\.s\.|us only|remote(?:\s*[-/(]\s*|\s+)us|new york|san francisco|washington(?:,? dc)?|boston|seattle|austin|los angeles|chicago|denver|atlanta|miami|portland|philadelphia|palo alto|mountain view|brooklyn)\b/i;
   if (/^(?:united states|us|usa)$/i.test(country) || usSignal.test(location)) return true;
   if (country && !/^(?:worldwide|global|anywhere)$/i.test(country)) return false;
   if (job.isRemote !== true) return false;

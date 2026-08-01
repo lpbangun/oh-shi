@@ -1,7 +1,21 @@
 import { env } from "cloudflare:workers";
-import { detectAtsFromLinks, fetchCanonicalBoard } from "./ats-adapters";
-import { ensureDatabase } from "./data";
+import { fetchCanonicalBoard } from "./ats-adapters";
+import { probeCanonicalSource } from "./canonical-source-discovery";
+import {
+  ensureDatabase,
+  registerStartupDomainEvidence,
+} from "./data";
+import {
+  careerFingerprint,
+  registrableDomain,
+  type DomainPermissionStatus,
+} from "./domain-registry";
 import { portfolioWindow, processSequentiallyIsolated } from "./ingestion-core";
+import {
+  summarizeDiscoveryReceipts,
+  type DiscoverySourceReceipt,
+} from "./refresh-contract";
+import { linksFromHtml, permittedFetch } from "./public-web";
 import { normalizeDomain, sourceKey } from "./source-registry";
 
 type Candidate = {
@@ -27,19 +41,6 @@ const titleFromDomain = (domain: string) =>
   domain.split(".")[0].split(/[-_]/).map((part) =>
     part ? part[0].toUpperCase() + part.slice(1) : ""
   ).join(" ");
-
-function linksFromHtml(html: string, baseUrl: string) {
-  const links = new Set<string>();
-  for (const match of html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
-    try {
-      const url = new URL(match[1], baseUrl);
-      if (url.protocol === "https:") links.add(url.href);
-    } catch {
-      // Invalid links are not candidates.
-    }
-  }
-  return [...links];
-}
 
 function explicitCompanyWebsiteLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
@@ -67,47 +68,6 @@ function companyNameFromProfile(html: string, fallbackDomain: string) {
   return titleFromDomain(fallbackDomain);
 }
 
-function robotsAllows(html: string, path: string) {
-  const groups = html.split(/\n(?=user-agent\s*:)/i);
-  const relevant = groups.filter((group) => /user-agent\s*:\s*(\*|OH-SHI)/i.test(group));
-  return !relevant.some((group) =>
-    group.split(/\r?\n/).some((line) => {
-      const match = line.match(/^\s*disallow\s*:\s*(\S+)/i);
-      return match && match[1] !== "" && (match[1] === "/" || path.startsWith(match[1]));
-    })
-  );
-}
-
-async function permittedFetch(url: string, fetcher: typeof fetch) {
-  let current = new URL(url);
-  for (let redirect = 0; redirect <= 5; redirect += 1) {
-    const robotsUrl = new URL("/robots.txt", current);
-    const robots = await fetcher(robotsUrl, {
-      headers: { "User-Agent": "OH-SHI/1.0 discovery (+public portfolio evidence)" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (robots.ok && !robotsAllows(await robots.text(), current.pathname)) {
-      throw new Error("robots_policy_disallows_discovery");
-    }
-    const response = await fetcher(current, {
-      redirect: "manual",
-      headers: { "User-Agent": "OH-SHI/1.0 discovery (+public portfolio evidence)" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) throw new Error("discovery_redirect_missing_location");
-      const next = new URL(location, current);
-      if (next.protocol !== "https:") throw new Error("discovery_redirect_not_https");
-      current = next;
-      continue;
-    }
-    if (!response.ok) throw new Error(`discovery_source_http_${response.status}`);
-    return response;
-  }
-  throw new Error("discovery_redirect_limit_exceeded");
-}
-
 export async function enqueueCandidate(candidate: {
   name: string; websiteUrl: string; investorSourceId: string; evidenceUrl: string;
 }, now = new Date().toISOString()) {
@@ -120,11 +80,46 @@ export async function enqueueCandidate(candidate: {
   } catch {
     return { accepted: false, created: false };
   }
-  const domain = normalizeDomain(candidate.websiteUrl);
-  if (!domain) return { accepted: false, created: false };
-  const investor = await env.DB.prepare("SELECT id FROM investor_sources WHERE id=?")
-    .bind(candidate.investorSourceId).first<{ id: string }>();
+  const submittedDomain = registrableDomain(candidate.websiteUrl);
+  if (!submittedDomain) return { accepted: false, created: false };
+  const investor = await env.DB.prepare(`SELECT id, access_mode as accessMode,
+    terms_url as termsUrl
+    FROM investor_sources WHERE id=?`)
+    .bind(candidate.investorSourceId).first<{
+      id: string;
+      accessMode: string;
+      termsUrl: string | null;
+    }>();
   if (!investor) return { accepted: false, created: false };
+  const alias = await env.DB.prepare(`SELECT
+    aliases.canonical_domain as canonicalDomain,
+    domains.website_url as websiteUrl
+    FROM startup_domain_aliases aliases
+    JOIN startup_domains domains
+      ON domains.canonical_domain=aliases.canonical_domain
+    WHERE aliases.alias_domain=? AND aliases.relation='alias'`)
+    .bind(submittedDomain)
+    .first<{ canonicalDomain: string; websiteUrl: string }>();
+  const domain = alias?.canonicalDomain || submittedDomain;
+  const websiteUrl = alias?.websiteUrl || candidate.websiteUrl;
+  const permissionStatus: DomainPermissionStatus =
+    investor.accessMode === "public_page"
+      ? "permitted"
+      : investor.accessMode === "manual_import"
+        ? "manual_only"
+        : "awaiting_permission";
+  await registerStartupDomainEvidence({
+    companyName: candidate.name,
+    websiteUrl,
+    observedWebsiteUrls: alias ? [candidate.websiteUrl] : [],
+    sourceId: candidate.investorSourceId,
+    sourceKind: "investor_portfolio",
+    sourceClassification: "official_portfolio_candidate",
+    evidenceUrl: candidate.evidenceUrl,
+    permissionStatus,
+    sourceTermsUrl: investor.termsUrl || undefined,
+    observedAt: now,
+  });
   const id = hashId("candidate", domain);
   const existing = await env.DB.prepare(
     "SELECT id FROM discovery_queue WHERE normalized_domain=?"
@@ -136,7 +131,7 @@ export async function enqueueCandidate(candidate: {
     ON CONFLICT(normalized_domain) DO UPDATE SET
       company_name=CASE WHEN discovery_queue.company_name='' THEN excluded.company_name ELSE discovery_queue.company_name END,
       website_url=excluded.website_url`).bind(
-      id, domain, candidate.name.trim() || titleFromDomain(domain), candidate.websiteUrl, now
+      id, domain, candidate.name.trim() || titleFromDomain(domain), websiteUrl, now
     ),
     env.DB.prepare(`INSERT OR IGNORE INTO discovery_queue_investors (
       candidate_id, investor_source_id, evidence_url, first_discovered_at
@@ -153,7 +148,11 @@ async function discoverInvestorSource(source: {
   id: string; portfolioUrl: string; accessMode: string; discoveryCursor: number;
 }, fetcher: typeof fetch, now: string) {
   if (source.accessMode !== "public_page") {
-    return { discovered: 0, nextCursor: source.discoveryCursor, status: "manual" as const };
+    return {
+      discovered: 0,
+      nextCursor: source.discoveryCursor,
+      status: source.accessMode === "manual_import" ? "manual" as const : "blocked" as const,
+    };
   }
   const response = await permittedFetch(source.portfolioUrl, fetcher);
   const html = await response.text();
@@ -212,21 +211,11 @@ async function discoverInvestorSource(source: {
     }, now);
     if (result.created) discovered += 1;
   }
-  return { discovered, nextCursor, status: "success" as const };
+  return { discovered, nextCursor, status: "completed" as const };
 }
 
 async function resolveCanonicalSource(candidate: Candidate, fetcher: typeof fetch) {
-  const pages = [candidate.websiteUrl, new URL("/careers", candidate.websiteUrl).href,
-    new URL("/jobs", candidate.websiteUrl).href];
-  const attempts = await Promise.all(pages.map(async (page) => {
-    try {
-      const response = await permittedFetch(page, fetcher);
-      return [response.url, ...linksFromHtml(await response.text(), response.url)];
-    } catch {
-      return [];
-    }
-  }));
-  return detectAtsFromLinks(attempts.flat());
+  return (await probeCanonicalSource(candidate.websiteUrl, { fetcher })).detection;
 }
 
 async function processCandidate(
@@ -237,11 +226,14 @@ async function processCandidate(
 ) {
   await env.DB.prepare("UPDATE discovery_queue SET status='resolving', last_attempted_at=? WHERE id=?")
     .bind(now, candidate.id).run();
+  await env.DB.prepare(`UPDATE startup_domains SET
+    last_discovery_attempt_at=?, last_seen_at=? WHERE canonical_domain=?`)
+    .bind(now, now, candidate.normalizedDomain).run();
   const detection = await resolveCanonicalSource(candidate, fetcher);
   if (!detection) {
     await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
       last_error='canonical_ats_not_detected', review_notes=? WHERE id=?`)
-      .bind("Official website checked; no supported public ATS link was detected.", candidate.id).run();
+        .bind("Official website checked; no supported public ATS or actionable first-party career page was detected.", candidate.id).run();
     return { activated: false, boardDetected: false };
   }
   try {
@@ -288,6 +280,19 @@ async function processCandidate(
       env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
         review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
         .bind(candidate.id),
+      env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
+        review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
+        career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
+        WHERE canonical_domain=?`).bind(
+        companyId,
+        detection.careersUrl,
+        detection.provider,
+        detection.boardId,
+        careerFingerprint(detection.provider, detection.boardId, detection.careersUrl),
+        now,
+        now,
+        candidate.normalizedDomain
+      ),
     ]);
     return { activated: true, boardDetected: true };
   } catch (error) {
@@ -314,13 +319,14 @@ export async function runDiscovery(options: {
   let candidatesDiscovered = 0;
   const failedSources: Array<{ id: string; error: string }> = [];
   const blockedSources: string[] = [];
+  const receipts: DiscoverySourceReceipt[] = [];
   for (const source of configured.results) {
     const attemptedAt = new Date().toISOString();
     try {
       const result = await discoverInvestorSource(source, fetcher, attemptedAt);
       candidatesDiscovered += result.discovered;
-      if (result.status === "manual") blockedSources.push(source.id);
-      const sourceUpdate = result.status === "success"
+      if (result.status === "blocked") blockedSources.push(source.id);
+      const sourceUpdate = result.status === "completed"
         ? env.DB.prepare(`UPDATE investor_sources SET last_attempted_at=?,
             last_successful_at=?, last_error=NULL, discovery_cursor=? WHERE id=?`)
             .bind(attemptedAt, attemptedAt, result.nextCursor, source.id)
@@ -334,9 +340,24 @@ export async function runDiscovery(options: {
           runId, source.id, result.status, attemptedAt, attemptedAt, result.discovered
         ),
       ]);
+      receipts.push({
+        source_id: source.id,
+        access_mode: source.accessMode,
+        status: result.status,
+        fetched: source.accessMode === "public_page",
+        discovered_count: result.discovered,
+      });
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       failedSources.push({ id: source.id, error: message });
+      receipts.push({
+        source_id: source.id,
+        access_mode: source.accessMode,
+        status: "failed",
+        fetched: source.accessMode === "public_page",
+        discovered_count: 0,
+        error: message,
+      });
       await env.DB.batch([
         env.DB.prepare(`UPDATE investor_sources SET last_attempted_at=?, last_error=? WHERE id=?`)
           .bind(attemptedAt, message, source.id),
@@ -387,16 +408,18 @@ export async function runDiscovery(options: {
     error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
   }));
   const completedAt = new Date().toISOString();
-  const allSourcesFailed =
-    configured.results.length > 0 && failedSources.length === configured.results.length;
-  const overallStatus = allSourcesFailed
+  const sourceCounts = summarizeDiscoveryReceipts(receipts);
+  const allFetchedSourcesFailed =
+    sourceCounts.fetched > 0 && sourceCounts.failed === sourceCounts.fetched;
+  const overallStatus = allFetchedSourcesFailed
     ? "failed"
     : failedSources.length || failedCandidates.length
       ? "partial_success"
       : "success";
   const metrics = {
     overall_status: overallStatus,
-    investor_sources_attempted: configured.results.length,
+    source_counts: sourceCounts,
+    receipts,
     candidates_discovered: candidatesDiscovered,
     candidates_processed: Math.min(queued.results.length, options.processLimit || 25),
     canonical_boards_detected: canonicalBoardsDetected,

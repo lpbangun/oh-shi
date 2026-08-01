@@ -51,6 +51,8 @@ production dependency advisories.
 - `GET /api/v1/jobs/:id`
 - `GET /api/v1/changes`
 - `GET /api/v1/coverage`
+- `GET /api/v1/signals`
+- `GET /api/v1/off-board-openings`
 - `GET /exports/companies.jsonl`
 - `GET /exports/jobs.jsonl`
 - `GET /exports/daily-changes.json`
@@ -59,7 +61,9 @@ production dependency advisories.
 Pass `?include_closed=true` to the jobs endpoint to retain closed history.
 The preferred intelligence endpoint validates filters, returns HTTP 400 for unknown
 parameters, and provides deterministic cursor pagination. See `/llms.txt` for exact
-filters and natural-language request recipes.
+filters and natural-language request recipes. Default job results use the same
+deterministic company-diverse ranked round-robin order in the preferred API,
+compatibility API, and human interface.
 
 ## Discovery and refresh
 
@@ -81,6 +85,29 @@ licensed/manual intake for sources where automated discovery is not permitted.
 See [docs/discovery-sources.md](docs/discovery-sources.md) for source policy,
 access status, limits, and the import record shape.
 
+`pnpm run pilot:measure-yield` with `--offset=0`, `--limit=25`, and an explicit
+`--as-of=2026-07-31T00:00:00.000Z` performs a local, read-only, resumable
+measurement over the ignored 500-domain pilot artifact. It writes
+input/config/implementation-bound JSONL receipts and a derived summary under
+`outputs/`; it never imports candidates, activates companies, writes D1, or
+fetches an unsupported external career host. Reuse the same explicit `as-of`
+value and output paths when resuming. A receipt/config mismatch fails closed
+and requires a new receipts path.
+
+`pnpm run audit:live-quality` performs a read-only deterministic 200-record
+sample against the deployed jobs API and the corresponding complete canonical
+ATS collections. Use `--output <path>` to retain the row-level review artifact.
+Use `--sample-size all` for a full-inventory dry run.
+The automated audit distinguishes closed records, still-published records that
+fail current eligibility rules, exact duplicates, and inconclusive source
+failures. It does not replace the final manual review required for release.
+
+Mass-deletion quarantine inspection and application are deliberately separate
+from refresh. The protected snapshot `GET` is read-only. Its `POST` path
+requires its own explicit production data-rewrite approval and revalidates an
+exact frozen member set against a fresh complete source before any closure.
+Deploying or triggering refresh does not authorize applying a quarantine.
+
 ## Database and release operations
 
 `drizzle/0001_discovery_pipeline.sql` is an additive, forward-only D1 migration.
@@ -92,7 +119,9 @@ upgrade without dropping records. A release operator should:
 2. configure the deployment secret `INGEST_TOKEN`;
 3. deploy the saved source version;
 4. call `GET /api/v1/coverage` and confirm existing counts remain present; and
-5. trigger the refresh workflow once, then confirm its freshness receipt.
+5. trigger the refresh workflow once, then confirm its freshness receipt; and
+6. inspect any mass-deletion quarantines read-only, then obtain separate
+   approval before applying one.
 
 No third-party API key is required for the public ATS adapters. Sources that
 require permission or a licensed feed remain in manual status instead of being

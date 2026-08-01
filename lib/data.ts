@@ -1,9 +1,33 @@
 import { env } from "cloudflare:workers";
+import { companyDiverseJobs } from "./derive";
+import {
+  buildStartupDomainPilot,
+  careerFingerprint,
+  registryIdentityConflicts,
+  registrableDomain,
+  type StartupDomainEntry,
+  type StartupDomainEvidenceInput,
+} from "./domain-registry";
 import { companyScoreReceipts } from "./hiring-score";
+import type { HiringSignalImport } from "./hiring-signals";
+import { prepareSeedJobStatement } from "./job-store";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
+import {
+  listActiveHiringSignalRecords,
+  listOffBoardVerifiedOpeningRecords,
+  persistHiringSignalRecords,
+} from "./signal-store";
+import { promoteHiringSignal } from "./signal-promotion";
 import { isBoardTracked } from "./tracked-boards";
 import { COMPANY_SOURCE_SEEDS, INVESTOR_SOURCE_SEEDS, sourceKey } from "./source-registry";
-import { normalizeSector, type ChangeEvent, type Company, type CoverageMetrics, type Job } from "./types";
+import {
+  normalizeSector,
+  type ChangeEvent,
+  type Company,
+  type CoverageMetrics,
+  type HiringSignal,
+  type Job,
+} from "./types";
 
 let initialization: Promise<void> | null = null;
 
@@ -21,14 +45,26 @@ const jobColumns = `
   id, company_id as companyId, external_id as externalId, provider, source_id as sourceId, title,
   role_family as roleFamily, location, remote_status as remoteStatus,
   employment_type as employmentType, compensation, canonical_url as canonicalUrl,
-  source, status, first_seen_at as firstSeenAt, published_at as publishedAt, last_verified_at as lastVerifiedAt,
-  closed_at as closedAt, summary
+  source, status, first_seen_at as firstSeenAt, last_seen_at as lastSeenAt,
+  source_updated_at as sourceUpdatedAt, published_at as publishedAt,
+  last_verified_at as lastVerifiedAt, closed_at as closedAt,
+  raw_url as rawUrl, discovery_channel as discoveryChannel,
+  evidence_url as evidenceUrl, parser_version as parserVersion,
+  snapshot_run_id as snapshotRunId, linkedin_presence_state as linkedInPresenceState,
+  linkedin_evidence_url as linkedInEvidenceUrl, linkedin_checked_at as linkedInCheckedAt,
+  summary
 `;
 
 const changeColumns = `
   id, entity_type as entityType, entity_id as entityId, change_type as changeType,
   title, description, occurred_at as occurredAt, source_url as sourceUrl
 `;
+
+async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
+  for (let index = 0; index < statements.length; index += size) {
+    await env.DB.batch(statements.slice(index, index + size));
+  }
+}
 
 async function initializeDatabase() {
   if (!env.DB) throw new Error("D1 binding DB is unavailable.");
@@ -71,9 +107,97 @@ async function initializeDatabase() {
       source TEXT NOT NULL,
       status TEXT NOT NULL,
       first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL DEFAULT '',
+      source_updated_at TEXT,
       last_verified_at TEXT NOT NULL,
       closed_at TEXT,
-      summary TEXT NOT NULL
+      raw_url TEXT NOT NULL DEFAULT '',
+      discovery_channel TEXT NOT NULL DEFAULT 'public_ats',
+      evidence_url TEXT NOT NULL DEFAULT '',
+      parser_version TEXT NOT NULL DEFAULT 'legacy',
+      snapshot_run_id TEXT NOT NULL DEFAULT 'legacy',
+      linkedin_presence_state TEXT NOT NULL DEFAULT 'unknown' CHECK(
+        linkedin_presence_state IN ('confirmed','not_observed','unknown')
+      ),
+      linkedin_evidence_url TEXT,
+      linkedin_checked_at TEXT,
+      summary TEXT NOT NULL,
+      CHECK(linkedin_presence_state='unknown' OR (
+        linkedin_evidence_url IS NOT NULL AND linkedin_checked_at IS NOT NULL
+      ))
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS job_observations (
+      id TEXT PRIMARY KEY NOT NULL,
+      job_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      normalized_canonical_url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      location TEXT NOT NULL,
+      employment_type TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      published_at TEXT,
+      status TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      last_verified_at TEXT NOT NULL,
+      closed_at TEXT,
+      raw_url TEXT NOT NULL,
+      evidence_url TEXT NOT NULL,
+      parser_version TEXT NOT NULL,
+      snapshot_run_id TEXT NOT NULL,
+      match_method TEXT NOT NULL CHECK(match_method IN (
+        'new','stable_id','canonical_url','high_confidence','backfill'
+      )),
+      match_score_bps INTEGER NOT NULL CHECK(match_score_bps BETWEEN 0 AND 10000),
+      UNIQUE(provider, source_id, external_id)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS hiring_signals (
+      id TEXT PRIMARY KEY,
+      company_id TEXT,
+      company_name TEXT NOT NULL,
+      company_domain TEXT NOT NULL,
+      role_function TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      source_kind TEXT NOT NULL CHECK(source_kind IN (
+        'company_blog','rss','github','hacker_news','authorized_api','submission'
+      )),
+      source_url TEXT NOT NULL,
+      evidence_url TEXT NOT NULL,
+      source_rights_url TEXT NOT NULL,
+      application_url TEXT,
+      permission_status TEXT NOT NULL CHECK(permission_status IN (
+        'permitted','authorized','manual_reviewed'
+      )),
+      confidence INTEGER NOT NULL CHECK(confidence BETWEEN 0 AND 100),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+        'active','expired','unverifiable','promoted'
+      )),
+      observed_at TEXT NOT NULL,
+      last_verified_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL CHECK(expires_at > observed_at),
+      promoted_job_id TEXT,
+      CHECK(
+        (status='promoted' AND promoted_job_id IS NOT NULL) OR
+        (status<>'promoted' AND promoted_job_id IS NULL)
+      )
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS hiring_signal_promotions (
+      signal_id TEXT PRIMARY KEY NOT NULL,
+      job_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      evidence_url TEXT NOT NULL,
+      source_rights_url TEXT NOT NULL,
+      discovery_source_kind TEXT NOT NULL,
+      verified_at TEXT NOT NULL,
+      run_id TEXT NOT NULL
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS changes (
       id TEXT PRIMARY KEY,
@@ -89,7 +213,7 @@ async function initializeDatabase() {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS changes_occurred_idx ON changes(occurred_at DESC)"),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS investor_sources (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, portfolio_url TEXT NOT NULL,
-      jobs_url TEXT, access_mode TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+      jobs_url TEXT, terms_url TEXT, access_mode TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
       mandatory INTEGER NOT NULL DEFAULT 0, review_notes TEXT NOT NULL DEFAULT '',
       last_attempted_at TEXT, last_successful_at TEXT, last_error TEXT,
       discovery_cursor INTEGER NOT NULL DEFAULT 0
@@ -100,6 +224,7 @@ async function initializeDatabase() {
       discovery_status TEXT NOT NULL DEFAULT 'active', first_discovered_at TEXT NOT NULL,
       last_attempted_at TEXT, last_successful_at TEXT, last_error TEXT,
       consecutive_failures INTEGER NOT NULL DEFAULT 0, review_notes TEXT NOT NULL DEFAULT '',
+      quarantine_snapshot_id TEXT, quarantine_application_id TEXT,
       UNIQUE(provider, board_id)
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS company_investors (
@@ -118,9 +243,58 @@ async function initializeDatabase() {
       candidate_id TEXT NOT NULL, investor_source_id TEXT NOT NULL, evidence_url TEXT NOT NULL,
       first_discovered_at TEXT NOT NULL, PRIMARY KEY(candidate_id, investor_source_id)
     )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domains (
+      canonical_domain TEXT PRIMARY KEY, company_id TEXT UNIQUE,
+      company_name TEXT NOT NULL, website_url TEXT NOT NULL,
+      activity_state TEXT NOT NULL DEFAULT 'unknown' CHECK(activity_state IN (
+        'unknown','active','inactive'
+      )),
+      review_status TEXT NOT NULL DEFAULT 'pending' CHECK(review_status IN (
+        'pending','verified','rejected'
+      )),
+      pilot_cohort TEXT, careers_url TEXT, ats_provider TEXT, ats_board_id TEXT,
+      career_fingerprint TEXT, last_discovery_attempt_at TEXT,
+      first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domain_aliases (
+      alias_domain TEXT PRIMARY KEY, canonical_domain TEXT NOT NULL,
+      relation TEXT NOT NULL DEFAULT 'alias' CHECK(relation='alias'),
+      evidence_url TEXT NOT NULL, permission_status TEXT NOT NULL,
+      source_terms_url TEXT, observed_at TEXT NOT NULL,
+      CHECK(alias_domain <> canonical_domain)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domain_acquisitions (
+      canonical_domain TEXT NOT NULL, related_domain TEXT NOT NULL,
+      relation TEXT NOT NULL CHECK(relation IN ('acquired_from','acquired_by')),
+      evidence_url TEXT NOT NULL, permission_status TEXT NOT NULL,
+      source_terms_url TEXT, observed_at TEXT NOT NULL,
+      PRIMARY KEY(canonical_domain, related_domain, relation, evidence_url),
+      CHECK(canonical_domain <> related_domain)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domain_evidence (
+      canonical_domain TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT NOT NULL,
+      source_classification TEXT NOT NULL, evidence_url TEXT NOT NULL,
+      permission_status TEXT NOT NULL, source_terms_url TEXT, observed_at TEXT NOT NULL,
+      observed_website_urls_json TEXT NOT NULL DEFAULT '[]',
+      PRIMARY KEY(canonical_domain, source_kind, source_id, evidence_url)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domain_imports (
+      cohort TEXT PRIMARY KEY, expected_domains INTEGER NOT NULL,
+      persisted_domains INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL CHECK(status IN ('running','completed','failed')),
+      started_at TEXT NOT NULL, completed_at TEXT, error_message TEXT
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS startup_domain_cohorts (
+      canonical_domain TEXT NOT NULL, cohort TEXT NOT NULL, included_at TEXT NOT NULL,
+      PRIMARY KEY(canonical_domain, cohort)
+    )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS ingestion_runs (
       id TEXT PRIMARY KEY, started_at TEXT NOT NULL, completed_at TEXT,
       status TEXT NOT NULL, metrics_json TEXT NOT NULL DEFAULT '{}'
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS refresh_runs (
+      run_key TEXT PRIMARY KEY, requested_at TEXT NOT NULL, completed_at TEXT,
+      status TEXT NOT NULL, http_status INTEGER, response_json TEXT
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS ingestion_source_results (
       run_id TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT NOT NULL,
@@ -129,6 +303,41 @@ async function initializeDatabase() {
       opened_count INTEGER NOT NULL DEFAULT 0, closed_count INTEGER NOT NULL DEFAULT 0,
       error_code TEXT, error_message TEXT,
       PRIMARY KEY(run_id, source_kind, source_id)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS canonical_source_snapshots (
+      id TEXT PRIMARY KEY, run_id TEXT NOT NULL, source_id TEXT NOT NULL,
+      provider TEXT NOT NULL, captured_at TEXT NOT NULL, parser_version TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('accepted','quarantined')),
+      existing_open_count INTEGER NOT NULL, observed_open_count INTEGER NOT NULL,
+      missing_count INTEGER NOT NULL, missing_ratio_bps INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL, quarantine_reason TEXT, board_id TEXT,
+      UNIQUE(run_id, source_id)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS canonical_snapshot_members (
+      snapshot_id TEXT NOT NULL, external_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('observed','missing','existing')),
+      PRIMARY KEY(snapshot_id, external_id, kind)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS canonical_snapshot_applications (
+      idempotency_key TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL UNIQUE,
+      source_id TEXT NOT NULL, provider TEXT NOT NULL, board_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN (
+        'running','applied','rejected','failed','uncertain'
+      )),
+      reason TEXT NOT NULL, original_fingerprint TEXT NOT NULL,
+      fresh_fingerprint TEXT, original_existing_count INTEGER NOT NULL,
+      fresh_existing_count INTEGER, original_observed_count INTEGER NOT NULL,
+      fresh_observed_count INTEGER, original_missing_count INTEGER NOT NULL,
+      fresh_missing_count INTEGER, requested_at TEXT NOT NULL, completed_at TEXT,
+      opened_count INTEGER NOT NULL DEFAULT 0,
+      closed_count INTEGER NOT NULL DEFAULT 0, error TEXT
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS fragile_job_misses (
+      job_id TEXT NOT NULL, source_id TEXT NOT NULL,
+      first_miss_at TEXT NOT NULL, last_miss_at TEXT NOT NULL,
+      clean_miss_count INTEGER NOT NULL CHECK(clean_miss_count >= 1),
+      last_run_id TEXT NOT NULL,
+      PRIMARY KEY (job_id, source_id)
     )`),
   ]);
 
@@ -139,6 +348,25 @@ async function initializeDatabase() {
   if (!companyInfo.results.some((column) => column.name === "sector")) {
     await env.DB.prepare(
       "ALTER TABLE companies ADD COLUMN sector TEXT NOT NULL DEFAULT 'Other'"
+    ).run();
+  }
+  const sourceInfo = await env.DB.prepare("PRAGMA table_info(company_sources)")
+    .all<{ name: string }>();
+  if (!sourceInfo.results.some((column) => column.name === "quarantine_snapshot_id")) {
+    await env.DB.prepare(
+      "ALTER TABLE company_sources ADD COLUMN quarantine_snapshot_id TEXT"
+    ).run();
+  }
+  if (!sourceInfo.results.some((column) => column.name === "quarantine_application_id")) {
+    await env.DB.prepare(
+      "ALTER TABLE company_sources ADD COLUMN quarantine_application_id TEXT"
+    ).run();
+  }
+  const snapshotInfo = await env.DB.prepare("PRAGMA table_info(canonical_source_snapshots)")
+    .all<{ name: string }>();
+  if (!snapshotInfo.results.some((column) => column.name === "board_id")) {
+    await env.DB.prepare(
+      "ALTER TABLE canonical_source_snapshots ADD COLUMN board_id TEXT"
     ).run();
   }
   const jobInfo = await env.DB.prepare("PRAGMA table_info(jobs)").all<{ name: string }>();
@@ -152,6 +380,41 @@ async function initializeDatabase() {
   if (!jobColumnNames.has("published_at")) {
     await env.DB.prepare("ALTER TABLE jobs ADD COLUMN published_at TEXT").run();
   }
+  const jobProvenanceColumns = [
+    ["last_seen_at", "ALTER TABLE jobs ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''"],
+    ["source_updated_at", "ALTER TABLE jobs ADD COLUMN source_updated_at TEXT"],
+    ["raw_url", "ALTER TABLE jobs ADD COLUMN raw_url TEXT NOT NULL DEFAULT ''"],
+    [
+      "discovery_channel",
+      "ALTER TABLE jobs ADD COLUMN discovery_channel TEXT NOT NULL DEFAULT 'public_ats'",
+    ],
+    ["evidence_url", "ALTER TABLE jobs ADD COLUMN evidence_url TEXT NOT NULL DEFAULT ''"],
+    [
+      "parser_version",
+      "ALTER TABLE jobs ADD COLUMN parser_version TEXT NOT NULL DEFAULT 'legacy'",
+    ],
+    [
+      "snapshot_run_id",
+      "ALTER TABLE jobs ADD COLUMN snapshot_run_id TEXT NOT NULL DEFAULT 'legacy'",
+    ],
+    ["linkedin_evidence_url", "ALTER TABLE jobs ADD COLUMN linkedin_evidence_url TEXT"],
+    ["linkedin_checked_at", "ALTER TABLE jobs ADD COLUMN linkedin_checked_at TEXT"],
+    [
+      "linkedin_presence_state",
+      `ALTER TABLE jobs ADD COLUMN linkedin_presence_state TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(linkedin_presence_state IN ('confirmed','not_observed','unknown') AND
+          (linkedin_presence_state='unknown' OR
+            (linkedin_evidence_url IS NOT NULL AND linkedin_checked_at IS NOT NULL)))`,
+    ],
+  ] as const;
+  for (const [column, statement] of jobProvenanceColumns) {
+    if (!jobColumnNames.has(column)) await env.DB.prepare(statement).run();
+  }
+  await env.DB.prepare(`UPDATE jobs SET
+    last_seen_at=CASE WHEN last_seen_at='' THEN last_verified_at ELSE last_seen_at END,
+    raw_url=CASE WHEN raw_url='' THEN canonical_url ELSE raw_url END,
+    evidence_url=CASE WHEN evidence_url='' THEN canonical_url ELSE evidence_url END
+    WHERE last_seen_at='' OR raw_url='' OR evidence_url=''`).run();
   const investorInfo = await env.DB.prepare("PRAGMA table_info(investor_sources)")
     .all<{ name: string }>();
   if (!investorInfo.results.some((column) => column.name === "discovery_cursor")) {
@@ -159,9 +422,67 @@ async function initializeDatabase() {
       "ALTER TABLE investor_sources ADD COLUMN discovery_cursor INTEGER NOT NULL DEFAULT 0"
     ).run();
   }
+  if (!investorInfo.results.some((column) => column.name === "terms_url")) {
+    await env.DB.prepare(
+      "ALTER TABLE investor_sources ADD COLUMN terms_url TEXT"
+    ).run();
+  }
+  const aliasInfo = await env.DB.prepare("PRAGMA table_info(startup_domain_aliases)")
+    .all<{ name: string }>();
+  if (!aliasInfo.results.some((column) => column.name === "source_terms_url")) {
+    await env.DB.prepare(
+      "ALTER TABLE startup_domain_aliases ADD COLUMN source_terms_url TEXT"
+    ).run();
+  }
+  const registryEvidenceInfo = await env.DB.prepare(
+    "PRAGMA table_info(startup_domain_evidence)"
+  ).all<{ name: string }>();
+  if (
+    !registryEvidenceInfo.results.some(
+      (column) => column.name === "observed_website_urls_json"
+    )
+  ) {
+    await env.DB.prepare(
+      "ALTER TABLE startup_domain_evidence ADD COLUMN observed_website_urls_json TEXT NOT NULL DEFAULT '[]'"
+    ).run();
+  }
   await env.DB.prepare(
     "CREATE INDEX IF NOT EXISTS jobs_source_status_idx ON jobs(provider, source_id, status)"
   ).run();
+  await env.DB.batch([
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS job_observations_job_status_idx
+      ON job_observations(job_id, status)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS job_observations_company_url_idx
+      ON job_observations(company_id, normalized_canonical_url)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS job_observations_source_status_idx
+      ON job_observations(provider, source_id, status)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS startup_domains_pilot_idx
+      ON startup_domains(pilot_cohort, review_status)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS startup_domain_aliases_canonical_idx
+      ON startup_domain_aliases(canonical_domain)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS startup_domain_acquisitions_related_idx
+      ON startup_domain_acquisitions(related_domain)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS startup_domain_evidence_source_idx
+      ON startup_domain_evidence(source_kind, source_id)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS startup_domain_cohorts_cohort_idx
+      ON startup_domain_cohorts(cohort)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS canonical_source_snapshots_source_idx
+      ON canonical_source_snapshots(source_id, captured_at)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS canonical_snapshot_members_snapshot_idx
+      ON canonical_snapshot_members(snapshot_id, kind)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS canonical_snapshot_applications_source_idx
+      ON canonical_snapshot_applications(source_id, requested_at)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS fragile_job_misses_source_idx
+      ON fragile_job_misses(source_id, first_miss_at)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signals_active_idx
+      ON hiring_signals(status, expires_at)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signals_company_idx
+      ON hiring_signals(company_domain, status)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signal_promotions_job_idx
+      ON hiring_signal_promotions(job_id)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signal_promotions_company_idx
+      ON hiring_signal_promotions(company_id, verified_at)`),
+  ]);
   const sectors = await env.DB.prepare(
     "SELECT id, industry, sector FROM companies"
   ).all<{ id: string; industry: string; sector: string }>();
@@ -208,14 +529,17 @@ async function initializeDatabase() {
   const discoveredAt = new Date().toISOString();
   await env.DB.batch([
     ...INVESTOR_SOURCE_SEEDS.map((source) => env.DB.prepare(`INSERT INTO investor_sources (
-      id, name, kind, portfolio_url, jobs_url, access_mode, enabled, mandatory, review_notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, kind, portfolio_url, jobs_url, terms_url, access_mode,
+      enabled, mandatory, review_notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind,
       portfolio_url=excluded.portfolio_url, jobs_url=excluded.jobs_url,
+      terms_url=excluded.terms_url,
       access_mode=excluded.access_mode, enabled=excluded.enabled,
       mandatory=excluded.mandatory, review_notes=excluded.review_notes`).bind(
       source.id, source.name, source.kind, source.portfolioUrl, source.jobsUrl,
-      source.access, source.enabled ? 1 : 0, source.mandatory ? 1 : 0, source.reviewNotes
+      source.termsUrl || null, source.access, source.enabled ? 1 : 0,
+      source.mandatory ? 1 : 0, source.reviewNotes
     )),
     ...COMPANY_SOURCE_SEEDS.map((source) => env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
       id, company_id, provider, board_id, careers_url, enabled, discovery_status,
@@ -225,6 +549,62 @@ async function initializeDatabase() {
       source.boardId, source.careersUrl, discoveredAt
     )),
   ]);
+  const registryCompanies = await env.DB.prepare(`SELECT
+    c.id, c.name, c.domain, c.careers_url as careersUrl, c.source_url as sourceUrl,
+    s.provider, s.board_id as boardId
+    FROM companies c LEFT JOIN company_sources s ON s.id=(
+      SELECT selected.id FROM company_sources selected
+      WHERE selected.company_id=c.id ORDER BY selected.enabled DESC, selected.id LIMIT 1
+    ) ORDER BY c.id`).all<{
+      id: string;
+      name: string;
+      domain: string;
+      careersUrl: string;
+      sourceUrl: string;
+      provider: string | null;
+      boardId: string | null;
+    }>();
+  const registryObservedAt = new Date().toISOString();
+  const registryBackfill: D1PreparedStatement[] = [];
+  for (const company of registryCompanies.results) {
+    const canonicalDomain = registrableDomain(company.domain);
+    if (!canonicalDomain) continue;
+    const fingerprint = company.provider && company.boardId
+      ? careerFingerprint(company.provider, company.boardId, company.careersUrl)
+      : null;
+    registryBackfill.push(
+      env.DB.prepare(`INSERT INTO startup_domains (
+        canonical_domain, company_id, company_name, website_url, activity_state,
+        review_status, pilot_cohort, careers_url, ats_provider, ats_board_id,
+        career_fingerprint, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, 'active', 'verified', 'production-baseline', ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(canonical_domain) DO UPDATE SET
+        company_id=COALESCE(startup_domains.company_id, excluded.company_id),
+        company_name=excluded.company_name, activity_state='active',
+        review_status='verified', careers_url=excluded.careers_url,
+        ats_provider=excluded.ats_provider, ats_board_id=excluded.ats_board_id,
+        career_fingerprint=excluded.career_fingerprint, last_seen_at=excluded.last_seen_at`)
+        .bind(
+          canonicalDomain,
+          company.id,
+          company.name,
+          `https://${canonicalDomain}/`,
+          company.careersUrl,
+          company.provider,
+          company.boardId,
+          fingerprint,
+          registryObservedAt,
+          registryObservedAt
+        ),
+      env.DB.prepare(`INSERT OR IGNORE INTO startup_domain_evidence (
+        canonical_domain, source_kind, source_id, source_classification,
+        evidence_url, permission_status, source_terms_url, observed_at
+      ) VALUES (?, 'production_baseline', ?, 'canonically_verified_company',
+        ?, 'manual_only', NULL, ?)`)
+        .bind(canonicalDomain, company.id, company.sourceUrl, registryObservedAt)
+    );
+  }
+  await batchInChunks(registryBackfill);
   if (!hadCompanies) {
     const jobStatements = seedJobs.map((job) => {
       const canonicalSource = COMPANY_SOURCE_SEEDS.find(
@@ -233,18 +613,11 @@ async function initializeDatabase() {
       if (!canonicalSource) {
         throw new Error(`Seed job ${job.id} has no canonical company source.`);
       }
-      return (
-      env.DB.prepare(`INSERT OR IGNORE INTO jobs (
-      id, company_id, external_id, provider, source_id, title, role_family, location, remote_status,
-      employment_type, compensation, canonical_url, source, status, first_seen_at,
-      published_at, last_verified_at, closed_at, summary
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`).bind(
-      job.id, job.companyId, job.externalId, canonicalSource.provider,
-      sourceKey(canonicalSource.provider, canonicalSource.boardId), job.title,
-      job.roleFamily, job.location, job.remoteStatus, job.employmentType,
-      job.compensation, job.canonicalUrl, job.source, job.status, job.firstSeenAt,
-      job.lastVerifiedAt, job.closedAt, job.summary
-    )
+      return prepareSeedJobStatement(
+        env.DB,
+        job,
+        canonicalSource.provider,
+        sourceKey(canonicalSource.provider, canonicalSource.boardId)
       );
     });
 
@@ -268,6 +641,19 @@ async function initializeDatabase() {
     source_id=COALESCE((SELECT id FROM company_sources s
       WHERE s.company_id=jobs.company_id ORDER BY s.id LIMIT 1), source_id)
     WHERE source_id='legacy'`).run();
+  // Every canonical row has at least one source observation on the same
+  // initialization pass, including newly inserted seed rows.
+  await env.DB.prepare(`INSERT OR IGNORE INTO job_observations (
+    id, job_id, company_id, provider, source_id, external_id, canonical_url,
+    normalized_canonical_url, title, location, employment_type, summary,
+    published_at, status, first_seen_at, last_seen_at, last_verified_at,
+    closed_at, raw_url, evidence_url, parser_version, snapshot_run_id,
+    match_method, match_score_bps
+  ) SELECT 'observation_' || id, id, company_id, provider, source_id, external_id,
+    canonical_url, canonical_url, title, location, employment_type, summary,
+    published_at, status, first_seen_at, last_seen_at, last_verified_at,
+    closed_at, raw_url, evidence_url, parser_version, snapshot_run_id,
+    'backfill', 10000 FROM jobs`).run();
   await env.DB.prepare(
     "CREATE UNIQUE INDEX IF NOT EXISTS jobs_provider_identity_idx ON jobs(provider, source_id, external_id)"
   ).run();
@@ -312,6 +698,249 @@ export async function ensureDatabase() {
   await initialization;
 }
 
+export async function persistStartupDomainPilot(entries: StartupDomainEntry[]) {
+  await ensureDatabase();
+  const internalConflicts = registryIdentityConflicts(entries);
+  if (internalConflicts.length) {
+    throw new Error(`Domain registry identity conflict: ${internalConflicts.join(", ")}`);
+  }
+  const cohorts = [...new Set(
+    entries.map((entry) => entry.pilotCohort).filter(Boolean)
+  )];
+  if (cohorts.length > 1) {
+    throw new Error("A registry import must contain exactly one pilot cohort.");
+  }
+  const cohort = cohorts[0] || "";
+  const importStartedAt = new Date().toISOString();
+  if (cohort) {
+    await env.DB.prepare(`INSERT INTO startup_domain_imports (
+      cohort, expected_domains, persisted_domains, status, started_at,
+      completed_at, error_message
+    ) VALUES (?, ?, 0, 'running', ?, NULL, NULL)
+    ON CONFLICT(cohort) DO UPDATE SET
+      expected_domains=excluded.expected_domains, persisted_domains=0,
+      status='running', started_at=excluded.started_at,
+      completed_at=NULL, error_message=NULL`)
+      .bind(cohort, entries.length, importStartedAt)
+      .run();
+  }
+  const [storedDomains, storedAliases] = await Promise.all([
+    env.DB.prepare("SELECT canonical_domain as canonicalDomain FROM startup_domains")
+      .all<{ canonicalDomain: string }>(),
+    env.DB.prepare(`SELECT alias_domain as aliasDomain,
+      canonical_domain as canonicalDomain FROM startup_domain_aliases`)
+      .all<{ aliasDomain: string; canonicalDomain: string }>(),
+  ]);
+  const canonicalDomains = new Set(storedDomains.results.map((item) => item.canonicalDomain));
+  const aliasOwners = new Map(
+    storedAliases.results.map((item) => [item.aliasDomain, item.canonicalDomain])
+  );
+  for (const entry of entries) {
+    const canonicalOwner = aliasOwners.get(entry.canonicalDomain);
+    if (canonicalOwner && canonicalOwner !== entry.canonicalDomain) {
+      throw new Error(
+        `Domain registry identity conflict: canonical_is_existing_alias:${entry.canonicalDomain}`
+      );
+    }
+    for (const alias of entry.aliases) {
+      if (canonicalDomains.has(alias.aliasDomain)) {
+        throw new Error(
+          `Domain registry identity conflict: alias_is_existing_canonical:${alias.aliasDomain}`
+        );
+      }
+      const owner = aliasOwners.get(alias.aliasDomain);
+      if (owner && owner !== entry.canonicalDomain) {
+        throw new Error(
+          `Domain registry identity conflict: alias_has_existing_owner:${alias.aliasDomain}`
+        );
+      }
+    }
+  }
+  const statements: D1PreparedStatement[] = [];
+  for (const entry of entries) {
+    const evidence = entry.evidence[0];
+    if (!evidence) continue;
+    statements.push(env.DB.prepare(`INSERT INTO startup_domains (
+      canonical_domain, company_name, website_url, activity_state, review_status,
+      pilot_cohort, first_seen_at, last_seen_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(canonical_domain) DO UPDATE SET
+      company_name=CASE WHEN startup_domains.review_status='verified'
+        THEN startup_domains.company_name ELSE excluded.company_name END,
+      website_url=CASE WHEN startup_domains.review_status='verified'
+        THEN startup_domains.website_url ELSE excluded.website_url END,
+      activity_state=CASE WHEN startup_domains.activity_state='unknown'
+        THEN excluded.activity_state ELSE startup_domains.activity_state END,
+      review_status=CASE WHEN startup_domains.review_status='pending'
+        THEN excluded.review_status ELSE startup_domains.review_status END,
+      pilot_cohort=COALESCE(startup_domains.pilot_cohort, excluded.pilot_cohort),
+      last_seen_at=excluded.last_seen_at`).bind(
+      entry.canonicalDomain,
+      entry.companyName,
+      entry.websiteUrl,
+      entry.activityState,
+      entry.reviewStatus,
+      entry.pilotCohort || null,
+      evidence.observedAt,
+      evidence.observedAt
+    ));
+    if (cohort) {
+      statements.push(env.DB.prepare(`INSERT OR IGNORE INTO startup_domain_cohorts (
+        canonical_domain, cohort, included_at
+      ) VALUES (?, ?, ?)`).bind(
+        entry.canonicalDomain,
+        cohort,
+        evidence.observedAt
+      ));
+    }
+    for (const item of entry.evidence) {
+      statements.push(env.DB.prepare(`INSERT INTO startup_domain_evidence (
+        canonical_domain, source_kind, source_id, source_classification,
+        evidence_url, permission_status, source_terms_url, observed_at,
+        observed_website_urls_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(canonical_domain, source_kind, source_id, evidence_url) DO UPDATE SET
+        source_classification=excluded.source_classification,
+        permission_status=excluded.permission_status,
+        source_terms_url=excluded.source_terms_url,
+        observed_at=excluded.observed_at,
+        observed_website_urls_json=excluded.observed_website_urls_json`).bind(
+        entry.canonicalDomain,
+        item.sourceKind,
+        item.sourceId,
+        item.sourceClassification,
+        item.evidenceUrl,
+        item.permissionStatus,
+        item.sourceTermsUrl,
+        item.observedAt,
+        JSON.stringify(item.observedWebsiteUrls)
+      ));
+    }
+    for (const alias of entry.aliases) {
+      statements.push(env.DB.prepare(`INSERT INTO startup_domain_aliases (
+        alias_domain, canonical_domain, relation, evidence_url,
+        permission_status, source_terms_url, observed_at
+      ) VALUES (?, ?, 'alias', ?, ?, ?, ?)
+      ON CONFLICT(alias_domain) DO UPDATE SET
+        evidence_url=excluded.evidence_url,
+        permission_status=excluded.permission_status,
+        source_terms_url=excluded.source_terms_url,
+        observed_at=excluded.observed_at`).bind(
+        alias.aliasDomain,
+        entry.canonicalDomain,
+        alias.evidenceUrl,
+        alias.permissionStatus,
+        alias.sourceTermsUrl,
+        alias.observedAt
+      ));
+    }
+    for (const acquisition of entry.acquisitions) {
+      statements.push(env.DB.prepare(`INSERT INTO startup_domain_acquisitions (
+        canonical_domain, related_domain, relation, evidence_url,
+        permission_status, source_terms_url, observed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(canonical_domain, related_domain, relation, evidence_url) DO UPDATE SET
+        permission_status=excluded.permission_status,
+        source_terms_url=excluded.source_terms_url,
+        observed_at=excluded.observed_at`).bind(
+        entry.canonicalDomain,
+        acquisition.relatedDomain,
+        acquisition.relation,
+        acquisition.evidenceUrl,
+        acquisition.permissionStatus,
+        acquisition.sourceTermsUrl,
+        acquisition.observedAt
+      ));
+    }
+  }
+  try {
+    await batchInChunks(statements);
+    let persistedDomains = entries.length;
+    if (cohort) {
+      const persisted = await env.DB.prepare(`SELECT COUNT(*) as count
+        FROM startup_domain_cohorts WHERE cohort=?`)
+        .bind(cohort)
+        .first<{ count: number }>();
+      persistedDomains = Number(persisted?.count || 0);
+      if (persistedDomains !== entries.length) {
+        throw new Error(
+          `Domain registry import incomplete: expected ${entries.length}, persisted ${persistedDomains}.`
+        );
+      }
+      await env.DB.prepare(`UPDATE startup_domain_imports SET
+        persisted_domains=?, status='completed', completed_at=?, error_message=NULL
+        WHERE cohort=?`).bind(
+        persistedDomains,
+        new Date().toISOString(),
+        cohort
+      ).run();
+    }
+    return {
+      domains: persistedDomains,
+      evidence: entries.reduce((total, entry) => total + entry.evidence.length, 0),
+      aliases: entries.reduce((total, entry) => total + entry.aliases.length, 0),
+      acquisitions: entries.reduce((total, entry) => total + entry.acquisitions.length, 0),
+      importStatus: cohort ? "completed" as const : "untracked" as const,
+    };
+  } catch (error) {
+    if (cohort) {
+      const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+      await env.DB.prepare(`UPDATE startup_domain_imports SET status='failed',
+        error_message=? WHERE cohort=?`).bind(message, cohort).run();
+    }
+    throw error;
+  }
+}
+
+export async function registerStartupDomainEvidence(
+  input: StartupDomainEvidenceInput,
+  pilotCohort = ""
+) {
+  const pilot = buildStartupDomainPilot([input], 1, pilotCohort);
+  if (pilot.entries.length) await persistStartupDomainPilot(pilot.entries);
+  return pilot.receipt;
+}
+
+export async function claimRefreshRun(runKey: string, requestedAt: string) {
+  await ensureDatabase();
+  const result = await env.DB.prepare(`INSERT OR IGNORE INTO refresh_runs (
+    run_key, requested_at, status
+  ) VALUES (?, ?, 'running')`).bind(runKey, requestedAt).run();
+  return Number(result.meta.changes || 0) === 1;
+}
+
+export async function readRefreshRun<T>(runKey: string) {
+  await ensureDatabase();
+  const row = await env.DB.prepare(`SELECT completed_at as completedAt,
+    http_status as httpStatus, response_json as responseJson
+    FROM refresh_runs WHERE run_key=?`).bind(runKey).first<{
+      completedAt: string | null;
+      httpStatus: number | null;
+      responseJson: string | null;
+    }>();
+  if (!row?.completedAt || !row.responseJson || !row.httpStatus) return null;
+  return {
+    completed: true,
+    httpStatus: row.httpStatus,
+    body: JSON.parse(row.responseJson) as T,
+  };
+}
+
+export async function completeRefreshRun<T>(
+  runKey: string,
+  response: { httpStatus: number; body: T }
+) {
+  await ensureDatabase();
+  const completedAt = new Date().toISOString();
+  const result = await env.DB.prepare(`UPDATE refresh_runs SET completed_at=?, status='completed',
+    http_status=?, response_json=? WHERE run_key=? AND status='running'`)
+    .bind(completedAt, response.httpStatus, JSON.stringify(response.body), runKey)
+    .run();
+  if (Number(result.meta.changes || 0) !== 1) {
+    throw new Error("Refresh run completion was not durably persisted.");
+  }
+}
+
 export async function listCompanies(): Promise<Company[]> {
   await ensureDatabase();
   const [result, investors, providers, discovered] = await Promise.all([
@@ -344,10 +973,31 @@ export async function listJobs(includeClosed = false): Promise<Job[]> {
     listCompanies(),
   ]);
   const companiesById = new Map(companies.map((company) => [company.id, company]));
-  return result.results.map((job) => ({
+  const jobs = result.results.map((job) => ({
     ...job,
     company: companiesById.get(job.companyId),
   }));
+  return includeClosed ? jobs : companyDiverseJobs(jobs, companies);
+}
+
+export async function listActiveHiringSignals(now = new Date()): Promise<HiringSignal[]> {
+  await ensureDatabase();
+  return listActiveHiringSignalRecords(env.DB, now);
+}
+
+export async function persistHiringSignals(signals: HiringSignalImport[]) {
+  await ensureDatabase();
+  return persistHiringSignalRecords(env.DB, signals);
+}
+
+export async function promoteSignal(signalId: string) {
+  await ensureDatabase();
+  return promoteHiringSignal(env.DB, signalId);
+}
+
+export async function listOffBoardVerifiedOpenings() {
+  await ensureDatabase();
+  return listOffBoardVerifiedOpeningRecords(env.DB);
 }
 
 export async function listChanges(): Promise<ChangeEvent[]> {
@@ -413,10 +1063,21 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const nowIso = now.toISOString();
   const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
   const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
-  const [totals, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany] =
+  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
         FROM jobs WHERE status='verified_open'`).first<{ jobs: number; companies: number }>(),
+      env.DB.prepare(`SELECT COUNT(*) as count FROM hiring_signals
+        WHERE status='active' AND expires_at > ?`)
+        .bind(nowIso).first<{ count: number }>(),
+      env.DB.prepare(`SELECT COUNT(DISTINCT promotion.job_id) as openings,
+        COUNT(DISTINCT promotion.company_id) as companies
+        FROM hiring_signal_promotions promotion
+        JOIN jobs ON jobs.id=promotion.job_id
+        WHERE jobs.status='verified_open'`).first<{
+          openings: number;
+          companies: number;
+        }>(),
       env.DB.prepare(`SELECT COUNT(DISTINCT company_id) as count FROM company_sources
         WHERE discovery_status='active' AND first_discovered_at >= ?`).bind(weekAgo).first<{ count: number }>(),
       env.DB.prepare(`SELECT COUNT(DISTINCT company_id) as count FROM company_sources
@@ -444,12 +1105,29 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         .first<{ value: string | null }>(),
       env.DB.prepare(`SELECT MAX(first_discovered_at) as value FROM company_sources
         WHERE discovery_status='active'`).first<{ value: string | null }>(),
+      env.DB.prepare(`SELECT
+        COUNT(*) as total,
+        (SELECT COUNT(*) FROM startup_domain_cohorts memberships
+          JOIN startup_domain_imports imports ON imports.cohort=memberships.cohort
+          WHERE imports.status='completed') as pilot,
+        SUM(CASE WHEN review_status='pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN review_status='verified' AND activity_state='active' THEN 1 ELSE 0 END)
+          as verifiedActive
+        FROM startup_domains`).first<{
+          total: number;
+          pilot: number;
+          pending: number;
+          verifiedActive: number;
+        }>(),
     ]);
   const daysWithoutGrowth = latestCompany?.value
     ? Math.max(0, Math.floor((now.valueOf() - Date.parse(latestCompany.value)) / 86_400_000))
     : 0;
   return {
     verifiedOpenJobs: Number(totals?.jobs || 0),
+    activeHiringSignals: Number(activeSignals?.count || 0),
+    offBoardVerifiedOpenings: Number(offBoardVerified?.openings || 0),
+    offBoardVerifiedCompanies: Number(offBoardVerified?.companies || 0),
     activeCompanies: Number(totals?.companies || 0),
     companiesAddedLast7Days: Number(recentCompanies?.count || 0),
     companiesAddedLast1Day: Number(recentDayCompanies?.count || 0),
@@ -458,6 +1136,10 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
     lastCanonicalRefresh: refresh?.value || null,
     consecutiveDaysWithoutCompanyGrowth: daysWithoutGrowth,
     companyGrowthWarning: Number(totals?.companies || 0) < 50 && daysWithoutGrowth >= 3,
+    startupDomains: Number(registry?.total || 0),
+    pilotStartupDomains: Number(registry?.pilot || 0),
+    pendingStartupDomains: Number(registry?.pending || 0),
+    verifiedActiveStartupDomains: Number(registry?.verifiedActive || 0),
     investors: Object.fromEntries(investors.results.map((item) => [item.name, Number(item.count)])),
     providers: Object.fromEntries(providers.results.map((item) => [item.provider, Number(item.count)])),
     sourceFailures: failures.results,

@@ -1,4 +1,13 @@
-export type AtsProvider = "ashby" | "greenhouse" | "lever" | "workable" | "manual";
+export type AtsProvider =
+  | "ashby"
+  | "greenhouse"
+  | "lever"
+  | "workable"
+  | "recruitee"
+  | "personio"
+  | "smartrecruiters"
+  | "structured"
+  | "manual";
 export type DiscoveryAccess = "public_page" | "manual_import" | "awaiting_permission";
 
 export type InvestorSourceSeed = {
@@ -7,6 +16,7 @@ export type InvestorSourceSeed = {
   kind: "investor" | "accelerator";
   portfolioUrl: string;
   jobsUrl: string | null;
+  termsUrl?: string;
   access: DiscoveryAccess;
   enabled: boolean;
   mandatory: boolean;
@@ -31,8 +41,9 @@ export const INVESTOR_SOURCE_SEEDS: readonly InvestorSourceSeed[] = [
   {
     id: "general-catalyst", name: "General Catalyst", kind: "investor",
     portfolioUrl: "https://www.generalcatalyst.com/portfolio", jobsUrl: "https://jobs.generalcatalyst.com/jobs",
-    access: "public_page", enabled: true, mandatory: true,
-    reviewNotes: "Official public portfolio; investor page is not canonical job evidence.",
+    termsUrl: "https://www.generalcatalyst.com/terms-and-conditions",
+    access: "awaiting_permission", enabled: true, mandatory: true,
+    reviewNotes: "Terms limit site use to personal, noncommercial use; automated product ingestion requires permission.",
   },
   {
     id: "khosla-ventures", name: "Khosla Ventures", kind: "investor",
@@ -43,8 +54,9 @@ export const INVESTOR_SOURCE_SEEDS: readonly InvestorSourceSeed[] = [
   {
     id: "sequoia", name: "Sequoia Capital", kind: "investor",
     portfolioUrl: "https://sequoiacap.com/our-companies/", jobsUrl: "https://jobs.sequoiacap.com/jobs",
-    access: "public_page", enabled: true, mandatory: false,
-    reviewNotes: "Official companies resource and public portfolio-job surface.",
+    termsUrl: "https://sequoiacap.com/legal/",
+    access: "awaiting_permission", enabled: true, mandatory: false,
+    reviewNotes: "Legal terms reserve site content and limit downloads/use to personal information; automated product ingestion requires permission.",
   },
   {
     id: "nea", name: "New Enterprise Associates / NEA", kind: "investor",

@@ -1,6 +1,7 @@
 import {
   companyDayMovements,
   companyDeltas,
+  companyDiverseJobs,
   normalizeSector,
   sectorDayMovements,
   sectorStats,
@@ -42,6 +43,7 @@ const capabilities = {
   views: {
     jobs: {
       default_limit: 25,
+      default_order: "company-diverse ranked round-robin",
       filters: [
         "q",
         "status",
@@ -242,8 +244,8 @@ export async function GET(request: Request) {
         investor,
         new_since: newSince,
       });
-      rows = jobs
-        .filter((job) => {
+      rows = companyDiverseJobs(
+        jobs.filter((job) => {
           const company = companyById.get(job.companyId);
           if (status && job.status !== status) return false;
           if (
@@ -263,8 +265,9 @@ export async function GET(request: Request) {
               .some((value) => contains(value, q))
           ) return false;
           return true;
-        })
-        .sort((a, b) => b.firstSeenAt.localeCompare(a.firstSeenAt) || a.id.localeCompare(b.id));
+        }),
+        companies
+      );
     } else if (view === "companies") {
       const sector = stringFilter(url.searchParams, "sector");
       const minSignal = parseNumberFilter(url.searchParams, "min_signal");

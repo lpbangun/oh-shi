@@ -8,10 +8,13 @@
     "jobs": "/api/v1/intelligence?view=jobs",
     "companies": "/api/v1/intelligence?view=companies",
     "movements": "/api/v1/intelligence?view=movements",
-    "sectors": "/api/v1/intelligence?view=sectors"
+    "sectors": "/api/v1/intelligence?view=sectors",
+    "signals": "/api/v1/signals",
+    "off_board_openings": "/api/v1/off-board-openings"
   },
   "coverage": "/api/v1/coverage",
   "pagination": "Pass page.next_cursor unchanged with the same view and filters.",
+  "default_job_order": "Deterministic company-diverse ranked round-robin.",
   "change_feed": "/api/v1/changes",
   "instructions": "/llms.txt",
   "canonical_job_rule": "A job is verified open only when its canonical source still lists it.",

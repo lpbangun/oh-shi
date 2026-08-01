@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { companyDiverseJobs, type MarketMovement, type SectorStat } from "@/lib/derive";
-import type { ChangeEvent, Company, CoverageMetrics, Job } from "@/lib/types";
+import type {
+  ChangeEvent,
+  Company,
+  CoverageMetrics,
+  HiringSignal,
+  Job,
+  OffBoardVerifiedOpening,
+} from "@/lib/types";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
 import { CompanyModal, JobModal } from "./RecordModal";
@@ -23,6 +30,8 @@ type Props = {
   dataAsOf: string;
   coverage: CoverageMetrics;
   generatedAt: string;
+  signals: HiringSignal[];
+  offBoardOpenings: OffBoardVerifiedOpening[];
 };
 
 type SortId =
@@ -99,7 +108,20 @@ function InfoExplainer({ label, children }: { label: string; children: React.Rea
   );
 }
 
-export function JobBoard({ companies, jobs, changes, sectors, movements, deltas, facets, dataAsOf, coverage, generatedAt }: Props) {
+export function JobBoard({
+  companies,
+  jobs,
+  changes,
+  sectors,
+  movements,
+  deltas,
+  facets,
+  dataAsOf,
+  coverage,
+  generatedAt,
+  signals,
+  offBoardOpenings,
+}: Props) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
@@ -523,6 +545,99 @@ export function JobBoard({ companies, jobs, changes, sectors, movements, deltas,
               <button type="button" className="primary" disabled={pageEnd >= visibleJobs.length} onClick={() => { setPage(safePage + 1); scrollToJobs(); }}>Next →</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ══ OFF-BOARD SIGNALS ══ */}
+      <section className="section off-radar" id="off-the-radar">
+        <div className="wrap">
+          <div className="section-heading">
+            <div>
+              <h2>Off the radar</h2>
+              <p>Roles found beyond general job boards, split by what the evidence proves. Verified discoveries count once in the jobs above; signals do not.</p>
+            </div>
+            <div className="off-radar-api-links">
+              <Link href="/api/v1/off-board-openings" className="api-link">Verified API</Link>
+              <Link href="/api/v1/signals" className="api-link">Signals API</Link>
+            </div>
+          </div>
+          <div className="off-radar-rule">
+            Promotion requires an exact role match on a complete current employer or documented ATS source. The original off-board evidence stays attached for provenance.
+          </div>
+          <div className="off-radar-lane-heading">
+            <div>
+              <h3>Verified off-board openings</h3>
+              <p>Current roles discovered through permitted off-board evidence and independently re-verified at the canonical source.</p>
+            </div>
+            <span>{offBoardOpenings.length} verified</span>
+          </div>
+          {offBoardOpenings.length ? (
+            <div className="off-verified-list">
+              {offBoardOpenings.map((opening) => (
+                <article className="off-verified-row" key={opening.signalId}>
+                  <div>
+                    <h4>{opening.title}</h4>
+                    <p>{opening.companyName} · {opening.location} · {opening.employmentType}</p>
+                  </div>
+                  <div className="off-verified-actions">
+                    <a href={opening.evidenceUrl} rel="noreferrer">
+                      {opening.discoverySourceKind.replaceAll("_", " ")} evidence
+                    </a>
+                    <a href={opening.canonicalUrl} rel="noreferrer">Apply at source</a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="off-radar-empty">
+              No off-board lead has passed exact-role re-verification yet.
+            </div>
+          )}
+          <div className="off-radar-lane-heading signals">
+            <div>
+              <h3>Signals awaiting verification</h3>
+              <p>Current, permitted evidence of hiring intent. These leads are not verified openings and never affect job counts or closure.</p>
+            </div>
+            <span>{signals.length} active</span>
+          </div>
+          {signals.length ? (
+            <div className="off-radar-list">
+              {signals.map((signal) => {
+                const ageDays = Math.max(
+                  0,
+                  Math.floor(
+                    (Date.parse(generatedAt) - Date.parse(signal.lastVerifiedAt)) / 86_400_000
+                  )
+                );
+                return (
+                  <article className="off-radar-card" key={signal.id}>
+                    <div className="off-radar-card-head">
+                      <div>
+                        <h3>{signal.companyName}</h3>
+                        <p>{signal.roleFunction}</p>
+                      </div>
+                      <span className="off-radar-confidence">{signal.confidence}/100 confidence</span>
+                    </div>
+                    <p className="off-radar-summary">{signal.summary}</p>
+                    <dl>
+                      <div>
+                        <dt>Source</dt>
+                        <dd><a href={signal.evidenceUrl} rel="noreferrer">{signal.sourceKind.replaceAll("_", " ")}</a></dd>
+                      </div>
+                      <div>
+                        <dt>Freshness</dt>
+                        <dd>{ageDays === 0 ? "verified today" : `verified ${ageDays}d ago`} · expires {signal.expiresAt.slice(0, 10)}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="off-radar-empty">
+              No active off-board signals meet the evidence and freshness rules right now.
+            </div>
+          )}
         </div>
       </section>
 

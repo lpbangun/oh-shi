@@ -73,7 +73,17 @@ test("seed jobs preserve canonical truth and company relationships", () => {
     assert.ok(job.summary.length >= 20);
     assert.ok(job.summary.length <= 240);
     validDate(job.firstSeenAt, `${job.id} first seen`);
+    validDate(job.lastSeenAt, `${job.id} last seen`);
     validDate(job.lastVerifiedAt, `${job.id} last verified`);
+    if (job.sourceUpdatedAt) validDate(job.sourceUpdatedAt, `${job.id} source updated`);
+    assert.equal(job.rawUrl, job.canonicalUrl);
+    assert.equal(job.evidenceUrl, job.canonicalUrl);
+    assert.equal(job.discoveryChannel, "public_ats");
+    assert.ok(job.parserVersion);
+    assert.ok(job.snapshotRunId);
+    assert.equal(job.linkedInPresenceState, "unknown");
+    assert.equal(job.linkedInEvidenceUrl, null);
+    assert.equal(job.linkedInCheckedAt, null);
     if (job.status === "verified_open") assert.equal(job.closedAt, null);
   }
 

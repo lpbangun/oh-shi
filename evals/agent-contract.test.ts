@@ -12,6 +12,8 @@ const publicRoutes = [
   "app/api/v1/changes/route.ts",
   "app/api/v1/intelligence/route.ts",
   "app/api/v1/coverage/route.ts",
+  "app/api/v1/signals/route.ts",
+  "app/api/v1/off-board-openings/route.ts",
   "app/exports/companies.jsonl/route.ts",
   "app/exports/jobs.jsonl/route.ts",
   "app/exports/daily-changes.json/route.ts",
@@ -37,6 +39,8 @@ test("agent discovery files advertise every stable public surface", async () => 
     "/api/v1/changes",
     "/api/v1/intelligence",
     "/api/v1/coverage",
+    "/api/v1/signals",
+    "/api/v1/off-board-openings",
     "/exports/companies.jsonl",
     "/exports/jobs.jsonl",
     "/exports/daily-changes.json",
@@ -52,11 +56,19 @@ test("agent discovery files advertise every stable public surface", async () => 
   assert.equal(policy.capabilities.companies, "/api/v1/intelligence?view=companies");
   assert.equal(policy.capabilities.movements, "/api/v1/intelligence?view=movements");
   assert.equal(policy.capabilities.sectors, "/api/v1/intelligence?view=sectors");
+  assert.equal(policy.capabilities.signals, "/api/v1/signals");
+  assert.equal(
+    policy.capabilities.off_board_openings,
+    "/api/v1/off-board-openings"
+  );
 });
 
 test("agent instructions use the actual public field casing and query recipes", async () => {
   const llms = await read("app/llms.txt/route.ts");
   assert.ok(llms.includes("canonicalUrl"));
+  assert.ok(llms.includes("evidenceUrl"));
+  assert.ok(llms.includes("linkedInPresenceState"));
+  assert.match(llms, /not_observed is not a claim/);
   assert.doesNotMatch(llms, /canonical_url/);
   for (const view of ["jobs", "companies", "movements", "sectors"]) {
     assert.ok(llms.includes(`view=${view}`), `llms.txt must document the ${view} view`);
@@ -84,10 +96,13 @@ test("API envelopes remain versioned, incremental, and licensed", async () => {
 
 test("canonical refresh is protected", async () => {
   const source = await read("app/api/internal/refresh/route.ts");
+  assert.match(source, /export function GET/);
   assert.match(source, /export async function POST/);
   assert.match(source, /authorization/i);
   assert.match(source, /INGEST_TOKEN/);
   assert.match(source, /status:\s*401/);
+  assert.match(source, /idempotency-key/i);
+  assert.match(source, /executeRefreshOnce/);
 });
 
 test("manual discovery import is protected by the ingestion credential", async () => {
@@ -96,4 +111,94 @@ test("manual discovery import is protected by the ingestion credential", async (
   assert.match(source, /authorization/i);
   assert.match(source, /INGEST_TOKEN/);
   assert.match(source, /status:\s*401/);
+});
+
+test("canonical quarantine review is protected and explicit", async () => {
+  const [route, review] = await Promise.all([
+    read("app/api/internal/canonical/snapshots/route.ts"),
+    read("lib/canonical-snapshot-review.ts"),
+  ]);
+  assert.match(route, /export async function GET/);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /authorization/i);
+  assert.match(route, /INGEST_TOKEN/);
+  assert.match(route, /status:\s*401/);
+  assert.match(route, /idempotency-key/i);
+  assert.match(route, /apply:\$\{snapshotId\}:\$\{expectedFingerprint\}/);
+  assert.match(review, /retryCanonicalFetch/);
+  assert.match(review, /exact_membership_unavailable/);
+  assert.match(review, /application_statement|applicationStatementIndex/i);
+});
+
+test("startup-domain pilot import is protected and cannot activate records", async () => {
+  const source = await read("app/api/internal/discovery/domains/route.ts");
+  assert.match(source, /export async function POST/);
+  assert.match(source, /authorization/i);
+  assert.match(source, /INGEST_TOKEN/);
+  assert.match(source, /status:\s*401/);
+  assert.match(source, /persistStartupDomainPilot/);
+  assert.match(source, /activation:\s*"none"/);
+  assert.match(source, /activityState:\s*"unknown"/);
+  assert.match(source, /reviewStatus:\s*"pending"/);
+  assert.doesNotMatch(source, /INSERT INTO (?:companies|jobs)/);
+});
+
+test("hiring-signal import is protected and explicitly cannot mutate jobs", async () => {
+  const [route, store, canonicalStore] = await Promise.all([
+    read("app/api/internal/signals/import/route.ts"),
+    read("lib/signal-store.ts"),
+    read("lib/canonical-refresh-store.ts"),
+  ]);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /authorization/i);
+  assert.match(route, /INGEST_TOKEN/);
+  assert.match(route, /status:\s*401/);
+  assert.match(route, /jobs_mutated:\s*0/);
+  assert.doesNotMatch(store, /\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+jobs\b/i);
+  assert.doesNotMatch(canonicalStore, /hiring_signals/i);
+});
+
+test("signal promotion is protected and requires canonical re-verification", async () => {
+  const [route, promotion, publicRoute] = await Promise.all([
+    read("app/api/internal/signals/promote/route.ts"),
+    read("lib/signal-promotion.ts"),
+    read("app/api/v1/off-board-openings/route.ts"),
+  ]);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /authorization/i);
+  assert.match(route, /INGEST_TOKEN/);
+  assert.match(route, /status:\s*401/);
+  assert.match(promotion, /findExactPromotionJob/);
+  assert.match(promotion, /retryCanonicalFetch/);
+  assert.match(promotion, /persistCanonicalSource/);
+  assert.match(promotion, /status='active' AND expires_at > \?/);
+  assert.match(publicRoute, /off_board_verified_opening/);
+  assert.match(publicRoute, /listOffBoardVerifiedOpenings/);
+});
+
+test("off-board signals are a distinct public surface and UI section", async () => {
+  const [route, board] = await Promise.all([
+    read("app/api/v1/signals/route.ts"),
+    read("app/components/JobBoard.tsx"),
+  ]);
+  assert.match(route, /hiring_signal_not_verified_opening/);
+  assert.match(route, /listActiveHiringSignals/);
+  assert.match(board, />Off the radar</);
+  assert.match(board, /not verified openings/);
+  assert.match(board, /signal\.sourceKind/);
+  assert.match(board, /signal\.confidence/);
+  assert.match(board, /signal\.lastVerifiedAt/);
+  assert.match(board, /Verified off-board openings/);
+  assert.match(board, /offBoardOpenings/);
+});
+
+test("all default public job surfaces use the shared company-diverse order", async () => {
+  const [data, intelligence, board] = await Promise.all([
+    read("lib/data.ts"),
+    read("app/api/v1/intelligence/route.ts"),
+    read("app/components/JobBoard.tsx"),
+  ]);
+  assert.match(data, /includeClosed \? jobs : companyDiverseJobs\(jobs, companies\)/);
+  assert.match(intelligence, /companyDiverseJobs\(/);
+  assert.match(board, /companyDiverseJobs\(rows, companies\)/);
 });

@@ -16,6 +16,14 @@
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:ui": "playwright test --ui",
+    "pilot:domains": "tsx scripts/build-startup-domain-pilot.ts",
+    "pilot:measure-yield": "tsx scripts/measure-startup-domain-yield.ts",
+    "verify:structured": "tsx scripts/verify-structured-career-source.ts",
+    "verify:workable": "tsx scripts/verify-workable-source.ts",
+    "verify:recruitee": "tsx scripts/verify-recruitee-source.ts",
+    "verify:personio": "tsx scripts/verify-personio-source.ts",
+    "verify:smartrecruiters": "tsx scripts/verify-smartrecruiters-source.ts",
+    "audit:live-quality": "tsx scripts/audit-live-data-quality.ts",
     "quality": "pnpm run typecheck && pnpm run eval && pnpm run build",
     "quality:ci": "pnpm run lint && pnpm run typecheck && pnpm run eval && pnpm run build && pnpm run e2e",
     "test": "pnpm run eval",
@@ -26,7 +34,8 @@
     "drizzle-orm": "0.45.2",
     "next": "16.2.12",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "tldts": "7.4.9"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -42,6 +51,7 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
+    "miniflare": "4.20260515.0",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "tsx": "4.20.6",

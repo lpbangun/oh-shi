@@ -183,6 +183,29 @@ test.describe("desktop hiring intelligence", () => {
     await expect(confidenceReceipt).toContainText(/source|corroboration/i);
   });
 
+  test("off-board evidence is visibly separate from verified openings", async ({ page }) => {
+    const verifiedJobs = page.locator("#jobs");
+    const offRadar = page.locator("#off-the-radar");
+    await expect(verifiedJobs.getByRole("heading", { name: "Open jobs" })).toBeVisible();
+    await expect(offRadar.getByRole("heading", { name: "Off the radar" })).toBeVisible();
+    await expect(
+      offRadar.getByRole("heading", { name: "Verified off-board openings" })
+    ).toBeVisible();
+    await expect(
+      offRadar.getByRole("heading", { name: "Signals awaiting verification" })
+    ).toBeVisible();
+    await expect(offRadar).toContainText(/not verified openings/i);
+    await expect(offRadar.getByRole("link", { name: "Verified API" })).toBeVisible();
+    await expect(offRadar.getByRole("link", { name: "Signals API" })).toBeVisible();
+    const [jobsBox, signalsBox] = await Promise.all([
+      verifiedJobs.boundingBox(),
+      offRadar.boundingBox(),
+    ]);
+    expect(jobsBox).not.toBeNull();
+    expect(signalsBox).not.toBeNull();
+    expect(signalsBox!.y).toBeGreaterThan(jobsBox!.y + jobsBox!.height - 1);
+  });
+
   test("desktop has no serious accessibility violations", async ({ page }) => {
     await expectNoSeriousAxeViolations(page);
   });

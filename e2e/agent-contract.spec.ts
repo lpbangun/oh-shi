@@ -15,6 +15,30 @@ type IntelligencePayload<T> = {
 };
 
 test.describe("unified agent contract", () => {
+  test("default job APIs share the company-diverse order", async ({ request }) => {
+    const compatibilityResponse = await request.get("/api/v1/jobs");
+    expect(compatibilityResponse.status()).toBe(200);
+    const compatibility = (await compatibilityResponse.json()) as {
+      data: Array<{ id: string; companyId: string }>;
+    };
+    const intelligenceResponse = await request.get(
+      "/api/v1/intelligence?view=jobs&limit=8"
+    );
+    expect(intelligenceResponse.status()).toBe(200);
+    const intelligence =
+      (await intelligenceResponse.json()) as IntelligencePayload<{
+        id: string;
+        companyId: string;
+      }>;
+
+    expect(compatibility.data.slice(0, 8).map((job) => job.id)).toEqual(
+      intelligence.data.map((job) => job.id)
+    );
+    expect(
+      new Set(compatibility.data.slice(0, 4).map((job) => job.companyId)).size
+    ).toBe(4);
+  });
+
   test("capabilities and llms.txt expose one deterministic entrypoint", async ({
     request,
   }) => {
@@ -183,14 +207,20 @@ test.describe("unified agent contract", () => {
   });
 
   test("coverage totals reconcile with compatibility records", async ({ request }) => {
-    const [coverageResponse, jobsResponse] = await Promise.all([
+    const [coverageResponse, jobsResponse, signalsResponse, offBoardResponse] = await Promise.all([
       request.get("/api/v1/coverage"),
       request.get("/api/v1/jobs"),
+      request.get("/api/v1/signals"),
+      request.get("/api/v1/off-board-openings"),
     ]);
     expect(coverageResponse.status()).toBe(200);
     expect(jobsResponse.status()).toBe(200);
+    expect(signalsResponse.status()).toBe(200);
+    expect(offBoardResponse.status()).toBe(200);
     const coverage = await coverageResponse.json();
     const jobs = await jobsResponse.json();
+    const signalPayload = await signalsResponse.json();
+    const offBoardPayload = await offBoardResponse.json();
     const openJobs = jobs.data.filter(
       (job: { status: string }) => job.status === "verified_open"
     );
@@ -206,5 +236,31 @@ test.describe("unified agent contract", () => {
     );
     expect(coverage.data.investors).toBeTruthy();
     expect(coverage.data.providers).toBeTruthy();
+    expect(signalPayload.data.classification).toBe(
+      "hiring_signal_not_verified_opening"
+    );
+    expect(coverage.data.activeHiringSignals).toBe(
+      signalPayload.data.signals.length
+    );
+    expect(offBoardPayload.data.classification).toBe(
+      "off_board_verified_opening"
+    );
+    expect(coverage.data.offBoardVerifiedOpenings).toBe(
+      offBoardPayload.data.openings.length
+    );
+    expect(coverage.data.offBoardVerifiedCompanies).toBe(
+      new Set(
+        offBoardPayload.data.openings.map(
+          (opening: { companyId: string }) => opening.companyId
+        )
+      ).size
+    );
+    expect(
+      signalPayload.data.signals.every(
+        (signal: { status: string; expiresAt: string }) =>
+          signal.status === "active" &&
+          Date.parse(signal.expiresAt) > Date.parse(signalPayload.generated_at)
+      )
+    ).toBe(true);
   });
 });
