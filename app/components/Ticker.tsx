@@ -3,19 +3,19 @@
 import { useEffect, useState } from "react";
 import type { Company } from "@/lib/types";
 
-/** Milliseconds until the next :30 UTC run in the six-hour schedule. */
+/** Milliseconds until the next :30 UTC run in the two-hour schedule. */
 function untilNextRun(now: Date) {
-  const slotHour = Math.floor(now.getUTCHours() / 6) * 6;
+  const slotHour = Math.floor(now.getUTCHours() / 2) * 2;
   const next = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), slotHour, 30, 0)
   );
-  if (next.getTime() <= now.getTime()) next.setUTCHours(next.getUTCHours() + 6);
+  if (next.getTime() <= now.getTime()) next.setUTCHours(next.getUTCHours() + 2);
   return next.getTime() - now.getTime();
 }
 
 function Countdown() {
   // Rendered only after mount: a clock in server HTML would hydrate stale.
-  const [label, setLabel] = useState("NEXT RUN · EVERY 6H");
+  const [label, setLabel] = useState("NEXT RUN · EVERY 2H");
   useEffect(() => {
     const tick = () => {
       const remaining = Math.max(0, Math.floor(untilNextRun(new Date()) / 1000));

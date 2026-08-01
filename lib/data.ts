@@ -857,11 +857,23 @@ export async function persistStartupDomainPilot(entries: StartupDomainEntry[]) {
     await batchInChunks(statements);
     let persistedDomains = entries.length;
     if (cohort) {
-      const persisted = await env.DB.prepare(`SELECT COUNT(*) as count
-        FROM startup_domain_cohorts WHERE cohort=?`)
-        .bind(cohort)
-        .first<{ count: number }>();
-      persistedDomains = Number(persisted?.count || 0);
+      // Count only the domains in this batch. Comparing against the whole
+      // cohort would fail every request after the first, which capped a cohort
+      // at a single request body.
+      const domains = entries.map((entry) => entry.canonicalDomain);
+      let confirmed = 0;
+      // D1 allows at most 100 bound parameters per statement, and the cohort
+      // itself takes one of them.
+      for (let index = 0; index < domains.length; index += 50) {
+        const chunk = domains.slice(index, index + 50);
+        const persisted = await env.DB.prepare(`SELECT COUNT(*) as count
+          FROM startup_domain_cohorts
+          WHERE cohort=? AND canonical_domain IN (${chunk.map(() => "?").join(",")})`)
+          .bind(cohort, ...chunk)
+          .first<{ count: number }>();
+        confirmed += Number(persisted?.count || 0);
+      }
+      persistedDomains = confirmed;
       if (persistedDomains !== entries.length) {
         throw new Error(
           `Domain registry import incomplete: expected ${entries.length}, persisted ${persistedDomains}.`

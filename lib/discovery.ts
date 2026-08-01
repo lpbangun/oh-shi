@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { fetchCanonicalBoard } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
+import { probeAtsBySlug } from "./ats-slug-probe";
+import { YC_SOURCE_KIND } from "./startup-directory";
 import {
   ensureDatabase,
   registerStartupDomainEvidence,
@@ -215,7 +217,35 @@ async function discoverInvestorSource(source: {
 }
 
 async function resolveCanonicalSource(candidate: Candidate, fetcher: typeof fetch) {
-  return (await probeCanonicalSource(candidate.websiteUrl, { fetcher })).detection;
+  const probe = await probeCanonicalSource(candidate.websiteUrl, { fetcher });
+  if (probe.detection) return probe.detection;
+  // An ambiguous crawl means the site advertises more than one board; guessing
+  // from the slug would only add a third answer, so leave it for review.
+  if (probe.detectionStatus === "ambiguous") return null;
+  const slugMatch = await probeAtsBySlug(
+    candidate.normalizedDomain,
+    candidate.companyName,
+    { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
+  );
+  if (!slugMatch) return null;
+  return {
+    provider: slugMatch.provider,
+    boardId: slugMatch.boardId,
+    careersUrl: slugMatch.careersUrl,
+  };
+}
+
+/**
+ * A directory records the employer's own identifier for itself, which is a
+ * better slug guess than the domain label whenever the two differ.
+ */
+async function registryBoardSlugs(domain: string) {
+  const evidence = await env.DB.prepare(`SELECT source_id as sourceId
+    FROM startup_domain_evidence WHERE canonical_domain=?`)
+    .bind(domain).all<{ sourceId: string }>();
+  return evidence.results
+    .map((row) => row.sourceId.includes(":") ? row.sourceId.split(":").pop() || "" : "")
+    .filter(Boolean);
 }
 
 async function processCandidate(
@@ -303,8 +333,73 @@ async function processCandidate(
   }
 }
 
+/**
+ * Throughput comes from running often, not from long runs: each candidate costs
+ * several sequential fetches, so a large batch risks exceeding the refresh
+ * client's request timeout and losing the whole run. A smaller batch on a
+ * two-hourly schedule drains more per day than the previous 25/10 pair did in
+ * six-hourly runs, and fails cheaply when it fails.
+ */
+export const DEFAULT_PROCESS_LIMIT = 30;
+export const DEFAULT_ACTIVATION_LIMIT = 25;
+
+/** How many registry domains are moved into the queue per run. */
+export const DEFAULT_PROMOTION_LIMIT = 150;
+
+/**
+ * The domain registry used to be a dead end: imports populated `startup_domains`
+ * but only investor-portfolio candidates ever reached `discovery_queue`, so an
+ * open startup directory could never reach the board-detection stage. This moves
+ * permitted, unreviewed registry domains onto the queue so discovery drains the
+ * whole registry rather than just the portfolio crawl.
+ */
+export async function promoteRegistryDomains(
+  limit = DEFAULT_PROMOTION_LIMIT,
+  now = new Date().toISOString()
+) {
+  // Directory evidence names a startup outright, so it detects a board far more
+  // often than an encyclopedia entry that merely happens to list a company.
+  // Draining strictly by age would spend weeks on the low-yield sources first.
+  const pending = await env.DB.prepare(`SELECT
+      domains.canonical_domain as canonicalDomain,
+      domains.company_name as companyName,
+      domains.website_url as websiteUrl,
+      MAX(CASE WHEN evidence.source_kind=? THEN 1 ELSE 0 END) as directoryRanked
+    FROM startup_domains domains
+    JOIN startup_domain_evidence evidence
+      ON evidence.canonical_domain=domains.canonical_domain
+    LEFT JOIN discovery_queue queue
+      ON queue.normalized_domain=domains.canonical_domain
+    WHERE evidence.permission_status='permitted'
+      AND domains.review_status='pending'
+      AND domains.company_id IS NULL
+      AND queue.id IS NULL
+    GROUP BY domains.canonical_domain
+    ORDER BY directoryRanked DESC, domains.first_seen_at, domains.canonical_domain
+    LIMIT ?`)
+    .bind(YC_SOURCE_KIND, Math.max(0, Math.trunc(limit)))
+    .all<{ canonicalDomain: string; companyName: string; websiteUrl: string }>();
+  if (!pending.results.length) return 0;
+  await env.DB.batch(pending.results.map((domain) =>
+    env.DB.prepare(`INSERT INTO discovery_queue (
+      id, normalized_domain, company_name, website_url, status, first_discovered_at, review_notes
+    ) VALUES (?, ?, ?, ?, 'discovered', ?, 'Promoted from the startup domain registry.')
+    ON CONFLICT(normalized_domain) DO NOTHING`).bind(
+      hashId("candidate", domain.canonicalDomain),
+      domain.canonicalDomain,
+      domain.companyName.trim() || titleFromDomain(domain.canonicalDomain),
+      domain.websiteUrl,
+      now
+    )
+  ));
+  return pending.results.length;
+}
+
 export async function runDiscovery(options: {
-  fetcher?: typeof fetch; processLimit?: number; activationLimit?: number;
+  fetcher?: typeof fetch;
+  processLimit?: number;
+  activationLimit?: number;
+  promotionLimit?: number;
 } = {}) {
   await ensureDatabase();
   const fetcher = options.fetcher || fetch;
@@ -369,6 +464,12 @@ export async function runDiscovery(options: {
     }
   }
 
+  const promoted = await promoteRegistryDomains(
+    options.promotionLimit ?? DEFAULT_PROMOTION_LIMIT,
+    now
+  );
+  candidatesDiscovered += promoted;
+
   const queued = await env.DB.prepare(`SELECT q.id, q.normalized_domain as normalizedDomain,
     q.company_name as companyName, q.website_url as websiteUrl, q.status,
     qi.investor_source_id as investorSourceId, qi.evidence_url as evidenceUrl
@@ -381,7 +482,7 @@ export async function runDiscovery(options: {
     ORDER BY q.first_discovered_at, q.id LIMIT ?`)
     .bind(
       new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
-      options.processLimit || 25
+      options.processLimit || DEFAULT_PROCESS_LIMIT
     ).all<Candidate>();
   let canonicalBoardsDetected = 0;
   let companiesActivated = 0;
@@ -390,7 +491,7 @@ export async function runDiscovery(options: {
     async (candidate) => {
       const result = await processCandidate(
         candidate, fetcher, new Date().toISOString(),
-        companiesActivated < (options.activationLimit || 10)
+        companiesActivated < (options.activationLimit || DEFAULT_ACTIVATION_LIMIT)
       );
       if (result.boardDetected) canonicalBoardsDetected += 1;
       if (result.activated) companiesActivated += 1;
@@ -421,7 +522,7 @@ export async function runDiscovery(options: {
     source_counts: sourceCounts,
     receipts,
     candidates_discovered: candidatesDiscovered,
-    candidates_processed: Math.min(queued.results.length, options.processLimit || 25),
+    candidates_processed: Math.min(queued.results.length, options.processLimit || DEFAULT_PROCESS_LIMIT),
     canonical_boards_detected: canonicalBoardsDetected,
     companies_activated: companiesActivated,
     failed_sources: failedSources,

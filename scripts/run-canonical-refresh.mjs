@@ -47,7 +47,9 @@ const { preflight, result } = await runVersionedRefresh(
   runKey,
   {
     attempts: 3,
-    fetchImpl: (url, init) => fetchWithTimeout(url, init, 240_000),
+    // Discovery now probes board APIs per candidate, so a run legitimately
+    // takes several minutes; 240s cut off runs that were still succeeding.
+    fetchImpl: (url, init) => fetchWithTimeout(url, init, 600_000),
   }
 );
 

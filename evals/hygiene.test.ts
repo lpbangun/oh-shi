@@ -81,7 +81,7 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   }
 });
 
-test("six-hour discovery and refresh schedule proves reconciled source receipts and API freshness", async () => {
+test("two-hour discovery and refresh schedule proves reconciled source receipts and API freshness", async () => {
   const workflow = await read(".github/workflows/daily-refresh.yml");
   const refreshRunner = await read("scripts/run-canonical-refresh.mjs");
   const refreshClient = await read("lib/refresh-client.mjs");
@@ -89,7 +89,7 @@ test("six-hour discovery and refresh schedule proves reconciled source receipts 
   const ticker = await read("app/components/Ticker.tsx");
   const readme = await read("README.md");
 
-  assert.match(workflow, /cron: "30 \*\/6 \* \* \*"/);
+  assert.match(workflow, /cron: "30 \*\/2 \* \* \*"/);
   assert.match(workflow, /OH_SHI_BASE_URL/);
   assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
@@ -103,9 +103,9 @@ test("six-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(refreshRunner, /jobsAddedLast24Hours/);
   assert.match(refreshRunner, /Canonical source failure/);
   assert.match(refreshRunner, /Company growth warning/);
-  assert.match(homepage, /verified every six hours/);
-  assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 6\)/);
-  assert.match(readme, /minute 30 every six hours/);
+  assert.match(homepage, /verified every two hours/);
+  assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 2\)/);
+  assert.match(readme, /minute 30 every two hours/);
   assert.doesNotMatch(homepage, /once a day|verified every day/);
 });
 

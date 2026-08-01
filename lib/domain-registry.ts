@@ -304,12 +304,19 @@ export function registryIdentityConflicts(entries: StartupDomainEntry[]) {
   return [...conflicts].sort();
 }
 
+/**
+ * The pilot was capped at 500 while the cohort was hand-reviewed. Discovery now
+ * runs continuously against an open startup directory, so the ceiling only
+ * exists to bound a single run's memory.
+ */
+export const MAX_PILOT_DOMAINS = 25_000;
+
 export function buildStartupDomainPilot(
   inputs: StartupDomainEvidenceInput[],
   limit = 500,
   pilotCohort = ""
 ) {
-  const boundedLimit = Math.min(500, Math.max(1, Math.trunc(limit)));
+  const boundedLimit = Math.min(MAX_PILOT_DOMAINS, Math.max(1, Math.trunc(limit)));
   const entries = new Map<string, StartupDomainEntry>();
   let validRecords = 0;
   let rejectedRecords = 0;
