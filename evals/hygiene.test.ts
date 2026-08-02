@@ -114,12 +114,39 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
 
 test("terminal review candidates cannot starve newly discovered queue work", async () => {
   const discovery = await read("lib/discovery.ts");
+  const review = await read("lib/discovery-review.ts");
   assert.match(discovery, /q\.status IN \('discovered','canonical_source_found'\)/);
   assert.doesNotMatch(
     discovery,
     /q\.status IN \('discovered','needs_review','canonical_source_found'\)/
   );
   assert.match(discovery, /discovery_cursor as discoveryCursor/);
+  assert.match(discovery, /discovery_candidate_reviews review/);
+  assert.match(discovery, /review\.status NOT IN \('rejected','activated'\)/);
+  assert.match(review, /activation: "none"/);
+  assert.match(review, /publication: "none"/);
+  assert.match(review, /canonical_board_changed_since_review/);
+  assert.match(review, /snapshotFingerprint/);
+});
+
+test("manual candidate review workflow stages privately and requires exact approval", async () => {
+  const workflow = await read(".github/workflows/daily-refresh.yml");
+  const route = await read("app/api/internal/discovery/reviews/route.ts");
+  const stageScript = await read("scripts/stage-discovery-review.mjs");
+  const approvalScript = await read("scripts/approve-discovery-review.mjs");
+
+  assert.match(workflow, /stage_review/);
+  assert.match(workflow, /approve_review/);
+  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /OH_SHI_REVIEW_COUNT/);
+  assert.match(route, /stage:\$\{batchId\}:\$\{requestedCount\}/);
+  assert.match(route, /approve[\s\S]*batchId/);
+  assert.match(route, /expectedFingerprints/);
+  assert.match(stageScript, /requestedCount > 500/);
+  assert.match(stageScript, /limit: 25/);
+  assert.match(stageScript, /No companies or jobs were published/);
+  assert.match(approvalScript, /candidateIds\.length > 25/);
+  assert.match(approvalScript, /expectedFingerprints/);
 });
 
 test("runtime, migration, and Drizzle discovery schemas stay aligned", async () => {
@@ -139,6 +166,9 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
     snapshotReviewMigration,
     snapshotReview,
     snapshotReviewRoute,
+    discoveryReviewMigration,
+    discoveryReview,
+    discoveryReviewRoute,
   ] = await Promise.all([
     read("db/schema.ts"),
     read("lib/data.ts"),
@@ -155,6 +185,9 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
     read("drizzle/0010_canonical_snapshot_reviews.sql"),
     read("lib/canonical-snapshot-review.ts"),
     read("app/api/internal/canonical/snapshots/route.ts"),
+    read("drizzle/0011_discovery_candidate_reviews.sql"),
+    read("lib/discovery-review.ts"),
+    read("app/api/internal/discovery/reviews/route.ts"),
   ]);
   for (const table of [
     "discovery_queue_investors",
@@ -222,6 +255,17 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
   assert.match(snapshotReviewRoute, /Idempotency-Key/);
   assert.match(snapshotReviewRoute, /confirmation/);
   assert.match(canonicalRefresh, /discovery_status!='applying_quarantine'/);
+  for (const table of [
+    "discovery_review_batches",
+    "discovery_candidate_reviews",
+  ]) {
+    assert.ok(schema.includes(`sqliteTable("${table}"`));
+    assert.ok(runtime.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+    assert.ok(discoveryReviewMigration.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
+  }
+  assert.match(discoveryReviewMigration, /PRAGMA optimize/);
+  assert.match(discoveryReview, /MAX_REVIEW_BATCH_SIZE = 500/);
+  assert.match(discoveryReviewRoute, /confirmation/);
   for (const column of [
     "last_seen_at",
     "source_updated_at",

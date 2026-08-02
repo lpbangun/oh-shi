@@ -102,6 +102,14 @@ licensed/manual intake for sources where automated discovery is not permitted.
 See [docs/discovery-sources.md](docs/discovery-sources.md) for source policy,
 access status, limits, and the import record shape.
 
+Manual review uses the same workflow with `mode=stage_review`. It assigns up to
+500 candidates to a durable private batch, scans them in resumable groups of 25,
+and uploads JSON plus candidate/job CSV artifacts. Assigned candidates are
+excluded from scheduled activation until their exact IDs and staged board
+fingerprints are approved with `mode=approve_review`. Approval re-fetches each
+canonical board and fails closed if its job membership changed. Staging never
+creates a company, enables a source, or publishes a job.
+
 `pnpm run pilot:measure-yield` with `--offset=0`, `--limit=25`, and an explicit
 `--as-of=2026-07-31T00:00:00.000Z` performs a local, read-only, resumable
 measurement over the ignored 500-domain pilot artifact. It writes

@@ -261,6 +261,54 @@ export const discoveryQueueInvestors = sqliteTable("discovery_queue_investors", 
   primaryKey({ columns: [table.candidateId, table.investorSourceId] }),
 ]);
 
+export const discoveryReviewBatches = sqliteTable("discovery_review_batches", {
+  id: text("id").primaryKey(),
+  requestedCount: integer("requested_count").notNull(),
+  assignedCount: integer("assigned_count").notNull().default(0),
+  processedCount: integer("processed_count").notNull().default(0),
+  readyCount: integer("ready_count").notNull().default(0),
+  needsReviewCount: integer("needs_review_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  status: text("status").notNull().default("queued"),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+}, (table) => [
+  check(
+    "discovery_review_batches_status_check",
+    sql`${table.status} IN ('queued','processing','ready','completed','failed')`
+  ),
+]);
+
+export const discoveryCandidateReviews = sqliteTable("discovery_candidate_reviews", {
+  batchId: text("batch_id").notNull(),
+  candidateId: text("candidate_id").notNull(),
+  status: text("status").notNull().default("queued"),
+  companyName: text("company_name").notNull(),
+  normalizedDomain: text("normalized_domain").notNull(),
+  websiteUrl: text("website_url").notNull(),
+  provider: text("provider"),
+  boardId: text("board_id"),
+  careersUrl: text("careers_url"),
+  jobCount: integer("job_count").notNull().default(0),
+  jobsJson: text("jobs_json").notNull().default("[]"),
+  fingerprint: text("fingerprint"),
+  observedAt: text("observed_at"),
+  lastAttemptedAt: text("last_attempted_at"),
+  lastError: text("last_error"),
+  reviewedAt: text("reviewed_at"),
+  reviewReason: text("review_reason"),
+}, (table) => [
+  primaryKey({ columns: [table.batchId, table.candidateId] }),
+  index("discovery_candidate_reviews_batch_status_idx")
+    .on(table.batchId, table.status),
+  index("discovery_candidate_reviews_candidate_status_idx")
+    .on(table.candidateId, table.status),
+  check(
+    "discovery_candidate_reviews_status_check",
+    sql`${table.status} IN ('queued','processing','ready','needs_review','failed','approved','rejected','activated')`
+  ),
+]);
+
 export const startupDomains = sqliteTable("startup_domains", {
   canonicalDomain: text("canonical_domain").primaryKey(),
   companyId: text("company_id").unique(),
