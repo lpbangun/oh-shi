@@ -29,6 +29,13 @@ test("candidate-review migration creates constrained, indexed private staging ta
     batch_id, candidate_id, company_name, normalized_domain, website_url
   ) VALUES ('review-test', 'candidate-one', 'Example', 'example.com',
     'https://example.com')`).run();
+  await database.prepare(`CREATE TABLE discovery_queue_investors (
+    candidate_id TEXT NOT NULL, investor_source_id TEXT NOT NULL,
+    evidence_url TEXT NOT NULL
+  )`).run();
+  await database.prepare(`INSERT INTO discovery_queue_investors (
+    candidate_id, investor_source_id, evidence_url
+  ) VALUES ('candidate-one', 'yc-directory', 'https://example.com/evidence')`).run();
 
   const staged = await database.prepare(`SELECT status, job_count as jobCount,
     jobs_json as jobsJson FROM discovery_candidate_reviews
@@ -38,6 +45,20 @@ test("candidate-review migration creates constrained, indexed private staging ta
       jobsJson: string;
     }>();
   assert.deepEqual(staged, { status: "queued", jobCount: 0, jobsJson: "[]" });
+  const joined = await database.prepare(`SELECT
+    review.candidate_id as candidateId,
+    qi.investor_source_id as investorSourceId
+    FROM discovery_candidate_reviews review
+    LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=review.candidate_id
+    WHERE review.batch_id='review-test'
+    GROUP BY review.candidate_id`).first<{
+      candidateId: string;
+      investorSourceId: string;
+    }>();
+  assert.deepEqual(joined, {
+    candidateId: "candidate-one",
+    investorSourceId: "yc-directory",
+  });
   await assert.rejects(
     database.prepare(`UPDATE discovery_candidate_reviews SET status='published'
       WHERE batch_id='review-test'`).run(),
