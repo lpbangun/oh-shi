@@ -113,6 +113,25 @@ test("manual discovery import is protected by the ingestion credential", async (
   assert.match(source, /status:\s*401/);
 });
 
+test("candidate review staging is protected and approval is fingerprint-bound", async () => {
+  const [route, review] = await Promise.all([
+    read("app/api/internal/discovery/reviews/route.ts"),
+    read("lib/discovery-review.ts"),
+  ]);
+  assert.match(route, /export async function GET/);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /authorization/i);
+  assert.match(route, /INGEST_TOKEN/);
+  assert.match(route, /status:\s*401/);
+  assert.match(route, /stage:\$\{batchId\}:\$\{requestedCount\}/);
+  assert.match(route, /action === "approve"/);
+  assert.match(route, /\$\{action\}:\$\{batchId\}/);
+  assert.match(review, /publication:\s*"none"/);
+  assert.match(review, /expectedFingerprints/);
+  assert.match(review, /canonical_board_changed_since_review/);
+  assert.match(review, /sourceEnabled:\s*false/);
+});
+
 test("canonical quarantine review is protected and explicit", async () => {
   const [route, review] = await Promise.all([
     read("app/api/internal/canonical/snapshots/route.ts"),

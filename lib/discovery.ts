@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { fetchCanonicalBoard } from "./ats-adapters";
+import { fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
 import { probeAtsBySlug } from "./ats-slug-probe";
 import { YC_SOURCE_KIND } from "./startup-directory";
@@ -20,7 +20,7 @@ import {
 import { linksFromHtml, permittedFetch } from "./public-web";
 import { normalizeDomain, sourceKey } from "./source-registry";
 
-type Candidate = {
+export type Candidate = {
   id: string;
   normalizedDomain: string;
   companyName: string;
@@ -216,7 +216,10 @@ async function discoverInvestorSource(source: {
   return { discovered, nextCursor, status: "completed" as const };
 }
 
-async function resolveCanonicalSource(candidate: Candidate, fetcher: typeof fetch) {
+export async function resolveCanonicalSource(
+  candidate: Candidate,
+  fetcher: typeof fetch
+): Promise<AtsDetection | null> {
   const probe = await probeCanonicalSource(candidate.websiteUrl, { fetcher });
   if (probe.detection) return probe.detection;
   // An ambiguous crawl means the site advertises more than one board; guessing
@@ -227,7 +230,7 @@ async function resolveCanonicalSource(candidate: Candidate, fetcher: typeof fetc
     candidate.companyName,
     { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
   );
-  if (!slugMatch) return null;
+  if (!slugMatch || slugMatch.provider === "manual") return null;
   return {
     provider: slugMatch.provider,
     boardId: slugMatch.boardId,
@@ -246,6 +249,59 @@ async function registryBoardSlugs(domain: string) {
   return evidence.results
     .map((row) => row.sourceId.includes(":") ? row.sourceId.split(":").pop() || "" : "")
     .filter(Boolean);
+}
+
+export async function activateDiscoveredCandidate(
+  candidate: Candidate,
+  detection: AtsDetection,
+  now: string,
+  options: { sourceEnabled?: boolean } = {}
+) {
+  const existingCompany = await env.DB.prepare(
+    "SELECT id FROM companies WHERE lower(domain)=? LIMIT 1"
+  ).bind(candidate.normalizedDomain).first<{ id: string }>();
+  const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
+  const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
+  const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO companies (
+      id, slug, name, domain, description, founded_year, headquarters, employee_range,
+      industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
+      evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
+      source_url, open_job_count, last_verified_at
+    ) VALUES (?, ?, ?, ?, 'Profile discovered from an official investor portfolio.',
+      NULL, 'Not published', 'Not published', 'Other', 'Other', 'Not published',
+      'Not published', 'active', 0, 0, 'Not published', NULL, ?, ?, 0, ?)`)
+      .bind(companyId, slug, candidate.companyName, candidate.normalizedDomain,
+        detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now),
+    env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
+      id, company_id, provider, board_id, careers_url, enabled, discovery_status,
+      first_discovered_at, consecutive_failures, review_notes
+    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 0, 'Automatically detected and canonically verified')`)
+      .bind(canonicalSourceId, companyId, detection.provider, detection.boardId,
+        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now),
+    env.DB.prepare(`INSERT OR IGNORE INTO company_investors (
+      company_id, investor_source_id, first_discovered_at, evidence_url
+    ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
+      FROM discovery_queue_investors WHERE candidate_id=?`).bind(companyId, candidate.id),
+    env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
+      review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
+      .bind(candidate.id),
+    env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
+      review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
+      career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
+      WHERE canonical_domain=?`).bind(
+      companyId,
+      detection.careersUrl,
+      detection.provider,
+      detection.boardId,
+      careerFingerprint(detection.provider, detection.boardId, detection.careersUrl),
+      now,
+      now,
+      candidate.normalizedDomain
+    ),
+  ]);
+  return { companyId, canonicalSourceId };
 }
 
 async function processCandidate(
@@ -280,50 +336,7 @@ async function processCandidate(
         WHERE id=?`).bind(candidate.id).run();
       return { activated: false, boardDetected: true };
     }
-    const existingCompany = await env.DB.prepare(
-      "SELECT id FROM companies WHERE lower(domain)=? LIMIT 1"
-    ).bind(candidate.normalizedDomain).first<{ id: string }>();
-    const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
-    const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
-    const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
-    await env.DB.batch([
-      env.DB.prepare(`INSERT OR IGNORE INTO companies (
-        id, slug, name, domain, description, founded_year, headquarters, employee_range,
-        industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
-        evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
-        source_url, open_job_count, last_verified_at
-      ) VALUES (?, ?, ?, ?, 'Profile discovered from an official investor portfolio.',
-        NULL, 'Not published', 'Not published', 'Other', 'Other', 'Not published',
-        'Not published', 'active', 0, 0, 'Not published', NULL, ?, ?, 0, ?)`)
-        .bind(companyId, slug, candidate.companyName, candidate.normalizedDomain,
-          detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now),
-      env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
-        id, company_id, provider, board_id, careers_url, enabled, discovery_status,
-        first_discovered_at, consecutive_failures, review_notes
-      ) VALUES (?, ?, ?, ?, ?, 1, 'active', ?, 0, 'Automatically detected and canonically verified')`)
-        .bind(canonicalSourceId, companyId, detection.provider, detection.boardId,
-          detection.careersUrl, now),
-      env.DB.prepare(`INSERT OR IGNORE INTO company_investors (
-        company_id, investor_source_id, first_discovered_at, evidence_url
-      ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
-        FROM discovery_queue_investors WHERE candidate_id=?`).bind(companyId, candidate.id),
-      env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
-        review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
-        .bind(candidate.id),
-      env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
-        review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
-        career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
-        WHERE canonical_domain=?`).bind(
-        companyId,
-        detection.careersUrl,
-        detection.provider,
-        detection.boardId,
-        careerFingerprint(detection.provider, detection.boardId, detection.careersUrl),
-        now,
-        now,
-        candidate.normalizedDomain
-      ),
-    ]);
+    await activateDiscoveredCandidate(candidate, detection, now);
     return { activated: true, boardDetected: true };
   } catch (error) {
     await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
@@ -474,10 +487,17 @@ export async function runDiscovery(options: {
     q.company_name as companyName, q.website_url as websiteUrl, q.status,
     qi.investor_source_id as investorSourceId, qi.evidence_url as evidenceUrl
     FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
-    WHERE q.status IN ('discovered','canonical_source_found')
+    WHERE (
+      q.status IN ('discovered','canonical_source_found')
       OR (q.status='resolving' AND (
         q.last_attempted_at IS NULL OR q.last_attempted_at < ?
       ))
+    )
+      AND NOT EXISTS (
+        SELECT 1 FROM discovery_candidate_reviews review
+        WHERE review.candidate_id=q.id
+          AND review.status NOT IN ('rejected','activated')
+      )
     GROUP BY q.id
     ORDER BY q.first_discovered_at, q.id LIMIT ?`)
     .bind(

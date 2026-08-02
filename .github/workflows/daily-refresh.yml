@@ -6,6 +6,37 @@ on:
     # and a failed run costs one slot instead of six hours.
     - cron: "30 */2 * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Operation to run
+        required: true
+        default: refresh
+        type: choice
+        options:
+          - refresh
+          - stage_review
+          - approve_review
+      candidate_count:
+        description: Candidates to stage without publishing (1-500)
+        required: false
+        default: "500"
+        type: string
+      batch_id:
+        description: Stable review batch ID; generated from the run when omitted
+        required: false
+        type: string
+      candidate_ids:
+        description: Comma-separated reviewed candidate IDs (max 25)
+        required: false
+        type: string
+      review_reason:
+        description: Required reason for approving candidates
+        required: false
+        type: string
+      confirmation:
+        description: Exact approve:<batch-id>:<count> phrase
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -17,7 +48,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -39,6 +70,7 @@ jobs:
       # Keeps the company universe growing on its own. Evidence only: this step
       # never activates a company, so a directory change cannot publish a job.
       - name: Sync the public startup directory into the domain registry
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
         id: directory_sync
         continue-on-error: true
         env:
@@ -47,15 +79,45 @@ jobs:
         run: pnpm exec tsx scripts/sync-startup-directory.ts
 
       - name: Preflight, refresh, and verify freshness
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
         env:
           OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
           OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
         run: node scripts/run-canonical-refresh.mjs
 
+      - name: Stage candidates for review without publishing
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stage_review' }}
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+          OH_SHI_REVIEW_COUNT: ${{ inputs.candidate_count }}
+          OH_SHI_REVIEW_BATCH_ID: ${{ inputs.batch_id }}
+        run: node scripts/stage-discovery-review.mjs
+
+      - name: Upload private review artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stage_review' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-review-${{ github.run_id }}
+          path: artifacts/discovery-review-*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Activate explicitly approved candidates
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'approve_review' }}
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+          OH_SHI_REVIEW_BATCH_ID: ${{ inputs.batch_id }}
+          OH_SHI_REVIEW_CANDIDATE_IDS: ${{ inputs.candidate_ids }}
+          OH_SHI_REVIEW_REASON: ${{ inputs.review_reason }}
+          OH_SHI_REVIEW_CONFIRMATION: ${{ inputs.confirmation }}
+        run: node scripts/approve-discovery-review.mjs
+
       # Keep the job red for visibility without letting a malformed directory
       # record prevent already-persisted candidates from being refreshed.
       - name: Report directory sync failure
-        if: ${{ steps.directory_sync.outcome == 'failure' }}
+        if: ${{ (github.event_name == 'schedule' || inputs.mode == 'refresh') && steps.directory_sync.outcome == 'failure' }}
         run: |
           echo "::error::Directory sync failed; canonical refresh still ran."
           exit 1
