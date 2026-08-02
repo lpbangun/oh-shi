@@ -225,6 +225,7 @@ export type MarketMovement = {
   /** Stable across refreshes: movement:<group>:<day>:<entity key>. */
   id: string;
   group: "company" | "sector";
+  type: "opened" | "closed" | "mixed" | "funding";
   /** UTC calendar day, YYYY-MM-DD. */
   date: string;
   title: string;
@@ -238,6 +239,8 @@ export type MarketMovement = {
   jobs: MovementJobEvidence[];
   evidenceCount: number;
   sourceUrls: string[];
+  /** Current calibrated company score for company movements. */
+  hiringScore: number | null;
   /** Internal destination suitable for a clickable movement row. */
   href: string;
 };

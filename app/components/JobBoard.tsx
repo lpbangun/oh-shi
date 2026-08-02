@@ -64,6 +64,13 @@ function compensationFloor(value: string) {
 const directionOf = (value: number) => (value > 0 ? "up" : value < 0 ? "down" : "flat");
 const arrowOf = (value: number) => (value > 0 ? "▲" : value < 0 ? "▼" : "—");
 const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
+const sourceLabel = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "source";
+  }
+};
 
 type TableKey = "name" | "sector" | "stage" | "funding" | "size" | "open" | "delta" | "confidence" | "score";
 const TABLE_LABELS: Record<TableKey, string> = {
@@ -767,43 +774,70 @@ export function JobBoard({
             <div className="market-movements-head">
               <div>
                 <h3>Market movements</h3>
-                <p>Verified openings and closures bundled into company and sector-level activity.</p>
+                <p>Daily funding announcements plus verified openings and closures, each linked to source evidence.</p>
               </div>
               <span>{movements.length} movement{movements.length === 1 ? "" : "s"}</span>
             </div>
             <div className="movement-list">
               {movementRows.length ? movementRows.map((movement) => (
-                <button
+                <article
                   key={movement.id}
-                  type="button"
-                  className="market-movement"
-                  data-testid="market-movement"
-                  onClick={() => {
-                    if (movement.companySlug) {
-                      setModal({ kind: "company", id: movement.companySlug });
-                      return;
-                    }
-                    setSelectedSector(movement.sector);
-                    sectorSection.current?.scrollIntoView({ block: "start" });
-                  }}
+                  className={`market-movement${movement.type === "funding" ? " funding" : ""}`}
                 >
-                  <time dateTime={movement.date}>{movement.date}</time>
-                  <span className="movement-copy">
-                    <b>{movement.title}</b>
-                    <span>{movement.description}</span>
-                    {movement.jobs.length ? (
-                      <span className="movement-roles">
-                        {movement.jobs.slice(0, 3).map((job) => job.title).join(" · ")}
-                        {movement.jobs.length > 3 ? ` · +${movement.jobs.length - 3} more` : ""}
+                  <button
+                    type="button"
+                    className="movement-target"
+                    data-testid="market-movement"
+                    onClick={() => {
+                      if (movement.companySlug) {
+                        setModal({ kind: "company", id: movement.companySlug });
+                        return;
+                      }
+                      setSelectedSector(movement.sector);
+                      sectorSection.current?.scrollIntoView({ block: "start" });
+                    }}
+                  >
+                    <time dateTime={movement.date}>{movement.date}</time>
+                    <span className="movement-copy">
+                      <b>
+                        {movement.type === "funding" ? <span className="movement-kind">Funding</span> : null}
+                        {movement.title}
+                      </b>
+                      <span>{movement.description}</span>
+                      {movement.jobs.length ? (
+                        <span className="movement-roles">
+                          {movement.jobs.slice(0, 3).map((job) => job.title).join(" · ")}
+                          {movement.jobs.length > 3 ? ` · +${movement.jobs.length - 3} more` : ""}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="movement-open" aria-hidden="true">→</span>
+                  </button>
+                  <span className="movement-proof">
+                    {movement.type === "funding" ? (
+                      <span className="movement-signal">
+                        <b>{movement.hiringScore ?? "—"}</b>
+                        <small>hiring signal</small>
                       </span>
+                    ) : (
+                      <span className={`movement-net ${directionOf(movement.netChange)}`}>
+                        {arrowOf(movement.netChange)} {signed(movement.netChange)}
+                        <small>{movement.evidenceCount} source{movement.evidenceCount === 1 ? "" : "s"}</small>
+                      </span>
+                    )}
+                    {movement.sourceUrls[0] ? (
+                      <a
+                        className="movement-source"
+                        href={movement.sourceUrls[0]}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open source for ${movement.title}`}
+                      >
+                        {sourceLabel(movement.sourceUrls[0])} ↗
+                      </a>
                     ) : null}
                   </span>
-                  <span className={`movement-net ${directionOf(movement.netChange)}`}>
-                    {arrowOf(movement.netChange)} {signed(movement.netChange)}
-                    <small>{movement.evidenceCount} source{movement.evidenceCount === 1 ? "" : "s"}</small>
-                  </span>
-                  <span className="movement-open" aria-hidden="true">→</span>
-                </button>
+                </article>
               )) : (
                 <p className="movement-empty">No verified market movement in the current feed.</p>
               )}

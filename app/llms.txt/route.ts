@@ -41,6 +41,9 @@ Responses use camelCase record fields. Each envelope includes schema_version,
 generated_at, data_as_of, applied_filters, page, methodology_version, license, and
 data. Company records include signal and confidence calculation receipts. Movement
 records include underlying jobs, stable record IDs, and source URLs.
+Funding movements are refreshed daily, remain standalone company movements,
+and always include a navigable official-company or reputable-publication source URL.
+The affected company's calibrated score is recomputed when newer funding is published.
 
 ## Compatibility and bulk endpoints
 - Companies: ${origin}/api/v1/companies

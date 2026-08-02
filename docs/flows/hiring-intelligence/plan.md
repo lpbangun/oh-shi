@@ -69,6 +69,9 @@
 - Give OpenCode the failures and current diff, then compare its independent verdict
   against this spec.
 - Hot-fix failed criteria and repeat, up to three implementation iterations.
+- For funding discovery, conversion means a current, definitive fixture becomes
+  one cited movement, advances newer company funding facts, and produces a
+  matching recomputed score; the benchmark stops on conversion or after three passes.
 - Do not call the goal complete unless every spec acceptance criterion has direct
   evidence. If iteration three still exposes a release blocker, report it rather than
   redefining production readiness.

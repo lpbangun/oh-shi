@@ -105,6 +105,24 @@ test("canonical refresh is protected", async () => {
   assert.match(source, /executeRefreshOnce/);
 });
 
+test("daily funding discovery is protected, idempotent, and scheduled", async () => {
+  const [route, workflow, board] = await Promise.all([
+    read("app/api/internal/funding/refresh/route.ts"),
+    read(".github/workflows/daily-funding-discovery.yml"),
+    read("app/components/JobBoard.tsx"),
+  ]);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /authorization/i);
+  assert.match(route, /INGEST_TOKEN/);
+  assert.match(route, /idempotency-key/i);
+  assert.match(route, /executeRefreshOnce/);
+  assert.match(route, /persistFundingDiscoveries/);
+  assert.match(workflow, /cron:\s*["']20 11 \* \* \*["']/);
+  assert.match(workflow, /run-funding-discovery\.mjs/);
+  assert.match(board, /movement\.type === "funding"/);
+  assert.match(board, /movement-source/);
+});
+
 test("manual discovery import is protected by the ingestion credential", async () => {
   const source = await read("app/api/internal/discovery/import/route.ts");
   assert.match(source, /export async function POST/);

@@ -74,7 +74,7 @@ test("company/day movements aggregate openings, deduplicate retries, and remain 
   assert.equal(first[0].evidenceCount, cognitionJobs.length);
   assert.equal(first[0].netChange, cognitionJobs.length);
   assert.match(first[0].title, /Cognition opened 3 roles/);
-  assert.equal(first[0].href, "/companies/cognition");
+  assert.equal(first[0].href, "/company/cognition");
   assert.deepEqual(first, reordered);
 });
 

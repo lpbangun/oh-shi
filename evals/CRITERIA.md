@@ -11,6 +11,10 @@ The production build is allowed only after the local eval gate passes.
 - Stored score totals equal their structured calculation receipts.
 - At least 12 tracked companies cover at least eight normalized sectors.
 - Company/day and sector/day movement aggregates preserve underlying evidence.
+- Daily funding discovery accepts only dated, completed raises from official or
+  explicitly reputable HTTPS sources; replays are idempotent and never roll facts backward.
+- Funding movements appear on the homepage with a navigable citation and the
+  company's recomputed calibrated hiring signal.
 - Seed open-job counts match the actual seed records.
 - Canonical URLs are HTTPS and verified-open jobs do not have a closed timestamp.
 - Company records include stage, founding year, funding context, source evidence, and verification time.

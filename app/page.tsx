@@ -3,6 +3,7 @@ import {
   companyDayMovements,
   companyDeltas,
   facetValues,
+  fundingMovements,
   sectorDayMovements,
   sectorStats,
 } from "@/lib/derive";
@@ -36,6 +37,7 @@ export default async function Home() {
       ).size > 1
   );
   const movements = [
+    ...fundingMovements(companies, changes),
     ...companyDayMovements(companies, jobs, changes),
     ...sectorMovements,
   ].sort(
