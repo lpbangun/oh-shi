@@ -150,12 +150,25 @@ test("ycEvidenceInputs upgrades http to https, rejects non-https, and dedups by 
       website: "https://second.example",
       status: "active",
     },
+    {
+      name: "Multiple Websites",
+      slug: "multiple-websites",
+      website: "https://primary.example, https://secondary.example",
+      status: "active",
+    },
+    {
+      name: "Bare Host",
+      slug: "bare-host",
+      website: "https://brumby",
+      status: "active",
+    },
   ];
   const inputs = ycEvidenceInputs(companies, OBSERVED_AT);
-  assert.equal(inputs.length, 2);
+  assert.equal(inputs.length, 3);
   assert.equal(inputs[0].websiteUrl, "https://http.co/careers");
   assert.equal(inputs[1].companyName, "First");
   assert.equal(inputs[1].sourceId, "yc:duped");
+  assert.equal(inputs[2].websiteUrl, "https://primary.example/");
 });
 
 test("ycEvidenceInputs always emits activity unknown and review pending", () => {

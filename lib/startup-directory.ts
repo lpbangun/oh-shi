@@ -1,4 +1,7 @@
-import type { StartupDomainEvidenceInput } from "./domain-registry";
+import {
+  registrableDomain,
+  type StartupDomainEvidenceInput,
+} from "./domain-registry";
 
 export const YC_DIRECTORY_URL = "https://yc-oss.github.io/api/companies/all.json";
 export const YC_TERMS_URL = "https://github.com/yc-oss/api";
@@ -35,6 +38,23 @@ export function isLiveYcCompany(company: YcCompany) {
   return (company.status || "").toLowerCase() === "active";
 }
 
+function normalizedYcWebsite(value: string) {
+  for (const rawCandidate of value.split(",")) {
+    const candidate = rawCandidate.trim();
+    const httpsCandidate = candidate.startsWith("http://")
+      ? `https://${candidate.slice("http://".length)}`
+      : candidate;
+    if (!httpsCandidate.startsWith("https://")) continue;
+    try {
+      const url = new URL(httpsCandidate);
+      if (registrableDomain(url.hostname)) return url.href;
+    } catch {
+      // The public directory occasionally contains multiple or malformed URLs.
+    }
+  }
+  return "";
+}
+
 export function ycEvidenceInputs(
   companies: YcCompany[],
   observedAt: string
@@ -47,12 +67,10 @@ export function ycEvidenceInputs(
     const website = String(company.website || "").trim();
     if (!slug || !name || !website || seen.has(slug)) continue;
     if (!isLiveYcCompany(company)) continue;
-    // normalizedRecord rejects anything that is not https, so upgrade bare
-    // http entries rather than silently dropping the company.
-    const httpsWebsite = website.startsWith("http://")
-      ? `https://${website.slice("http://".length)}`
-      : website;
-    if (!httpsWebsite.startsWith("https://")) continue;
+    // The directory is external input: select the first valid registrable
+    // website, upgrade http, and drop malformed hostnames before batching.
+    const httpsWebsite = normalizedYcWebsite(website);
+    if (!httpsWebsite) continue;
     seen.add(slug);
     inputs.push({
       companyName: name,

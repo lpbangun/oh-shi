@@ -39,6 +39,8 @@ jobs:
       # Keeps the company universe growing on its own. Evidence only: this step
       # never activates a company, so a directory change cannot publish a job.
       - name: Sync the public startup directory into the domain registry
+        id: directory_sync
+        continue-on-error: true
         env:
           OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
           OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
@@ -49,3 +51,11 @@ jobs:
           OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
           OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
         run: node scripts/run-canonical-refresh.mjs
+
+      # Keep the job red for visibility without letting a malformed directory
+      # record prevent already-persisted candidates from being refreshed.
+      - name: Report directory sync failure
+        if: ${{ steps.directory_sync.outcome == 'failure' }}
+        run: |
+          echo "::error::Directory sync failed; canonical refresh still ran."
+          exit 1
