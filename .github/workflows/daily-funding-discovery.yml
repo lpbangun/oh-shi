@@ -1,0 +1,28 @@
+name: Daily funding discovery
+
+on:
+  schedule:
+    - cron: "20 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-funding-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Discover and publish verified funding updates
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+          OH_SHI_FUNDING_RUN_KEY: funding-${{ github.run_id }}-${{ github.run_attempt }}
+        run: node scripts/run-funding-discovery.mjs

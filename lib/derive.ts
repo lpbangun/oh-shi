@@ -318,6 +318,9 @@ export function companyDayMovements(
       return {
         id: `movement:company:${bucket.date}:${company.id}`,
         group: "company" as const,
+        type: counts.openedCount > 0 && counts.closedCount > 0
+          ? "mixed" as const
+          : counts.openedCount > 0 ? "opened" as const : "closed" as const,
         date: bucket.date,
         title: companyMovementTitle(company, jobs),
         description: movementDescription(jobs),
@@ -328,7 +331,8 @@ export function companyDayMovements(
         jobs,
         evidenceCount: jobs.length,
         sourceUrls: Array.from(new Set(jobs.map((job) => job.sourceUrl))).sort(),
-        href: `/companies/${encodeURIComponent(company.slug)}`,
+        hiringScore: company.hiringScore,
+        href: `/company/${encodeURIComponent(company.slug)}`,
       };
     })
   );
@@ -363,6 +367,9 @@ export function sectorDayMovements(
       return {
         id: `movement:sector:${bucket.date}:${sectorKey(bucket.sector)}`,
         group: "sector" as const,
+        type: counts.openedCount > 0 && counts.closedCount > 0
+          ? "mixed" as const
+          : counts.openedCount > 0 ? "opened" as const : "closed" as const,
         date: bucket.date,
         title: sectorMovementTitle(bucket.sector, jobs),
         description: movementDescription(jobs),
@@ -373,10 +380,48 @@ export function sectorDayMovements(
         jobs,
         evidenceCount: jobs.length,
         sourceUrls: Array.from(new Set(jobs.map((job) => job.sourceUrl))).sort(),
+        hiringScore: null,
         href: `/?sector=${encodeURIComponent(bucket.sector)}`,
       };
     })
   );
+}
+
+/** Funding announcements stay standalone company movements with source links. */
+export function fundingMovements(
+  companies: Company[],
+  changes: ChangeEvent[]
+): MarketMovement[] {
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  const seen = new Set<string>();
+  const movements: MarketMovement[] = [];
+  for (const change of changes) {
+    if (change.changeType !== "funding_announced" || change.entityType !== "company") continue;
+    const company = companyById.get(change.entityId);
+    const date = movementDay(change.occurredAt);
+    if (!company || !date || seen.has(change.id)) continue;
+    seen.add(change.id);
+    movements.push({
+      id: change.id,
+      group: "company",
+      type: "funding",
+      date,
+      title: change.title,
+      description: change.description,
+      sector: company.sector || normalizeSector(company.industry),
+      companyId: company.id,
+      companySlug: company.slug,
+      openedCount: 0,
+      closedCount: 0,
+      netChange: 0,
+      jobs: [],
+      evidenceCount: 1,
+      sourceUrls: [change.sourceUrl],
+      hiringScore: company.hiringScore,
+      href: `/company/${encodeURIComponent(company.slug)}`,
+    });
+  }
+  return sortMovements(movements);
 }
 
 export function deriveMarketMovements(
@@ -385,10 +430,14 @@ export function deriveMarketMovements(
   changes: ChangeEvent[],
   group: "company" | "sector" | "all" = "all"
 ): MarketMovement[] {
-  if (group === "company") return companyDayMovements(companies, jobs, changes);
+  if (group === "company") return sortMovements([
+    ...companyDayMovements(companies, jobs, changes),
+    ...fundingMovements(companies, changes),
+  ]);
   if (group === "sector") return sectorDayMovements(companies, jobs, changes);
   return sortMovements([
     ...companyDayMovements(companies, jobs, changes),
     ...sectorDayMovements(companies, jobs, changes),
+    ...fundingMovements(companies, changes),
   ]);
 }

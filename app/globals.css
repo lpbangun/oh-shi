@@ -304,15 +304,23 @@ th .info-explainer { margin-left: 5px; }
 }
 .movement-list { display: grid; }
 .market-movement {
-  display: grid; grid-template-columns: 84px minmax(0, 1fr) 74px 18px; gap: 14px; align-items: center;
-  width: 100%; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line);
-  background: none; color: var(--ink); text-align: left; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 16px; align-items: stretch;
+  width: 100%; border-bottom: 1px solid var(--line); color: var(--ink);
+}
+.movement-target {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr) 18px; gap: 14px; align-items: center;
+  min-width: 0; padding: 12px 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer;
 }
 .market-movement:hover { background: var(--bg2); box-shadow: 0 0 0 8px var(--bg2); }
-.market-movement:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
+.movement-target:focus-visible, .movement-source:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
 .market-movement time { color: var(--muted); font-family: var(--font-plex-mono), monospace; font-size: 10.5px; }
 .movement-copy { display: grid; gap: 2px; min-width: 0; }
 .movement-copy b { overflow: hidden; color: var(--ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.movement-kind {
+  display: inline-block; margin-right: 8px; padding: 2px 5px; border: 1px solid var(--acc);
+  color: var(--acc); font: 600 8.5px/1.2 var(--font-plex-mono), monospace;
+  letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px;
+}
 .movement-copy > span { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .movement-copy .movement-roles {
   overflow: hidden; margin-top: 2px; color: var(--ink2); font-family: var(--font-plex-mono), monospace;
@@ -323,8 +331,19 @@ th .info-explainer { margin-left: 5px; }
 .movement-net.down { color: var(--dn); }
 .movement-net.flat { color: var(--muted); }
 .movement-net small { display: block; margin-top: 3px; color: var(--muted); font-size: 8.5px; font-weight: 400; }
+.movement-proof {
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 5px;
+  min-width: 0; padding: 10px 0;
+}
+.movement-signal { text-align: right; font-family: var(--font-plex-mono), monospace; }
+.movement-signal b { display: block; color: var(--ink); font-size: 15px; line-height: 1; }
+.movement-signal small { display: block; margin-top: 3px; color: var(--muted); font-size: 8.5px; text-transform: uppercase; }
+.movement-source {
+  overflow: hidden; max-width: 100%; color: var(--acc); font: 9.5px/1.3 var(--font-plex-mono), monospace;
+  text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px;
+}
 .movement-open { color: var(--muted); font-size: 16px; transition: transform 0.12s, color 0.12s; }
-.market-movement:hover .movement-open { color: var(--acc); transform: translateX(2px); }
+.movement-target:hover .movement-open { color: var(--acc); transform: translateX(2px); }
 .movement-empty { padding: 22px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 
 .map-bar {
@@ -774,14 +793,17 @@ pre b { color: var(--ink); font-weight: 600; }
   .market-movements-head, .companies-head { align-items: flex-start; padding: 10px 0; }
   .market-movements-head p, .companies-head p { font-size: 11.5px; }
   .market-movements-head > span, .companies-head > span { display: none; }
-  .market-movement { grid-template-columns: minmax(0, 1fr) 58px 13px; gap: 9px; padding: 10px 0; }
+  .market-movement { grid-template-columns: minmax(0, 1fr) 68px; gap: 9px; }
+  .movement-target { grid-template-columns: minmax(0, 1fr) 13px; gap: 9px; padding: 10px 0; }
   .market-movement time { grid-column: 1; grid-row: 1; margin-bottom: -1px; font-size: 9.5px; }
   .movement-copy { grid-column: 1; grid-row: 2; }
   .movement-copy b { font-size: 13px; white-space: normal; }
   .movement-copy > span { font-size: 11.5px; }
   .movement-copy .movement-roles { display: none; }
-  .movement-net { grid-column: 2; grid-row: 1 / 3; font-size: 12px; }
-  .movement-open { grid-column: 3; grid-row: 1 / 3; font-size: 13px; }
+  .movement-proof { padding: 8px 0; gap: 6px; }
+  .movement-net { font-size: 12px; }
+  .movement-source { font-size: 8.5px; }
+  .movement-open { grid-column: 2; grid-row: 1 / 3; font-size: 13px; }
   .map-bar { font-size: 10px; padding: 9px 0; }
   .sector-map { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 6px; }
   .sector-tile { padding: 10px 11px 11px; }

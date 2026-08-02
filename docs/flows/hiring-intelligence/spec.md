@@ -188,6 +188,8 @@ grouping type, page number, and stable record IDs; do not log free-text prompts.
 - [ ] Location/sector/department menus scroll internally without closing.
 - [ ] Hiring movements are aggregated, evidence-backed, keyboard accessible, and
   navigate to the relevant record or filtered jobs.
+- [ ] Funding announcements are discovered daily, remain standalone company
+  movements, cite an official or reputable source, and trigger score recomputation.
 - [ ] At least 12 source-verified companies cover at least eight normalized sectors.
 - [ ] Order is movements → sector map → companies/funding → What changed.
 - [ ] Companies show no more than 10 rows per page on every viewport.

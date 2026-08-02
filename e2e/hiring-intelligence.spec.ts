@@ -121,6 +121,15 @@ test.describe("desktop hiring intelligence", () => {
     }).toBe(true);
   });
 
+  test("funding movements expose a navigable citation and calibrated signal", async ({ page }) => {
+    const funding = page.locator(".market-movement.funding").first();
+    await expect(funding).toBeVisible();
+    await expect(funding.locator(".movement-kind")).toHaveText("Funding");
+    await expect(funding.locator(".movement-signal small")).toHaveText("hiring signal");
+    await expect(funding.locator(".movement-source")).toHaveAttribute("href", /^https:\/\//);
+    await expect(funding.locator(".movement-source")).toHaveAttribute("target", "_blank");
+  });
+
   test("companies paginate ten at a time without duplicates", async ({ page }) => {
     const signal = page.locator("#signal");
     const pager = signal.locator(".pager").filter({ hasText: /companies/i });

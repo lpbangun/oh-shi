@@ -24,7 +24,9 @@ INGEST_TOKEN=local-only-token pnpm dev
 The app uses Cloudflare D1 through the Sites runtime. The database initializes with
 12 source-verified companies across a normalized sector taxonomy. A bounded
 two-hour discovery and canonical-refresh run then expands coverage and replaces
-seed hiring facts with current ATS records.
+seed hiring facts with current ATS records. A separate daily run scans tracked
+companies' official pages plus TechCrunch Venture and Crunchbase News for
+definitive, dated funding announcements.
 
 ## Evaluation gate
 
@@ -97,6 +99,16 @@ company), then runs the refresh. It needs these repository settings:
 - variable `OH_SHI_BASE_URL`
 - secret `OH_SHI_INGEST_TOKEN`
 
+The daily funding workflow runs at 11:20 UTC and calls the protected,
+idempotent `POST /api/internal/funding/refresh` endpoint. A candidate is
+published only when it names a tracked company, states a completed raise (not a
+rumor or planned round), carries a publication date within the last 14 days,
+and links to HTTPS evidence on the company's own domain or one of the explicit
+reputable publications. Publishing writes a standalone `funding_announced`
+movement, updates only newer company funding facts, and recomputes the affected
+company's hiring-signal and evidence-confidence receipts immediately. Replays
+cannot duplicate an announcement or roll funding facts backward.
+
 The same bearer credential protects `POST /api/internal/discovery/import`, the
 licensed/manual intake for sources where automated discovery is not permitted.
 See [docs/discovery-sources.md](docs/discovery-sources.md) for source policy,
@@ -160,7 +172,7 @@ scraped.
 | --- | --- | --- |
 | Open-role volume | 30 | Verified-open roles, log-saturating at 12 |
 | Open-role growth | 30 | Net opens minus closes over the trailing 90 days, saturating at ±6; a board with no observed activity scores 9 |
-| Funding and stage | 25 | Stage weight (Seed 0.6 → Growth 1.0) times funding recency (full ≤180 days, decaying to 0.4 at 540 days, 0.6 when the funding date is unknown) |
+| Funding and stage | 25 | Stage weight (Pre-seed 0.5, Seed 0.6, A 0.8, B 0.9, C 0.95, D+ / Growth 1.0) times funding recency (full ≤180 days, decaying to 0.4 at 540 days, 0.6 when the funding date is unknown) |
 | Board freshness | 15 | Days since the canonical board was last verified: full ≤2 days, reaching 0 at 30 days |
 
 `evidenceConfidence` is a separate 0-100 score measuring how well-evidenced the record is, not how attractive the company is: verification recency (40), share of open roles re-verified in the latest refresh (30), record completeness (20), and an independent-source check where the company domain differs from the careers domain (10).

@@ -23,7 +23,7 @@ export type EvidenceConfidenceInput = {
 };
 
 export const GROWTH_WINDOW_DAYS = 90;
-export const HIRING_SCORE_METHODOLOGY_VERSION = "2026-07-27";
+export const HIRING_SCORE_METHODOLOGY_VERSION = "2026-08-02";
 export const EVIDENCE_CONFIDENCE_METHODOLOGY_VERSION = "2026-07-27";
 
 export type ScoreComponent = {
@@ -40,10 +40,17 @@ export type ScoreReceipt = {
 };
 
 const STAGE_WEIGHTS: Record<string, number> = {
+  "pre-seed": 0.5,
   seed: 0.6,
+  "early stage": 0.65,
   "series a": 0.8,
   "series b": 0.9,
   "series c": 0.95,
+  "series d": 1,
+  "series e": 1,
+  "series f": 1,
+  "series g": 1,
+  "series h": 1,
   growth: 1,
 };
 

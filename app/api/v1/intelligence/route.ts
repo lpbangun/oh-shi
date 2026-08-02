@@ -2,6 +2,7 @@ import {
   companyDayMovements,
   companyDeltas,
   companyDiverseJobs,
+  fundingMovements,
   normalizeSector,
   sectorDayMovements,
   sectorStats,
@@ -166,6 +167,7 @@ function rawMovements(
         : [],
       evidenceCount: 1,
       sourceUrls: [change.sourceUrl],
+      hiringScore: company?.hiringScore || null,
       href: job ? `/job/${job.id}` : company ? `/company/${company.slug}` : change.sourceUrl,
     };
   });
@@ -320,9 +322,7 @@ export async function GET(request: Request) {
           ? groupedMovements
           : [
               ...groupedMovements,
-              ...rawMovements(changes, jobs, companies).filter(
-                (movement) => movement.jobs.length === 0
-              ),
+              ...fundingMovements(companies, changes),
             ];
       rows = movements
         .map((movement) => ({ ...movement, type: movementType(movement) }))

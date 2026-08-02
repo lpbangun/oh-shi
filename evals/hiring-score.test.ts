@@ -103,6 +103,19 @@ test("later stages outrank earlier stages at equal funding recency", () => {
   );
 });
 
+test("published funding-stage calibrations cover pre-seed through growth", () => {
+  const now = "2026-08-02T00:00:00.000Z";
+  const date = "2026-08-01";
+  assert.equal(fundingStagePoints("Pre-seed", date, now), 12.5);
+  assert.equal(fundingStagePoints("Seed", date, now), 15);
+  assert.equal(fundingStagePoints("Series A", date, now), 20);
+  assert.equal(fundingStagePoints("Series B", date, now), 22.5);
+  assert.equal(fundingStagePoints("Series C", date, now), 23.75);
+  assert.equal(fundingStagePoints("Series D", date, now), 25);
+  assert.equal(fundingStagePoints("Series E", date, now), 25);
+  assert.equal(fundingStagePoints("Growth", date, now), 25);
+});
+
 test("board freshness decays to zero for abandoned boards", () => {
   assert.equal(boardFreshnessPoints(NOW, NOW), 15);
   assert.equal(boardFreshnessPoints("2026-05-01T00:00:00.000Z", NOW), 0);

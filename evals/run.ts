@@ -2,6 +2,7 @@ import "./data-integrity.test";
 import "./data-quality-audit.test";
 import "./normalization.test";
 import "./hiring-score.test";
+import "./funding-discovery.test";
 import "./market-intelligence.test";
 import "./refresh-scoring.test";
 import "./agent-contract.test";

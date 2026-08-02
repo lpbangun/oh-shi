@@ -9,6 +9,8 @@ import {
   type StartupDomainEvidenceInput,
 } from "./domain-registry";
 import { companyScoreReceipts } from "./hiring-score";
+import type { FundingDiscovery } from "./funding-discovery";
+import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
@@ -535,10 +537,20 @@ async function initializeDatabase() {
       slug=excluded.slug, name=excluded.name, domain=excluded.domain,
       description=excluded.description, founded_year=excluded.founded_year,
       headquarters=excluded.headquarters, employee_range=excluded.employee_range,
-      industry=excluded.industry, sector=excluded.sector, stage=excluded.stage,
+      industry=excluded.industry, sector=excluded.sector,
+      stage=CASE
+        WHEN companies.latest_funding_date IS NULL OR
+          (excluded.latest_funding_date IS NOT NULL AND excluded.latest_funding_date > companies.latest_funding_date)
+        THEN excluded.stage ELSE companies.stage END,
       funding_mode=excluded.funding_mode, lifecycle_status=excluded.lifecycle_status,
-      latest_funding_label=excluded.latest_funding_label,
-      latest_funding_date=excluded.latest_funding_date,
+      latest_funding_label=CASE
+        WHEN companies.latest_funding_date IS NULL OR
+          (excluded.latest_funding_date IS NOT NULL AND excluded.latest_funding_date > companies.latest_funding_date)
+        THEN excluded.latest_funding_label ELSE companies.latest_funding_label END,
+      latest_funding_date=CASE
+        WHEN companies.latest_funding_date IS NULL OR
+          (excluded.latest_funding_date IS NOT NULL AND excluded.latest_funding_date > companies.latest_funding_date)
+        THEN excluded.latest_funding_date ELSE companies.latest_funding_date END,
       careers_url=excluded.careers_url, source_url=excluded.source_url`).bind(
       company.id, company.slug, company.name, company.domain, company.description,
       company.foundedYear, company.headquarters, company.employeeRange, company.industry,
@@ -1044,6 +1056,45 @@ export async function listChanges(): Promise<ChangeEvent[]> {
     `SELECT ${changeColumns} FROM changes ORDER BY occurred_at DESC`
   ).all<ChangeEvent>();
   return result.results;
+}
+
+/**
+ * Publish verified funding announcements and immediately recompute every
+ * affected company's calibrated score. Event ids are source-stable, so daily
+ * discovery retries cannot duplicate a movement.
+ */
+export async function persistFundingDiscoveries(discoveries: FundingDiscovery[]) {
+  await ensureDatabase();
+  if (!discoveries.length) return { announcementsAdded: 0, companiesUpdated: 0, scoresUpdated: 0 };
+  const persisted = await persistFundingDiscoveryRecords(env.DB, discoveries);
+
+  const [companies, jobs, changes] = await Promise.all([
+    env.DB.prepare(`SELECT ${companyColumns} FROM companies`).all<Company>(),
+    env.DB.prepare(`SELECT ${jobColumns} FROM jobs`).all<Job>(),
+    env.DB.prepare(`SELECT ${changeColumns} FROM changes`).all<ChangeEvent>(),
+  ]);
+  const now = new Date().toISOString();
+  const affectedIds = new Set(persisted.affectedCompanyIds);
+  const scoreStatements = companies.results
+    .filter((company) => affectedIds.has(company.id))
+    .map((company) => {
+      const receipts = companyScoreReceipts(
+        company,
+        jobs.results,
+        changes.results,
+        now,
+        isBoardTracked(company.id)
+      );
+      return env.DB.prepare(
+        "UPDATE companies SET hiring_score=?, evidence_confidence=? WHERE id=?"
+      ).bind(receipts.hiring.value, receipts.evidence.value, company.id);
+    });
+  if (scoreStatements.length) await env.DB.batch(scoreStatements);
+  return {
+    announcementsAdded: persisted.announcementsAdded,
+    companiesUpdated: persisted.companiesUpdated,
+    scoresUpdated: scoreStatements.length,
+  };
 }
 
 export async function getCompanyBySlug(slug: string): Promise<Company | null> {
