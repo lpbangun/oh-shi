@@ -176,20 +176,15 @@ test("signal promotion is protected and requires canonical re-verification", asy
   assert.match(publicRoute, /listOffBoardVerifiedOpenings/);
 });
 
-test("off-board signals are a distinct public surface and UI section", async () => {
+test("off-board signals remain distinct public API surfaces without an empty homepage section", async () => {
   const [route, board] = await Promise.all([
     read("app/api/v1/signals/route.ts"),
     read("app/components/JobBoard.tsx"),
   ]);
   assert.match(route, /hiring_signal_not_verified_opening/);
   assert.match(route, /listActiveHiringSignals/);
-  assert.match(board, />Off the radar</);
-  assert.match(board, /not verified openings/);
-  assert.match(board, /signal\.sourceKind/);
-  assert.match(board, /signal\.confidence/);
-  assert.match(board, /signal\.lastVerifiedAt/);
-  assert.match(board, /Verified off-board openings/);
-  assert.match(board, /offBoardOpenings/);
+  assert.doesNotMatch(board, />Off the radar</);
+  assert.doesNotMatch(board, /offBoardOpenings/);
 });
 
 test("all default public job surfaces use the shared company-diverse order", async () => {

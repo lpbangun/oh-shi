@@ -8,24 +8,20 @@ import {
 } from "@/lib/derive";
 import {
   getCoverageMetrics,
-  listActiveHiringSignals,
   listChanges,
   listCompanies,
   listJobs,
-  listOffBoardVerifiedOpenings,
 } from "@/lib/data";
 import { JobBoard } from "./components/JobBoard";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [companies, jobs, changes, coverage, signals, offBoardOpenings] = await Promise.all([
+  const [companies, jobs, changes, coverage] = await Promise.all([
     listCompanies(),
     listJobs(true),
     listChanges(),
     getCoverageMetrics(),
-    listActiveHiringSignals(),
-    listOffBoardVerifiedOpenings(),
   ]);
 
   const deltaMap = companyDeltas(companies, jobs, changes);
@@ -64,8 +60,6 @@ export default async function Home() {
       dataAsOf={DATA_AS_OF}
       coverage={coverage}
       generatedAt={new Date().toISOString()}
-      signals={signals}
-      offBoardOpenings={offBoardOpenings}
     />
   );
 }

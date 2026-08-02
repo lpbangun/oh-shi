@@ -38,6 +38,7 @@ let batches = 0;
 const failures: string[] = [];
 
 for (let index = 0; index < records.length; index += BATCH_SIZE) {
+  const batchNumber = Math.floor(index / BATCH_SIZE) + 1;
   const batch = records.slice(index, index + BATCH_SIZE);
   const response = await fetch(importUrl, {
     method: "POST",
@@ -51,7 +52,7 @@ for (let index = 0; index < records.length; index += BATCH_SIZE) {
   });
   const body = await response.text();
   if (response.status !== 202) {
-    failures.push(`batch ${batches + 1} returned HTTP ${response.status}: ${body.slice(0, 200)}`);
+    failures.push(`batch ${batchNumber} returned HTTP ${response.status}: ${body.slice(0, 200)}`);
     continue;
   }
   batches += 1;

@@ -92,6 +92,9 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(workflow, /cron: "30 \*\/2 \* \* \*"/);
   assert.match(workflow, /OH_SHI_BASE_URL/);
   assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
+  assert.match(workflow, /id: directory_sync/);
+  assert.match(workflow, /continue-on-error: true/);
+  assert.match(workflow, /steps\.directory_sync\.outcome == 'failure'/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
   assert.match(refreshRunner, /Preflight failed/);
   assert.match(refreshRunner, /refresh_run/);
