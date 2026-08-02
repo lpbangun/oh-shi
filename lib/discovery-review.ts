@@ -63,13 +63,17 @@ const batchColumns = `id, requested_count as requestedCount,
   failed_count as failedCount, status, created_at as createdAt,
   completed_at as completedAt`;
 
-const candidateColumns = `batch_id as batchId, candidate_id as candidateId,
-  status, company_name as companyName, normalized_domain as normalizedDomain,
-  website_url as websiteUrl, provider, board_id as boardId,
-  careers_url as careersUrl, job_count as jobCount, jobs_json as jobsJson,
-  fingerprint, observed_at as observedAt, last_attempted_at as lastAttemptedAt,
-  last_error as lastError, reviewed_at as reviewedAt,
-  review_reason as reviewReason`;
+const candidateColumns = `review.batch_id as batchId,
+  review.candidate_id as candidateId, review.status,
+  review.company_name as companyName,
+  review.normalized_domain as normalizedDomain,
+  review.website_url as websiteUrl, review.provider,
+  review.board_id as boardId, review.careers_url as careersUrl,
+  review.job_count as jobCount, review.jobs_json as jobsJson,
+  review.fingerprint, review.observed_at as observedAt,
+  review.last_attempted_at as lastAttemptedAt,
+  review.last_error as lastError, review.reviewed_at as reviewedAt,
+  review.review_reason as reviewReason`;
 
 const validBatchId = (value: string) =>
   /^[a-z0-9][a-z0-9._:-]{7,159}$/i.test(value);
@@ -382,8 +386,8 @@ export async function readDiscoveryReviewBatch(batchId: string) {
   const batch = await readBatchRow(batchId);
   if (!batch) return null;
   const rows = await env.DB.prepare(`SELECT ${candidateColumns}
-    FROM discovery_candidate_reviews WHERE batch_id=?
-    ORDER BY status, company_name, candidate_id`).bind(batchId)
+    FROM discovery_candidate_reviews review WHERE review.batch_id=?
+    ORDER BY review.status, review.company_name, review.candidate_id`).bind(batchId)
     .all<ReviewCandidateRow>();
   return {
     batch,
