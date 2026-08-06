@@ -7,7 +7,7 @@ import type {
   ChangeEvent,
   Company,
   CoverageMetrics,
-  Job,
+  DashboardJob,
 } from "@/lib/types";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
@@ -16,7 +16,7 @@ import { Ticker } from "./Ticker";
 
 type Props = {
   companies: Company[];
-  jobs: Job[];
+  jobs: DashboardJob[];
   changes: ChangeEvent[];
   sectors: SectorStat[];
   movements: MarketMovement[];
@@ -166,11 +166,11 @@ export function JobBoard({
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
   const companyBySlug = useMemo(() => new Map(companies.map((c) => [c.slug, c])), [companies]);
   const sectorOf = useCallback(
-    (job: Job) => companyById.get(job.companyId)?.sector || "Other",
+    (job: DashboardJob) => companyById.get(job.companyId)?.sector || "Other",
     [companyById]
   );
   const scoreOf = useCallback(
-    (job: Job) => companyById.get(job.companyId)?.hiringScore || 0,
+    (job: DashboardJob) => companyById.get(job.companyId)?.hiringScore || 0,
     [companyById]
   );
 
@@ -194,9 +194,9 @@ export function JobBoard({
       return true;
     });
 
-    const byTitle = (a: Job, b: Job) => a.title.localeCompare(b.title);
-    const nameOf = (job: Job) => companyById.get(job.companyId)?.name || "";
-    const comparators: Record<SortId, (a: Job, b: Job) => number> = {
+    const byTitle = (a: DashboardJob, b: DashboardJob) => a.title.localeCompare(b.title);
+    const nameOf = (job: DashboardJob) => companyById.get(job.companyId)?.name || "";
+    const comparators: Record<SortId, (a: DashboardJob, b: DashboardJob) => number> = {
       signal: (a, b) => scoreOf(b) - scoreOf(a) || byTitle(a, b),
       title: byTitle,
       title_desc: (a, b) => b.title.localeCompare(a.title),
