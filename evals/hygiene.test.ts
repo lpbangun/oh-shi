@@ -47,6 +47,28 @@ test("Sites configuration is bound to the public project and D1", async () => {
   assert.equal(hosting.r2, null);
 });
 
+test("homepage cold starts avoid database write storms and cache rendered documents", async () => {
+  const data = await read("lib/data.ts");
+  const homepage = await read("app/page.tsx");
+  const worker = await read("worker/index.ts");
+
+  assert.match(data, /EXISTS\(SELECT 1 FROM companies LIMIT 1\) as hasCompanies/);
+  assert.match(data, /EXISTS\(SELECT fingerprint FROM discovery_candidate_reviews LIMIT 0\)/);
+  assert.match(data, /isMissingDatabaseSchema/);
+  assert.match(data, /initialization \?\?= prepareDatabase\(\)/);
+  assert.match(data, /getHomepageData/);
+  assert.match(homepage, /getHomepageData\(\)/);
+  assert.doesNotMatch(homepage, /listJobs\(true\)/);
+  assert.match(data, /const dashboardJobColumns/);
+  assert.match(homepage, /changes\.slice\(0, HOMEPAGE_CHANGE_LIMIT\)/);
+  assert.match(homepage, /movements\.slice\(0, HOMEPAGE_MOVEMENT_LIMIT\)/);
+  assert.match(worker, /__oh_shi_version/);
+  assert.match(worker, /edgeCache\.match\(cacheKey\)/);
+  assert.match(worker, /edgeCache\.put\(cacheKey, cacheable\.clone\(\)\)/);
+  assert.match(worker, /max-age=0, s-maxage=300/);
+  assert.match(worker, /request\.headers\.get\("rsc"\) !== "1"/);
+});
+
 test("quality script enforces the intended gate order", async () => {
   const pkg = JSON.parse(await read("package.json"));
   assert.equal(

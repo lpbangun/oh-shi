@@ -2,6 +2,7 @@ import {
   normalizeSector,
   type ChangeEvent,
   type Company,
+  type DashboardJob,
   type Job,
   type MarketMovement,
   type MovementJobEvidence,
@@ -50,7 +51,7 @@ export function sectorKey(industry: string) {
  */
 export function companyDeltas(
   companies: Company[],
-  jobs: Job[],
+  jobs: Pick<Job, "id" | "companyId">[],
   changes: ChangeEvent[],
   now = Date.now()
 ): Map<string, number> {
@@ -115,8 +116,14 @@ export function sectorStats(
 }
 
 /** Distinct, sorted values for the column filter menus. */
-export function facetValues(jobs: Job[]) {
-  const collect = (pick: (job: Job) => string) =>
+export function facetValues(
+  jobs: Array<DashboardJob & { company?: Company }>,
+  companies: Company[] = []
+) {
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  const companyOf = (job: DashboardJob & { company?: Company }) =>
+    job.company || companyById.get(job.companyId);
+  const collect = (pick: (job: DashboardJob) => string) =>
     Array.from(new Set(jobs.map(pick).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   return {
@@ -124,16 +131,15 @@ export function facetValues(jobs: Job[]) {
     locations: collect((job) => job.location),
     employmentTypes: collect((job) => job.employmentType),
     providers: collect((job) => job.provider || job.source),
-    companies: Array.from(new Set(jobs.map((job) => job.company?.name || "").filter(Boolean))).sort(),
-    investors: Array.from(new Set(jobs.flatMap((job) => job.company?.investors || []))).sort(),
+    companies: Array.from(new Set(jobs.map((job) => companyOf(job)?.name || "").filter(Boolean))).sort(),
+    investors: Array.from(new Set(jobs.flatMap((job) => companyOf(job)?.investors || []))).sort(),
     sectors: Array.from(
       new Set(
         jobs
-          .map((job) =>
-            job.company
-              ? job.company.sector || normalizeSector(job.company.industry)
-              : ""
-          )
+          .map((job) => {
+            const company = companyOf(job);
+            return company ? company.sector || normalizeSector(company.industry) : "";
+          })
           .filter(Boolean)
       )
     ).sort((a, b) => a.localeCompare(b)),
@@ -145,12 +151,12 @@ export function facetValues(jobs: Job[]) {
  * This preserves hiring-signal priority while preventing a large board from
  * filling the first page. Explicit user sorts bypass this function.
  */
-export function companyDiverseJobs(
-  jobs: Job[],
+export function companyDiverseJobs<T extends Pick<Job, "id" | "companyId" | "title" | "firstSeenAt">>(
+  jobs: T[],
   companies: Company[]
 ) {
   const companyById = new Map(companies.map((company) => [company.id, company]));
-  const buckets = new Map<string, Job[]>();
+  const buckets = new Map<string, T[]>();
   for (const job of jobs) {
     const bucket = buckets.get(job.companyId) || [];
     bucket.push(job);
@@ -168,7 +174,7 @@ export function companyDiverseJobs(
     (companyById.get(a)?.name || a).localeCompare(companyById.get(b)?.name || b) ||
     a.localeCompare(b)
   );
-  const output: Job[] = [];
+  const output: T[] = [];
   for (let round = 0; output.length < jobs.length; round += 1) {
     let added = false;
     for (const companyId of companyIds) {
@@ -240,7 +246,7 @@ function sectorMovementTitle(sector: SectorName, evidence: MovementJobEvidence[]
 
 function movementEvidence(
   companies: Company[],
-  jobs: Job[],
+  jobs: Pick<Job, "id" | "companyId" | "title" | "canonicalUrl">[],
   changes: ChangeEvent[]
 ) {
   const companyById = new Map(companies.map((company) => [company.id, company]));
@@ -292,7 +298,7 @@ function sortMovements(movements: MarketMovement[]) {
 /** Aggregate canonical job changes into one movement per company per UTC day. */
 export function companyDayMovements(
   companies: Company[],
-  jobs: Job[],
+  jobs: Pick<Job, "id" | "companyId" | "title" | "canonicalUrl">[],
   changes: ChangeEvent[]
 ): MarketMovement[] {
   const buckets = new Map<string, MovementBucket>();
@@ -341,7 +347,7 @@ export function companyDayMovements(
 /** Aggregate canonical job changes into one movement per normalized sector/day. */
 export function sectorDayMovements(
   companies: Company[],
-  jobs: Job[],
+  jobs: Pick<Job, "id" | "companyId" | "title" | "canonicalUrl">[],
   changes: ChangeEvent[]
 ): MarketMovement[] {
   const buckets = new Map<string, MovementBucket>();

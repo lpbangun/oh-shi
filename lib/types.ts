@@ -121,6 +121,27 @@ export type Job = {
   company?: Company;
 };
 
+/** Lean record serialized into the interactive homepage job board. */
+export type DashboardJob = Pick<
+  Job,
+  | "id"
+  | "companyId"
+  | "provider"
+  | "title"
+  | "roleFamily"
+  | "location"
+  | "remoteStatus"
+  | "employmentType"
+  | "compensation"
+  | "canonicalUrl"
+  | "source"
+  | "status"
+  | "firstSeenAt"
+  | "lastVerifiedAt"
+  | "closedAt"
+  | "summary"
+>;
+
 export const HIRING_SIGNAL_SOURCE_KINDS = [
   "company_blog",
   "rss",

@@ -27,6 +27,7 @@ import {
   type ChangeEvent,
   type Company,
   type CoverageMetrics,
+  type DashboardJob,
   type HiringSignal,
   type Job,
 } from "./types";
@@ -60,6 +61,14 @@ const jobColumns = `
 const changeColumns = `
   id, entity_type as entityType, entity_id as entityId, change_type as changeType,
   title, description, occurred_at as occurredAt, source_url as sourceUrl
+`;
+
+const dashboardJobColumns = `
+  id, company_id as companyId, provider, title, role_family as roleFamily,
+  location, remote_status as remoteStatus, employment_type as employmentType,
+  compensation, canonical_url as canonicalUrl, source, status,
+  first_seen_at as firstSeenAt, last_verified_at as lastVerifiedAt,
+  closed_at as closedAt, summary
 `;
 
 async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
@@ -728,8 +737,61 @@ async function initializeDatabase() {
   if (scoreStatements.length) await env.DB.batch(scoreStatements);
 }
 
+function isMissingDatabaseSchema(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no such (?:table|column)(?::|\s)/i.test(message);
+}
+
+async function prepareDatabase() {
+  if (!env.DB) throw new Error("D1 binding DB is unavailable.");
+
+  // Sites applies the checked-in Drizzle migrations before serving a deployed
+  // version. One compile-time schema probe plus the company existence check
+  // replaces the hundreds of schema, backfill, and score-recalculation
+  // statements that previously ran on every cold Worker. LIMIT 0 keeps the
+  // schema checks read-only while SQLite still resolves every table and column.
+  try {
+    const readiness = await env.DB.prepare(`SELECT
+      EXISTS(SELECT 1 FROM companies LIMIT 1) as hasCompanies,
+      EXISTS(SELECT sector FROM companies LIMIT 0) as companiesReady,
+      EXISTS(SELECT linkedin_presence_state FROM jobs LIMIT 0) as jobsReady,
+      EXISTS(SELECT normalized_canonical_url FROM job_observations LIMIT 0) as observationsReady,
+      EXISTS(SELECT promoted_job_id FROM hiring_signals LIMIT 0) as signalsReady,
+      EXISTS(SELECT run_id FROM hiring_signal_promotions LIMIT 0) as promotionsReady,
+      EXISTS(SELECT occurred_at FROM changes LIMIT 0) as changesReady,
+      EXISTS(SELECT discovery_cursor FROM investor_sources LIMIT 0) as investorsReady,
+      EXISTS(SELECT quarantine_application_id FROM company_sources LIMIT 0) as sourcesReady,
+      EXISTS(SELECT company_id FROM company_investors LIMIT 0) as companyInvestorsReady,
+      EXISTS(SELECT review_notes FROM discovery_queue LIMIT 0) as discoveryReady,
+      EXISTS(SELECT candidate_id FROM discovery_queue_investors LIMIT 0) as discoveryInvestorsReady,
+      EXISTS(SELECT ready_count FROM discovery_review_batches LIMIT 0) as reviewBatchesReady,
+      EXISTS(SELECT fingerprint FROM discovery_candidate_reviews LIMIT 0) as reviewsReady,
+      EXISTS(SELECT career_fingerprint FROM startup_domains LIMIT 0) as domainsReady,
+      EXISTS(SELECT source_terms_url FROM startup_domain_aliases LIMIT 0) as aliasesReady,
+      EXISTS(SELECT related_domain FROM startup_domain_acquisitions LIMIT 0) as acquisitionsReady,
+      EXISTS(SELECT observed_website_urls_json FROM startup_domain_evidence LIMIT 0) as evidenceReady,
+      EXISTS(SELECT expected_domains FROM startup_domain_imports LIMIT 0) as importsReady,
+      EXISTS(SELECT cohort FROM startup_domain_cohorts LIMIT 0) as cohortsReady,
+      EXISTS(SELECT completed_at FROM ingestion_runs LIMIT 0) as ingestionReady,
+      EXISTS(SELECT response_json FROM refresh_runs LIMIT 0) as refreshReady,
+      EXISTS(SELECT source_id FROM ingestion_source_results LIMIT 0) as sourceResultsReady,
+      EXISTS(SELECT board_id FROM canonical_source_snapshots LIMIT 0) as snapshotsReady,
+      EXISTS(SELECT snapshot_id FROM canonical_snapshot_members LIMIT 0) as snapshotMembersReady,
+      EXISTS(SELECT idempotency_key FROM canonical_snapshot_applications LIMIT 0) as snapshotApplicationsReady,
+      EXISTS(SELECT clean_miss_count FROM fragile_job_misses LIMIT 0) as fragileMissesReady
+    `).first<{ hasCompanies: number }>();
+    if (Number(readiness?.hasCompanies || 0) > 0) return;
+  } catch (error) {
+    if (!isMissingDatabaseSchema(error)) throw error;
+  }
+
+  // Empty local databases and recognized legacy schemas retain the idempotent
+  // bootstrap path. Transport, authentication, and quota errors stay fatal.
+  await initializeDatabase();
+}
+
 export async function ensureDatabase() {
-  initialization ??= initializeDatabase().catch((error) => {
+  initialization ??= prepareDatabase().catch((error) => {
     initialization = null;
     throw error;
   });
@@ -1013,21 +1075,53 @@ export async function listCompanies(): Promise<Company[]> {
   }));
 }
 
-export async function listJobs(includeClosed = false): Promise<Job[]> {
+async function listStoredJobs(includeClosed = false): Promise<Job[]> {
   await ensureDatabase();
   const where = includeClosed ? "" : "WHERE status = 'verified_open'";
-  const [result, companies] = await Promise.all([
-    env.DB.prepare(
-      `SELECT ${jobColumns} FROM jobs ${where} ORDER BY first_seen_at DESC`
-    ).all<Job>(),
-    listCompanies(),
-  ]);
+  const result = await env.DB.prepare(
+    `SELECT ${jobColumns} FROM jobs ${where} ORDER BY first_seen_at DESC`
+  ).all<Job>();
+  return result.results;
+}
+
+async function listDashboardJobs(): Promise<DashboardJob[]> {
+  await ensureDatabase();
+  const result = await env.DB.prepare(
+    `SELECT ${dashboardJobColumns} FROM jobs ORDER BY first_seen_at DESC`
+  ).all<DashboardJob>();
+  return result.results;
+}
+
+function attachCompaniesToJobs(jobs: Job[], companies: Company[]) {
   const companiesById = new Map(companies.map((company) => [company.id, company]));
-  const jobs = result.results.map((job) => ({
+  return jobs.map((job) => ({
     ...job,
     company: companiesById.get(job.companyId),
   }));
+}
+
+export async function listJobs(includeClosed = false): Promise<Job[]> {
+  const [storedJobs, companies] = await Promise.all([
+    listStoredJobs(includeClosed),
+    listCompanies(),
+  ]);
+  const jobs = attachCompaniesToJobs(storedJobs, companies);
   return includeClosed ? jobs : companyDiverseJobs(jobs, companies);
+}
+
+export async function getHomepageData(now = new Date()) {
+  const [companies, jobs, changes, coverage] = await Promise.all([
+    listCompanies(),
+    listDashboardJobs(),
+    listChanges(),
+    getCoverageMetrics(now),
+  ]);
+  return {
+    companies,
+    jobs,
+    changes,
+    coverage,
+  };
 }
 
 export async function listActiveHiringSignals(now = new Date()): Promise<HiringSignal[]> {

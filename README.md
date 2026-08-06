@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/lpbangun/oh-shi/actions/workflows/ci.yml/badge.svg)](https://github.com/lpbangun/oh-shi/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/Code-MIT-111111.svg)](LICENSE)
-[![Website](https://img.shields.io/badge/Website-ohsi.work-ff6b5b.svg)](https://ohsi.work)
+[![Website](https://img.shields.io/badge/Website-ohshi.work-ff6b5b.svg)](https://ohshi.work)
 
 **OH SHI** is the **Operational Headquarters for Startup Hiring Intelligence**:
 a public, evidence-first source of truth for startup companies, verified open
@@ -19,7 +19,7 @@ It is designed for two audiences at once:
 
 <div align="center">
 
-**[Open the live app at ohsi.work](https://ohsi.work)**
+**[Open the live app at ohshi.work](https://ohshi.work)**
 
 ![OH SHI app preview](docs/assets/app-preview.png)
 
@@ -52,10 +52,10 @@ The core rules are intentionally simple:
 
 | Audience | Starting point | What it provides |
 | --- | --- | --- |
-| Job seeker or researcher | [Human job board](https://ohsi.work) | Search, filter, sort, inspect companies, and open canonical source links |
-| Agent or analyst | [`/api/v1/intelligence`](https://ohsi.work/api/v1/intelligence) | Preferred filtered API for jobs, companies, movements, and sectors |
-| Bulk consumer | [`jobs.jsonl`](https://ohsi.work/exports/jobs.jsonl) | Stream-friendly JSONL exports for local analysis |
-| Change consumer | [`daily-changes.json`](https://ohsi.work/exports/daily-changes.json) | Incremental openings, closures, funding, and company changes |
+| Job seeker or researcher | [Human job board](https://ohshi.work) | Search, filter, sort, inspect companies, and open canonical source links |
+| Agent or analyst | [`/api/v1/intelligence`](https://ohshi.work/api/v1/intelligence) | Preferred filtered API for jobs, companies, movements, and sectors |
+| Bulk consumer | [`jobs.jsonl`](https://ohshi.work/exports/jobs.jsonl) | Stream-friendly JSONL exports for local analysis |
+| Change consumer | [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Incremental openings, closures, funding, and company changes |
 | Maintainer | [`docs/architecture.md`](docs/architecture.md) | Backend lifecycle, storage model, and public read path |
 
 ## Backend architecture
@@ -178,7 +178,7 @@ derivations in [`lib/derive.ts`](lib/derive.ts).
 ### Preferred intelligence endpoint
 
 ```bash
-curl -fsSL "https://ohsi.work/api/v1/intelligence?view=jobs&limit=25"
+curl -fsSL "https://ohshi.work/api/v1/intelligence?view=jobs&limit=25"
 ```
 
 Supported views are `jobs`, `companies`, `movements`, and `sectors`. The endpoint
@@ -186,9 +186,9 @@ validates filters, rejects unknown parameters with HTTP 400, and returns a
 deterministic cursor for the next page.
 
 ```bash
-curl -fsSL "https://ohsi.work/api/v1/intelligence?view=jobs&status=verified_open&limit=25"
-curl -fsSL "https://ohsi.work/api/v1/intelligence?view=companies&sector=Healthcare"
-curl -fsSL "https://ohsi.work/llms.txt"
+curl -fsSL "https://ohshi.work/api/v1/intelligence?view=jobs&status=verified_open&limit=25"
+curl -fsSL "https://ohshi.work/api/v1/intelligence?view=companies&sector=Healthcare"
+curl -fsSL "https://ohshi.work/llms.txt"
 ```
 
 ### Public interfaces
@@ -366,7 +366,7 @@ closed when the response is incomplete.
 
 ## Links
 
-- **Website:** [ohsi.work](https://ohsi.work)
+- **Website:** [ohshi.work](https://ohshi.work)
 - **GitHub:** [github.com/lpbangun/oh-shi](https://github.com/lpbangun/oh-shi)
 - **Backend architecture:** [`docs/architecture.md`](docs/architecture.md)
 - **Discovery and source policy:** [`docs/discovery-sources.md`](docs/discovery-sources.md)

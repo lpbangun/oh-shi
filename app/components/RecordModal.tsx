@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import type { Company, Job } from "@/lib/types";
+import type { Company, DashboardJob } from "@/lib/types";
 import { CompanyLogo } from "./CompanyLogo";
 
 const isoDate = (value: string | null) => (value ? value.slice(0, 10) : "unknown");
@@ -49,7 +49,7 @@ export function JobModal({
   onOpenCompany,
   onClose,
 }: {
-  job: Job;
+  job: DashboardJob;
   company?: Company;
   backTo?: string;
   onBack: () => void;
@@ -106,7 +106,7 @@ export function CompanyModal({
   onClose,
 }: {
   company: Company;
-  roles: Job[];
+  roles: DashboardJob[];
   delta: number;
   onOpenJob: (jobId: string) => void;
   onFilterToCompany: () => void;

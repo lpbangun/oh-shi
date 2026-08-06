@@ -139,21 +139,37 @@ test.describe("unified agent contract", () => {
       )
     ).toBe(true);
 
-    const healthcareResponse = await request.get(
-      "/api/v1/intelligence?view=companies&sector=Healthcare&min_confidence=80"
+    // Confidence intentionally decays with verification age, so derive a
+    // stable filter threshold from the current public data instead of baking
+    // in a value that inevitably ages out.
+    const companiesResponse = await request.get(
+      "/api/v1/intelligence?view=companies&limit=100"
     );
-    const healthcare =
-      (await healthcareResponse.json()) as IntelligencePayload<{
+    const companies =
+      (await companiesResponse.json()) as IntelligencePayload<{
         sector: string;
         evidenceConfidence: number;
       }>;
-    expect(healthcareResponse.status()).toBe(200);
-    expect(healthcare.data.length).toBeGreaterThan(0);
+    expect(companiesResponse.status()).toBe(200);
+    const target = companies.data.reduce((best, company) =>
+      company.evidenceConfidence > best.evidenceConfidence ? company : best
+    );
+    const confidenceResponse = await request.get(
+      `/api/v1/intelligence?view=companies&sector=${encodeURIComponent(target.sector)}` +
+      `&min_confidence=${target.evidenceConfidence}`
+    );
+    const confidence =
+      (await confidenceResponse.json()) as IntelligencePayload<{
+        sector: string;
+        evidenceConfidence: number;
+      }>;
+    expect(confidenceResponse.status()).toBe(200);
+    expect(confidence.data.length).toBeGreaterThan(0);
     expect(
-      healthcare.data.every(
+      confidence.data.every(
         (company) =>
-          company.sector === "Healthcare" &&
-          company.evidenceConfidence >= 80
+          company.sector === target.sector &&
+          company.evidenceConfidence >= target.evidenceConfidence
       )
     ).toBe(true);
 
