@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { companyDiverseJobs, type MarketMovement, type SectorStat } from "@/lib/derive";
+import { companyDiverseJobs, facetValues, type MarketMovement, type SectorStat } from "@/lib/derive";
 import type {
   ChangeEvent,
   Company,
-  CoverageMetrics,
   DashboardJob,
 } from "@/lib/types";
+import type { HomepageCoverageMetrics } from "@/lib/data";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
 import { CompanyModal, JobModal } from "./RecordModal";
@@ -21,12 +21,8 @@ type Props = {
   sectors: SectorStat[];
   movements: MarketMovement[];
   deltas: Record<string, number>;
-  facets: {
-    departments: string[]; locations: string[]; employmentTypes: string[];
-    providers: string[]; companies: string[]; investors: string[]; sectors: string[];
-  };
   dataAsOf: string;
-  coverage: CoverageMetrics;
+  coverage: HomepageCoverageMetrics;
   generatedAt: string;
 };
 
@@ -113,16 +109,17 @@ function InfoExplainer({ label, children }: { label: string; children: React.Rea
 
 export function JobBoard({
   companies,
-  jobs,
+  jobs: initialJobs,
   changes,
   sectors,
   movements,
   deltas,
-  facets,
   dataAsOf,
   coverage,
   generatedAt,
 }: Props) {
+  const [jobs, setJobs] = useState(initialJobs);
+  const [jobIndexStatus, setJobIndexStatus] = useState<"loading" | "ready" | "partial">("loading");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [sector, setSector] = useState("");
@@ -147,6 +144,33 @@ export function JobBoard({
   // Phones get shorter pages; 20 rows is about one thumb-scroll.
   const [perPage, setPerPage] = useState(50);
   useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch("/api/v1/dashboard/jobs", {
+        headers: { accept: "application/json" },
+        signal: controller.signal,
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`Dashboard index returned ${response.status}`);
+          return response.json() as Promise<{ data?: DashboardJob[] }>;
+        })
+        .then((payload) => {
+          if (!Array.isArray(payload.data)) throw new Error("Dashboard index is malformed");
+          setJobs(payload.data);
+          setJobIndexStatus("ready");
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.name === "AbortError") return;
+          setJobIndexStatus("partial");
+        });
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     const media = window.matchMedia("(max-width: 680px)");
     const apply = () => {
       setPerPage(media.matches ? 20 : 50);
@@ -164,6 +188,7 @@ export function JobBoard({
   const changesSection = useRef<HTMLDivElement>(null);
 
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+  const facets = useMemo(() => facetValues(jobs, companies), [jobs, companies]);
   const companyBySlug = useMemo(() => new Map(companies.map((c) => [c.slug, c])), [companies]);
   const sectorOf = useCallback(
     (job: DashboardJob) => companyById.get(job.companyId)?.sector || "Other",
@@ -363,8 +388,8 @@ export function JobBoard({
           <div><b>{coverage.activeCompanies}</b><span>companies hiring</span></div>
           <div><b>{coverage.companiesAddedLast7Days}</b><span>companies added · 7d</span></div>
           <div><b>{coverage.jobsAddedLast24Hours}</b><span>jobs added · 24h</span></div>
-          <div><b>{Object.keys(coverage.investors).length}</b><span>investor sources</span></div>
-          <div><b>{Object.keys(coverage.providers).length}</b><span>ATS providers</span></div>
+          <div><b>{coverage.investorSourceCount}</b><span>investor sources</span></div>
+          <div><b>{coverage.providerCount}</b><span>ATS providers</span></div>
         </div>
         <div className="wrap coverage-freshness">
           Last canonical refresh: {coverage.lastCanonicalRefresh
@@ -428,6 +453,11 @@ export function JobBoard({
           <div className="result-count">
             <span>
               <b>{visibleJobs.length}</b> role{visibleJobs.length === 1 ? "" : "s"} across {new Set(visibleJobs.map((job) => job.companyId)).size} compan{new Set(visibleJobs.map((job) => job.companyId)).size === 1 ? "y" : "ies"} · {uniqueCompanies} on this page
+              <span className="job-index-status" role="status" aria-live="polite">
+                {jobIndexStatus === "loading" ? " · loading full index…" : null}
+                {jobIndexStatus === "ready" ? ` · ${jobs.length} roles loaded` : null}
+                {jobIndexStatus === "partial" ? " · recent roles shown" : null}
+              </span>
               {filtersActive ? <button className="clear-filters" type="button" onClick={clearFilters}>Clear filters ✕</button> : null}
             </span>
             <span>Sorted by {SORT_LABELS[sort]}</span>

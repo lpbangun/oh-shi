@@ -16,6 +16,7 @@
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:ui": "playwright test --ui",
+    "benchmark:loading": "node scripts/benchmark-loading.mjs",
     "pilot:domains": "tsx scripts/build-startup-domain-pilot.ts",
     "pilot:measure-yield": "tsx scripts/measure-startup-domain-yield.ts",
     "verify:structured": "tsx scripts/verify-structured-career-source.ts",

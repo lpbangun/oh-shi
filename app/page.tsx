@@ -2,7 +2,6 @@ import { DATA_AS_OF } from "@/lib/seed";
 import {
   companyDayMovements,
   companyDeltas,
-  facetValues,
   fundingMovements,
   sectorDayMovements,
   sectorStats,
@@ -15,15 +14,16 @@ import { JobBoard } from "./components/JobBoard";
 export const dynamic = "force-dynamic";
 
 const HOMEPAGE_CHANGE_LIMIT = 250;
+const HOMEPAGE_JOB_LIMIT = 100;
 const HOMEPAGE_MOVEMENT_LIMIT = 100;
 
 export default async function Home() {
-  const { companies, jobs, changes, coverage } = await getHomepageData();
+  const { companies, jobs, movementJobs, changes, coverage } = await getHomepageData();
 
-  const deltaMap = companyDeltas(companies, jobs, changes);
+  const deltaMap = companyDeltas(companies, movementJobs, changes);
   const sectors = sectorStats(companies, deltaMap);
-  const companyIdByJobId = new Map(jobs.map((job) => [job.id, job.companyId]));
-  const sectorMovements = sectorDayMovements(companies, jobs, changes).filter(
+  const companyIdByJobId = new Map(movementJobs.map((job) => [job.id, job.companyId]));
+  const sectorMovements = sectorDayMovements(companies, movementJobs, changes).filter(
     (movement) =>
       new Set(
         movement.jobs
@@ -33,7 +33,7 @@ export default async function Home() {
   );
   const movements = [
     ...fundingMovements(companies, changes),
-    ...companyDayMovements(companies, jobs, changes),
+    ...companyDayMovements(companies, movementJobs, changes),
     ...sectorMovements,
   ].sort(
     (a, b) =>
@@ -45,12 +45,11 @@ export default async function Home() {
   return (
     <JobBoard
       companies={companies}
-      jobs={jobs}
+      jobs={jobs.slice(0, HOMEPAGE_JOB_LIMIT)}
       changes={changes.slice(0, HOMEPAGE_CHANGE_LIMIT)}
       sectors={sectors}
       movements={movements.slice(0, HOMEPAGE_MOVEMENT_LIMIT)}
       deltas={Object.fromEntries(deltaMap)}
-      facets={facetValues(jobs, companies)}
       dataAsOf={DATA_AS_OF}
       coverage={coverage}
       generatedAt={new Date().toISOString()}

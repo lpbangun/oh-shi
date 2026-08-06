@@ -143,7 +143,12 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 }
 
 /* ── sections ───────────────────────────────────────── */
-.section { padding: clamp(38px, 4.6vw, 62px) 0; border-bottom: 1px solid var(--line); }
+.section {
+  padding: clamp(38px, 4.6vw, 62px) 0;
+  border-bottom: 1px solid var(--line);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
 .section-heading h2 { font-size: clamp(24px, 3vw, 36px); }
 .section-heading p { margin-top: 8px; max-width: 62ch; font-size: 14px; color: var(--muted); line-height: 1.55; }
@@ -166,6 +171,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
   padding: 16px 2px 5px; font-family: var(--font-plex-mono), monospace; font-size: 11px; color: var(--muted);
 }
 .result-count b { color: var(--ink); font-weight: 600; font-size: 12.5px; }
+.job-index-status { color: var(--acc); }
 .clear-filters {
   font-family: var(--font-plex-mono), monospace; font-size: 11px; color: var(--acc);
   background: none; border: 0; cursor: pointer; padding: 0 0 0 10px;
