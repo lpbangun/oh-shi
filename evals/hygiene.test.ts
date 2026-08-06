@@ -47,7 +47,7 @@ test("Sites configuration is bound to the public project and D1", async () => {
   assert.equal(hosting.r2, null);
 });
 
-test("homepage cold starts avoid database write storms and cache rendered documents", async () => {
+test("homepage cold starts avoid write storms and defer the full job index", async () => {
   const data = await read("lib/data.ts");
   const homepage = await read("app/page.tsx");
   const worker = await read("worker/index.ts");
@@ -60,11 +60,15 @@ test("homepage cold starts avoid database write storms and cache rendered docume
   assert.match(homepage, /getHomepageData\(\)/);
   assert.doesNotMatch(homepage, /listJobs\(true\)/);
   assert.match(data, /const dashboardJobColumns/);
+  assert.match(data, /export async function listDashboardJobs/);
+  assert.match(data, /listDashboardJobs\(100\)/);
+  assert.match(data, /listMovementJobs\(since\)/);
+  assert.match(data, /listHomepageChanges\(since\)/);
+  assert.match(data, /getHomepageCoverageMetrics\(now\)/);
+  assert.match(homepage, /jobs\.slice\(0, HOMEPAGE_JOB_LIMIT\)/);
   assert.match(homepage, /changes\.slice\(0, HOMEPAGE_CHANGE_LIMIT\)/);
   assert.match(homepage, /movements\.slice\(0, HOMEPAGE_MOVEMENT_LIMIT\)/);
-  assert.match(worker, /__oh_shi_version/);
-  assert.match(worker, /edgeCache\.match\(cacheKey\)/);
-  assert.match(worker, /edgeCache\.put\(cacheKey, cacheable\.clone\(\)\)/);
+  assert.doesNotMatch(worker, /caches\.default/);
   assert.match(worker, /max-age=0, s-maxage=300/);
   assert.match(worker, /request\.headers\.get\("rsc"\) !== "1"/);
 });
