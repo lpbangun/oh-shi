@@ -65,6 +65,23 @@ test("context reclassification is limited to missing or placeholder industries",
   );
 });
 
+test("context matcher uses high-confidence company domains without guessing unknown brands", () => {
+  const cases: Array<[string, string, string]> = [
+    ["Method Financial", "methodfi.com", "Financial Technology"],
+    ["Instawork", "instawork.com", "Human Resources"],
+    ["Firecrawl", "firecrawl.dev", "Developer Tools"],
+    ["Carrot Fertility", "get-carrot.com", "Healthcare"],
+    ["Heart Aerospace", "heartaerospace.com", "Hardware & Robotics"],
+    ["Flexport", "flexport.com", "Logistics & Mobility"],
+    ["Gusto", "gusto.com", "Human Resources"],
+    ["Unknown Startup", "unknown.example", "Other"],
+  ];
+
+  for (const [name, domain, expected] of cases) {
+    assert.equal(normalizeSector("Other", { name, domain }), expected, `${name} / ${domain}`);
+  }
+});
+
 test("U.S. eligibility accepts explicit U.S. and remote signals", () => {
   assert.equal(
     isUsEligible({

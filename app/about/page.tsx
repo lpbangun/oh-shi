@@ -65,8 +65,10 @@ export default async function AboutPage() {
         </p>
         <p style={{ fontSize: 15, lineHeight: 1.65, maxWidth: "62ch", color: "var(--ink2)", marginTop: 12 }}>
           We retain each source&apos;s detailed industry label and normalize it into a stable public sector
-          taxonomy for filters, sector totals, and movement views. Labels that do not match a published
-          sector remain <b>Other</b>.
+          taxonomy for filters, sector totals, and movement views. When a source does not publish an
+          industry, we apply a high-confidence context matcher to the company name and domain. Records
+          without a reliable source or context signal remain <b>Other</b>, while missing source labels
+          are shown as <b>Not published</b>.
         </p>
       </section>
 

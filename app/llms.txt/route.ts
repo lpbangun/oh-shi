@@ -7,8 +7,9 @@ OH SHI, the Operational Headquarters for Startup Hiring Intelligence, is a publi
 ## Freshness, sectors, and scoring
 Canonical ATS and permitted first-party career sources are refreshed every two hours.
 Industry labels remain as sourced and are also normalized into a stable public sector
-taxonomy for filtering, aggregation, and movement views; labels without a matching
-taxonomy rule are returned as sector Other. Funding discovery is a separate daily
+taxonomy for filtering, aggregation, and movement views. When an industry is missing,
+high-confidence company and domain context can provide the sector; records without a
+reliable signal are returned as sector Other. Funding discovery is a separate daily
 process. The /exports/daily-changes.json compatibility surface is a daily changes
 export and does not mean canonical jobs refresh only once per day.
 
