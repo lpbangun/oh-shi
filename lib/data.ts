@@ -1084,12 +1084,64 @@ async function listStoredJobs(includeClosed = false): Promise<Job[]> {
   return result.results;
 }
 
-async function listDashboardJobs(): Promise<DashboardJob[]> {
+export async function listDashboardJobs(limit?: number): Promise<DashboardJob[]> {
+  await ensureDatabase();
+  const query = `SELECT ${dashboardJobColumns} FROM jobs ORDER BY first_seen_at DESC${
+    limit ? " LIMIT ?" : ""
+  }`;
+  const statement = env.DB.prepare(query);
+  const result = await (limit ? statement.bind(limit) : statement).all<DashboardJob>();
+  return result.results;
+}
+
+type MovementJob = Pick<DashboardJob, "id" | "companyId" | "title" | "canonicalUrl">;
+
+async function listMovementJobs(since: string): Promise<MovementJob[]> {
   await ensureDatabase();
   const result = await env.DB.prepare(
-    `SELECT ${dashboardJobColumns} FROM jobs ORDER BY first_seen_at DESC`
-  ).all<DashboardJob>();
+    `SELECT DISTINCT jobs.id, jobs.company_id as companyId, jobs.title,
+       jobs.canonical_url as canonicalUrl
+     FROM jobs JOIN changes ON changes.entity_id=jobs.id
+     WHERE changes.occurred_at >= ?
+       AND changes.change_type IN ('job_opened', 'job_closed')`
+  ).bind(since).all<MovementJob>();
   return result.results;
+}
+
+export type HomepageCoverageMetrics = Pick<CoverageMetrics,
+  "verifiedOpenJobs" | "activeCompanies" | "companiesAddedLast7Days" |
+  "jobsAddedLast24Hours" | "lastCanonicalRefresh"
+> & {
+  investorSourceCount: number;
+  providerCount: number;
+};
+
+async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMetrics> {
+  await ensureDatabase();
+  const nowIso = now.toISOString();
+  const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
+  const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
+  const row = await env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM jobs WHERE status='verified_open') as verifiedOpenJobs,
+    (SELECT COUNT(DISTINCT company_id) FROM jobs WHERE status='verified_open') as activeCompanies,
+    (SELECT COUNT(DISTINCT company_id) FROM company_sources
+      WHERE discovery_status='active' AND first_discovered_at >= ?) as companiesAddedLast7Days,
+    (SELECT COUNT(*) FROM jobs WHERE status='verified_open'
+      AND first_seen_at >= ? AND first_seen_at <= ?) as jobsAddedLast24Hours,
+    (SELECT COUNT(*) FROM investor_sources WHERE enabled=1) as investorSourceCount,
+    (SELECT COUNT(DISTINCT provider) FROM company_sources
+      WHERE enabled=1 AND discovery_status='active') as providerCount,
+    (SELECT MAX(last_successful_at) FROM company_sources) as lastCanonicalRefresh`
+  ).bind(weekAgo, dayAgo, nowIso).first<HomepageCoverageMetrics>();
+  return {
+    verifiedOpenJobs: Number(row?.verifiedOpenJobs || 0),
+    activeCompanies: Number(row?.activeCompanies || 0),
+    companiesAddedLast7Days: Number(row?.companiesAddedLast7Days || 0),
+    jobsAddedLast24Hours: Number(row?.jobsAddedLast24Hours || 0),
+    investorSourceCount: Number(row?.investorSourceCount || 0),
+    providerCount: Number(row?.providerCount || 0),
+    lastCanonicalRefresh: row?.lastCanonicalRefresh || null,
+  };
 }
 
 function attachCompaniesToJobs(jobs: Job[], companies: Company[]) {
@@ -1110,15 +1162,18 @@ export async function listJobs(includeClosed = false): Promise<Job[]> {
 }
 
 export async function getHomepageData(now = new Date()) {
-  const [companies, jobs, changes, coverage] = await Promise.all([
+  const since = new Date(now.valueOf() - 30 * 86_400_000).toISOString();
+  const [companies, jobs, movementJobs, changes, coverage] = await Promise.all([
     listCompanies(),
-    listDashboardJobs(),
-    listChanges(),
-    getCoverageMetrics(now),
+    listDashboardJobs(100),
+    listMovementJobs(since),
+    listHomepageChanges(since),
+    getHomepageCoverageMetrics(now),
   ]);
   return {
     companies,
     jobs,
+    movementJobs,
     changes,
     coverage,
   };
@@ -1144,11 +1199,22 @@ export async function listOffBoardVerifiedOpenings() {
   return listOffBoardVerifiedOpeningRecords(env.DB);
 }
 
-export async function listChanges(): Promise<ChangeEvent[]> {
+export async function listChanges(since?: string): Promise<ChangeEvent[]> {
+  await ensureDatabase();
+  const query = `SELECT ${changeColumns} FROM changes${since ? " WHERE occurred_at >= ?" : ""}
+    ORDER BY occurred_at DESC`;
+  const statement = env.DB.prepare(query);
+  const result = await (since ? statement.bind(since) : statement).all<ChangeEvent>();
+  return result.results;
+}
+
+async function listHomepageChanges(since: string): Promise<ChangeEvent[]> {
   await ensureDatabase();
   const result = await env.DB.prepare(
-    `SELECT ${changeColumns} FROM changes ORDER BY occurred_at DESC`
-  ).all<ChangeEvent>();
+    `SELECT ${changeColumns} FROM changes
+     WHERE occurred_at >= ? OR change_type='funding_announced'
+     ORDER BY occurred_at DESC`
+  ).bind(since).all<ChangeEvent>();
   return result.results;
 }
 
