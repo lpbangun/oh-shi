@@ -43,6 +43,17 @@ export function sectorKey(industry: string) {
 }
 
 /**
+ * Prefer a deterministic reclassification from the source evidence. Keep a
+ * previously stored non-Other sector only when the source has no usable
+ * industry or company-context signal at all (for example a legacy row whose
+ * source industry was never published).
+ */
+export function sectorForCompany(company: Company): SectorName {
+  const inferred = normalizeSector(company.industry, company);
+  return inferred === "Other" && company.sector !== "Other" ? company.sector : inferred;
+}
+
+/**
  * Net open-role movement per company over the last 30 days.
  *
  * The companies table stores only a current `openJobCount`, so a real
@@ -80,8 +91,9 @@ export function companyDeltas(
 }
 
 /**
- * One row per industry present in the data. We do not impose a taxonomy the
- * database does not have: the sector is the company's own `industry` value.
+ * One row per normalized sector present in the data. The source industry is
+ * retained on each company, while the stable sector keeps near-duplicate
+ * labels together for aggregation and filtering.
  */
 export function sectorStats(
   companies: Company[],
@@ -91,7 +103,7 @@ export function sectorStats(
   const buckets = new Map<string, Company[]>();
 
   for (const company of companies) {
-    const name = company.sector || normalizeSector(company.industry);
+    const name = sectorForCompany(company);
     const bucket = buckets.get(name);
     if (bucket) bucket.push(company);
     else buckets.set(name, [company]);
@@ -138,7 +150,7 @@ export function facetValues(
         jobs
           .map((job) => {
             const company = companyOf(job);
-            return company ? company.sector || normalizeSector(company.industry) : "";
+            return company ? sectorForCompany(company) : "";
           })
           .filter(Boolean)
       )
@@ -306,7 +318,7 @@ export function companyDayMovements(
     const key = `${item.date}:${item.company.id}`;
     const bucket = buckets.get(key) || {
       date: item.date,
-      sector: item.company.sector || normalizeSector(item.company.industry),
+      sector: sectorForCompany(item.company),
       company: item.company,
       evidence: [],
     };
@@ -352,7 +364,7 @@ export function sectorDayMovements(
 ): MarketMovement[] {
   const buckets = new Map<string, MovementBucket>();
   for (const item of movementEvidence(companies, jobs, changes)) {
-    const sector = item.company.sector || normalizeSector(item.company.industry);
+    const sector = sectorForCompany(item.company);
     const key = `${item.date}:${sector}`;
     const bucket = buckets.get(key) || {
       date: item.date,
@@ -414,7 +426,7 @@ export function fundingMovements(
       date,
       title: change.title,
       description: change.description,
-      sector: company.sector || normalizeSector(company.industry),
+      sector: sectorForCompany(company),
       companyId: company.id,
       companySlug: company.slug,
       openedCount: 0,

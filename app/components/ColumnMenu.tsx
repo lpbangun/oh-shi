@@ -63,7 +63,7 @@ export function ColumnMenu({ label, className, filtering, sortArrow, groups, onS
   useEffect(() => {
     if (open) {
       menuRef.current
-        ?.querySelector<HTMLButtonElement>(".col-menu-item")
+        ?.querySelector<HTMLButtonElement>(".col-menu-item.on, .col-menu-item")
         ?.focus({ preventScroll: true });
     }
   }, [open]);
@@ -120,9 +120,10 @@ export function ColumnMenu({ label, className, filtering, sortArrow, groups, onS
         ref={buttonRef}
         type="button"
         className={`col-button${active ? " active" : ""}${className ? ` ${className}` : ""}`}
+        aria-label={`${label} options`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
+        aria-controls={menuId}
         onClick={toggle}
       >
         <span className="label">{label}</span>
@@ -142,13 +143,15 @@ export function ColumnMenu({ label, className, filtering, sortArrow, groups, onS
         >
           {groups.map((group, index) => (
             <div key={group.heading}>
-              {index > 0 ? <hr /> : null}
+              {index > 0 ? <hr aria-hidden="true" /> : null}
               <div className="col-menu-section">{group.heading}</div>
               {group.options.map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  role="menuitem"
+                  role="menuitemradio"
+                  aria-checked={option.selected}
+                  aria-label={`${group.heading}: ${option.label}`}
                   className={`col-menu-item${option.selected ? " on" : ""}`}
                   onClick={() => {
                     onSelect(option.id);

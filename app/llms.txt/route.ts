@@ -4,6 +4,23 @@ export async function GET(request: Request) {
 
 OH SHI, the Operational Headquarters for Startup Hiring Intelligence, is a public source of startup hiring facts for humans and AI agents.
 
+## Freshness, sectors, and scoring
+Canonical ATS and permitted first-party career sources are refreshed every two hours.
+Industry labels remain as sourced and are also normalized into a stable public sector
+taxonomy for filtering, aggregation, and movement views; labels without a matching
+taxonomy rule are returned as sector Other. Funding discovery is a separate daily
+process. The /exports/daily-changes.json compatibility surface is a daily changes
+export and does not mean canonical jobs refresh only once per day.
+
+Hiring signal is a directional 0–100 measure of observed hiring momentum, not a
+probability or calibrated forecast. Its components are open-role volume (0–30),
+90-day net role growth (0–30), funding stage and recency (0–25), and canonical-board
+freshness (0–15). Evidence confidence is separate and measures evidence quality:
+verification recency (0–40), canonical-board coverage (0–30), company-record
+completeness (0–20), and independent-source corroboration (0–10).
+The 30-day change is roles opened minus roles closed from the change feed during the
+last 30 days; no events in that window is reported as flat.
+
 ## Preferred entrypoint
 - Intelligence capabilities: ${origin}/api/v1/intelligence
 - Jobs: ${origin}/api/v1/intelligence?view=jobs
@@ -41,9 +58,9 @@ Responses use camelCase record fields. Each envelope includes schema_version,
 generated_at, data_as_of, applied_filters, page, methodology_version, license, and
 data. Company records include signal and confidence calculation receipts. Movement
 records include underlying jobs, stable record IDs, and source URLs.
-Funding movements are refreshed daily, remain standalone company movements,
-and always include a navigable official-company or reputable-publication source URL.
-The affected company's calibrated score is recomputed when newer funding is published.
+Funding movements use a separate daily discovery process, remain standalone company
+movements, and always include a navigable official-company or reputable-publication source URL.
+The affected company's directional score is recomputed when newer funding is published.
 
 ## Compatibility and bulk endpoints
 - Companies: ${origin}/api/v1/companies
@@ -54,7 +71,7 @@ The affected company's calibrated score is recomputed when newer funding is publ
 - Off-board hiring signals: ${origin}/api/v1/signals
 - Company JSONL: ${origin}/exports/companies.jsonl
 - Job JSONL: ${origin}/exports/jobs.jsonl
-- Daily changes: ${origin}/exports/daily-changes.json
+- Daily changes export: ${origin}/exports/daily-changes.json
 
 Job states are verified_open or verified_closed. Treat canonicalUrl as the
 application source. Job provenance includes rawUrl, evidenceUrl, discoveryChannel,

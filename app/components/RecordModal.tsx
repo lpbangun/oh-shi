@@ -9,10 +9,39 @@ const isoDate = (value: string | null) => (value ? value.slice(0, 10) : "unknown
 
 function useModalChrome(onClose: () => void) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        modalRef.current?.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+        ) || []
+      ).filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -20,23 +49,25 @@ function useModalChrome(onClose: () => void) {
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
+      previousFocus?.focus({ preventScroll: true });
     };
-  }, [onClose]);
-  return closeRef;
+  }, []);
+  return { closeRef, modalRef };
 }
 
-function Overlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+function Overlay({ onClose, modalRef, children }: { onClose: () => void; modalRef: React.RefObject<HTMLDivElement | null>; children: React.ReactNode }) {
   return (
     <div
       className="overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
+      aria-describedby="modal-description"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="modal">{children}</div>
+      <div className="modal" ref={modalRef}>{children}</div>
     </div>
   );
 }
@@ -56,26 +87,28 @@ export function JobModal({
   onOpenCompany: () => void;
   onClose: () => void;
 }) {
-  const closeRef = useModalChrome(onClose);
+  const { closeRef, modalRef } = useModalChrome(onClose);
   const open = job.status === "verified_open";
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} modalRef={modalRef}>
       <div className="modal-head">
         <div>
           {backTo ? (
             <button className="modal-back" type="button" onClick={onBack}>← Back to {backTo}</button>
           ) : null}
           <h3 id="modal-title">{job.title}</h3>
-          <p className="sub">{company?.name} · {job.location} · {job.employmentType}</p>
+          <p className="sub">{company?.name} · {company?.sector || "Other"} · {job.location} · {job.employmentType}</p>
         </div>
-        <button ref={closeRef} className="modal-close" type="button" aria-label="Close" onClick={onClose}>×</button>
+        <button ref={closeRef} className="modal-close" type="button" aria-label="Close job record" onClick={onClose}>×</button>
       </div>
       <div className="modal-body">
-        <p>{job.summary}</p>
+        <p id="modal-description">{job.summary}</p>
         <dl className="modal-facts">
           <div><dt>Status</dt><dd>{open ? "Verified open" : "Verified closed"}</dd></div>
           <div><dt>Department</dt><dd>{job.roleFamily}</dd></div>
+          {company ? <div><dt>Category</dt><dd>{company.sector}</dd></div> : null}
+          {company ? <div><dt>Industry</dt><dd>{company.industry}</dd></div> : null}
           <div><dt>Arrangement</dt><dd>{job.remoteStatus}</dd></div>
           <div><dt>Compensation</dt><dd>{job.compensation}</dd></div>
           <div><dt>Hiring signal</dt><dd>{company ? company.hiringScore : "—"}</dd></div>
@@ -112,26 +145,29 @@ export function CompanyModal({
   onFilterToCompany: () => void;
   onClose: () => void;
 }) {
-  const closeRef = useModalChrome(onClose);
+  const { closeRef, modalRef } = useModalChrome(onClose);
   const openCount = roles.filter((role) => role.status === "verified_open").length;
   const direction = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
   const arrow = delta > 0 ? "▲" : delta < 0 ? "▼" : "—";
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} modalRef={modalRef}>
       <div className="modal-head">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           <CompanyLogo domain={company.domain} name={company.name} />
           <div>
             <h3 id="modal-title">{company.name}</h3>
-            <p className="sub">{company.industry} · {company.headquarters}</p>
+            <p className="sub">Category: {company.sector}</p>
+            <p className="sub sub-secondary">Industry: {company.industry} · {company.headquarters}</p>
           </div>
         </div>
-        <button ref={closeRef} className="modal-close" type="button" aria-label="Close" onClick={onClose}>×</button>
+        <button ref={closeRef} className="modal-close" type="button" aria-label="Close company record" onClick={onClose}>×</button>
       </div>
       <div className="modal-body">
-        <p>{company.description}</p>
+        <p id="modal-description">{company.description}</p>
         <dl className="modal-facts">
+          <div><dt>Category</dt><dd>{company.sector}</dd></div>
+          <div><dt>Industry</dt><dd>{company.industry}</dd></div>
           <div><dt>Stage</dt><dd>{company.stage}</dd></div>
           <div><dt>Latest funding</dt><dd>{company.latestFundingLabel}</dd></div>
           <div><dt>Headcount</dt><dd>{company.employeeRange}</dd></div>
@@ -151,6 +187,7 @@ export function CompanyModal({
                 key={role.id}
                 type="button"
                 className={`role-row${roleOpen ? "" : " closed"}`}
+                aria-label={`${role.title}, ${roleOpen ? "verified open" : "verified closed"}, ${role.location}, ${role.compensation}`}
                 onClick={() => onOpenJob(role.id)}
               >
                 <span className="state" aria-hidden="true">{roleOpen ? "■" : "□"}</span>

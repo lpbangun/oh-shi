@@ -40,7 +40,7 @@ const SORT_LABELS: Record<SortId, string> = {
   title_desc: "role Z–A",
   company: "company A–Z",
   company_desc: "company Z–A",
-  sector: "sector A–Z",
+  sector: "category A–Z",
   dept: "department A–Z",
   loc: "location A–Z",
   comp_low: "compensation, low to high",
@@ -74,7 +74,7 @@ const sourceLabel = (url: string) => {
 
 type TableKey = "name" | "sector" | "stage" | "funding" | "size" | "open" | "delta" | "confidence" | "score";
 const TABLE_LABELS: Record<TableKey, string> = {
-  name: "company name", sector: "sector", stage: "stage", funding: "latest funding",
+  name: "company name", sector: "category", stage: "stage", funding: "latest funding",
   size: "headcount", open: "open roles", delta: "30-day change", confidence: "confidence", score: "hiring signal",
 };
 /** Phone-only presets, because the sortable table headers are hidden there. */
@@ -165,6 +165,23 @@ export function JobBoard({
 
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
   const companyBySlug = useMemo(() => new Map(companies.map((c) => [c.slug, c])), [companies]);
+  const industryLabelsBySector = useMemo(() => {
+    const labels = new Map<string, Set<string>>();
+    for (const company of companies) {
+      const sector = company.sector || "Other";
+      const industry = company.industry.trim();
+      if (!industry) continue;
+      const values = labels.get(sector) || new Set<string>();
+      values.add(industry);
+      labels.set(sector, values);
+    }
+    return new Map(
+      Array.from(labels, ([sector, values]) => [
+        sector,
+        Array.from(values).sort((a, b) => a.localeCompare(b)),
+      ])
+    );
+  }, [companies]);
   const sectorOf = useCallback(
     (job: DashboardJob) => companyById.get(job.companyId)?.sector || "Other",
     [companyById]
@@ -308,10 +325,21 @@ export function JobBoard({
     setTablePage(0);
   }
 
-  const tableHeader = (key: TableKey, label: string, right = false) => (
-    <th className={right ? "right" : undefined} key={key}>
-      <button type="button" className={tableSort.key === key ? "on" : undefined} onClick={() => sortTable(key)}>
-        {label}<span className="arrow">{tableSort.dir === -1 ? "↓" : "↑"}</span>
+  const tableHeader = (key: TableKey, label: string, right = false) => {
+    const sorted = tableSort.key === key;
+    return (
+    <th
+      className={right ? "right" : undefined}
+      key={key}
+      aria-sort={sorted ? (tableSort.dir === -1 ? "descending" : "ascending") : "none"}
+    >
+      <button
+        type="button"
+        className={sorted ? "on" : undefined}
+        aria-label={`Sort by ${label}`}
+        onClick={() => sortTable(key)}
+      >
+        {label}{sorted ? <span className="arrow" aria-hidden="true">{tableSort.dir === -1 ? "↓" : "↑"}</span> : null}
       </button>
       {key === "confidence" ? (
         <InfoExplainer label="Confidence">
@@ -324,7 +352,8 @@ export function JobBoard({
         </InfoExplainer>
       ) : null}
     </th>
-  );
+    );
+  };
 
   /* ── sector map ──────────────────────────────────── */
   const maxSectorRoles = Math.max(1, ...sectors.map((item) => item.openRoles));
@@ -390,11 +419,12 @@ export function JobBoard({
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" />
             </svg>
+            <label className="sr-only" htmlFor="job-search">Search jobs</label>
             <input
+              id="job-search"
               value={query}
               onChange={(event) => { setQuery(event.target.value); setPage(0); }}
               placeholder="Search role, company, department or city…"
-              aria-label="Search jobs"
               autoComplete="off"
             />
             {query ? <button className="search-clear" type="button" onClick={() => { setQuery(""); setPage(0); }}>Clear</button> : null}
@@ -425,7 +455,7 @@ export function JobBoard({
             </label>
           </div>
 
-          <div className="result-count">
+          <div className="result-count" aria-live="polite">
             <span>
               <b>{visibleJobs.length}</b> role{visibleJobs.length === 1 ? "" : "s"} across {new Set(visibleJobs.map((job) => job.companyId)).size} compan{new Set(visibleJobs.map((job) => job.companyId)).size === 1 ? "y" : "ies"} · {uniqueCompanies} on this page
               {filtersActive ? <button className="clear-filters" type="button" onClick={clearFilters}>Clear filters ✕</button> : null}
@@ -459,9 +489,9 @@ export function JobBoard({
               onSelect={applyMenu}
             />
             <ColumnMenu
-              label="Sector" className="sector"
+              label="Category" className="sector"
               sortArrow={arrowFor(["sector"])} filtering={Boolean(sector)}
-              groups={[sortGroup([["sector", "Sector A → Z"]]), filterGroup("Filter by sector", "sector", sector, sectors.map((item) => item.name), "All sectors")]}
+              groups={[sortGroup([["sector", "Category A → Z"]]), filterGroup("Filter by category", "sector", sector, sectors.map((item) => item.name), "All categories")]}
               onSelect={applyMenu}
             />
             <ColumnMenu
@@ -524,7 +554,13 @@ export function JobBoard({
                       >
                         {company?.name}
                       </button>
-                      <span className="sector" title={company?.industry}>{company?.sector}</span>
+                      <span
+                        className="sector"
+                        title={company?.industry ? `Source industry: ${company.industry}` : "Source industry not published"}
+                      >
+                        <b className="category-name">{company?.sector || "Other"}</b>
+                        {company?.industry ? <small className="industry-note">{company.industry}</small> : null}
+                      </span>
                       <span className="dept">{job.roleFamily}</span>
                       <span className="loc">{job.location}</span>
                       <span className="comp">{job.compensation}</span>
@@ -575,22 +611,29 @@ export function JobBoard({
 
           <div className="sector-block" id="sector-map" ref={sectorSection}>
           <div className="map-bar">
-            <span>Sector map · sized by open roles · 30-day change</span>
-            <span>{sectors.length} sector{sectors.length === 1 ? "" : "s"} · {companies.length} companies · {totalOpenRoles} open roles</span>
+            <span>Category map · sized by open roles · 30-day change</span>
+            <span>{sectors.length} categor{sectors.length === 1 ? "y" : "ies"} · {companies.length} companies · {totalOpenRoles} open roles</span>
           </div>
           <div className="sector-map">
             {sectors.map((stat) => {
               const direction = directionOf(stat.delta30d);
               const selected = selectedSector === stat.name;
+              const industryLabels = industryLabelsBySector.get(stat.name) || [];
               return (
                 <button
                   key={stat.key}
                   type="button"
                   className={`sector-tile ${direction === "flat" ? "" : direction}${selected ? " selected" : ""}`}
                   aria-pressed={selected}
+                  aria-label={`${stat.name} category, ${stat.openRoles} open roles, ${signed(stat.delta30d)} over 30 days${industryLabels.length ? `. Industry labels: ${industryLabels.join(", ")}` : ""}`}
                   onClick={() => setSelectedSector(selected ? null : stat.name)}
                 >
                   <span className="name">{stat.name}</span>
+                  {industryLabels.length ? (
+                    <span className="category-detail" title={`Industry labels: ${industryLabels.join(", ")}`}>
+                      {industryLabels.join(" · ")}
+                    </span>
+                  ) : null}
                   <span className="value">{stat.openRoles}</span>
                   <span className={`delta ${direction}`}>{arrowOf(stat.delta30d)} {signed(stat.delta30d)}</span>
                   <span className="share"><i style={{ width: `${Math.round((stat.openRoles / maxSectorRoles) * 100)}%` }} /></span>
@@ -647,7 +690,7 @@ export function JobBoard({
               <thead>
                 <tr>
                   {tableHeader("name", "Company")}
-                  {tableHeader("sector", "Sector")}
+                  {tableHeader("sector", "Category")}
                   {tableHeader("stage", "Stage")}
                   {tableHeader("funding", "Latest funding")}
                   {tableHeader("size", "Headcount")}
@@ -664,8 +707,14 @@ export function JobBoard({
                     <tr
                       key={company.id}
                       tabIndex={0}
+                      aria-label={`Open company record for ${company.name}; category ${company.sector}; industry ${company.industry}`}
                       onClick={() => setModal({ kind: "company", id: company.slug })}
-                      onKeyDown={(event) => { if (event.key === "Enter") setModal({ kind: "company", id: company.slug }); }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setModal({ kind: "company", id: company.slug });
+                        }
+                      }}
                     >
                       <td>
                         <span className="cell-company">
@@ -673,7 +722,10 @@ export function JobBoard({
                           <b>{company.name}</b>
                         </span>
                       </td>
-                      <td className="dim" title={company.industry}>{company.sector}</td>
+                      <td className="industry-cell" title={`Source industry: ${company.industry}`}>
+                        <b>{company.sector}</b>
+                        <small>Industry: {company.industry}</small>
+                      </td>
                       <td className="dim">{company.stage}</td>
                       <td className="mono">{company.latestFundingLabel}</td>
                       <td className="mono">{company.employeeRange}</td>
@@ -735,7 +787,8 @@ export function JobBoard({
                   <CompanyLogo domain={company.domain} name={company.name} />
                   <span className="names">
                     <b>{company.name}</b>
-                    <span className="sub" title={`Source industry: ${company.industry}`}>{company.sector} · {company.stage} · {company.employeeRange}</span>
+                    <span className="sub">Category: {company.sector} · {company.stage} · {company.employeeRange}</span>
+                    <span className="sub-industry" title={`Source industry: ${company.industry}`}>Industry: {company.industry}</span>
                   </span>
                   <span className="right">
                     <span className="score" aria-label={`Hiring signal ${company.hiringScore}`}>
@@ -774,7 +827,7 @@ export function JobBoard({
             <div className="market-movements-head">
               <div>
                 <h3>Market movements</h3>
-                <p>Daily funding announcements plus verified openings and closures, each linked to source evidence.</p>
+                <p>Funding announcements plus verified openings and closures, each linked to source evidence.</p>
               </div>
               <span>{movements.length} movement{movements.length === 1 ? "" : "s"}</span>
             </div>
@@ -944,15 +997,15 @@ export function JobBoard({
               </p>
               <div className="points">
                 <div className="point">
-                  <span className="number">01</span><h4>Nothing to sign up for</h4>
+                  <span className="number">01</span><h3>Nothing to sign up for</h3>
                   <p>No account, no email wall. Search, filter and sort happen instantly in the page — nothing reloads.</p>
                 </div>
                 <div className="point">
-                  <span className="number">02</span><h4>Every row carries a date</h4>
+                  <span className="number">02</span><h3>Every row carries a date</h3>
                   <p>You see when we last checked the employer&apos;s board, not when someone reposted it somewhere else.</p>
                 </div>
                 <div className="point">
-                  <span className="number">03</span><h4>Links go to the source</h4>
+                  <span className="number">03</span><h3>Links go to the source</h3>
                   <p>Straight to the employer&apos;s own posting. No middleman, no tracking redirect, no dead application form.</p>
                 </div>
               </div>
@@ -960,11 +1013,11 @@ export function JobBoard({
                 <div>
                   <div className="block-head">How a row gets here</div>
                   <dl className="recipe">
-                    <div><dt>Run</dt><dd>Every day at <b>07:30 UTC</b></dd></div>
-                    <div><dt>Method</dt><dd>Fetch the employer&apos;s own applicant tracking board</dd></div>
-                    <div><dt>Sources</dt><dd><b>Ashby</b> and company careers pages</dd></div>
+                    <div><dt>Run</dt><dd>Every two hours at minute <b>:30 UTC</b></dd></div>
+                    <div><dt>Method</dt><dd>Fetch the employer&apos;s canonical ATS board or permitted first-party structured careers page</dd></div>
+                    <div><dt>Sources</dt><dd><b>Supported ATS boards</b> and permitted first-party structured careers pages</dd></div>
                     <div><dt>On change</dt><dd>Write a diff and keep the previous state</dd></div>
-                    <div><dt>On stale</dt><dd>Mark it <b>unverified</b> — never guess</dd></div>
+                    <div><dt>On failed refresh</dt><dd>Keep the last verified state and record the source failure — never guess</dd></div>
                   </dl>
                 </div>
                 <div>
@@ -986,15 +1039,15 @@ export function JobBoard({
               </p>
               <div className="points">
                 <div className="point">
-                  <span className="number">01</span><h4>State is explicit</h4>
+                  <span className="number">01</span><h3>State is explicit</h3>
                   <p>Every record carries <span className="mn">status</span> and <span className="mn">last_verified_at</span>. Absence never has to be interpreted.</p>
                 </div>
                 <div className="point">
-                  <span className="number">02</span><h4>Diffs, not full pulls</h4>
+                  <span className="number">02</span><h3>Diffs, not full pulls</h3>
                   <p>The changes feed reports what moved since the last run, so you fetch deltas instead of re-reading everything.</p>
                 </div>
                 <div className="point">
-                  <span className="number">03</span><h4>No scraping required</h4>
+                  <span className="number">03</span><h3>No scraping required</h3>
                   <p>One public intelligence endpoint covers discovery and filtered reads; JSONL remains available for bulk copies. <span className="mn">llms.txt</span> describes the contract.</p>
                 </div>
               </div>

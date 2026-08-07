@@ -40,10 +40,11 @@ async function rescoreCompanies(
   successfulCompanyIds: Set<string>
 ) {
   const windowStart = new Date(Date.parse(now) - GROWTH_WINDOW_DAYS * 86_400_000).toISOString();
-  const profiles = await database.prepare(`SELECT id, industry, stage, founded_year as foundedYear,
+  const profiles = await database.prepare(`SELECT id, name, domain, description, industry, stage, founded_year as foundedYear,
     latest_funding_date as latestFundingDate, source_url as sourceUrl, careers_url as careersUrl,
     last_verified_at as lastVerifiedAt FROM companies`).all<{
-      id: string; industry: string; stage: string; foundedYear: number | null;
+      id: string; name: string; domain: string; description: string; industry: string;
+      stage: string; foundedYear: number | null;
       latestFundingDate: string | null; sourceUrl: string; careersUrl: string; lastVerifiedAt: string;
     }>();
   for (const company of profiles.results) {
@@ -76,7 +77,7 @@ async function rescoreCompanies(
     });
     await database.prepare(`UPDATE companies SET sector=?, open_job_count=?,
       last_verified_at=?, hiring_score=?, evidence_confidence=? WHERE id=?`)
-      .bind(normalizeSector(company.industry), openJobCount, lastVerifiedAt,
+      .bind(normalizeSector(company.industry, company), openJobCount, lastVerifiedAt,
         hiringScore, evidenceConfidence, company.id).run();
   }
   return profiles.results.length;

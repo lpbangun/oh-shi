@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = h.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "OH SHI - Startup Hiring Intelligence";
-  const description = "Operational Headquarters for Startup Hiring Intelligence. A public, agent-readable source of truth for startup companies, hiring signals, and verified open jobs.";
+  const description = "Operational Headquarters for Startup Hiring Intelligence. Verified startup jobs, directional hiring momentum, and evidence confidence from canonical career sources refreshed every two hours.";
   return {
     metadataBase: new URL(origin),
     title,
@@ -74,7 +74,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Link href="/api/v1/jobs">jobs.json</Link>
               <Link href="/api/v1/changes">changes</Link>
               <Link href="/exports/jobs.jsonl">jobs.jsonl</Link>
-              <Link href="/exports/daily-changes.json">daily-changes</Link>
+              <Link href="/exports/daily-changes.json">daily-changes export</Link>
               <Link href="/llms.txt">llms.txt</Link>
             </div>
           </div>
@@ -86,7 +86,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                 <span className="long">, shown here to identify the employer whose posting we link to</span>
                 <span className="long"><i>/</i>Third-party job descriptions and source content remain with their owners</span>
                 <span className="long"><i>/</i>Nothing on this page is an endorsement by, or affiliation with, the companies named</span>
-                <i>/</i>Hiring signal is a directional momentum score, not a probability.
+                <i>/</i>Hiring signal is a directional momentum score, not a probability; evidence confidence measures verification quality.
               </p>
             </div>
           </div>
