@@ -1,0 +1,69 @@
+name: Data source proposal
+description: Propose a canonical job source or discovery source before implementation.
+title: "source: "
+labels:
+  - data-source
+body:
+  - type: input
+    id: source
+    attributes:
+      label: Source name
+      placeholder: Provider, API, feed, or first-party site
+    validations:
+      required: true
+  - type: input
+    id: documentation
+    attributes:
+      label: Official documentation or policy URL
+      description: Link to the provider's own API, feed, robots, licensing, or usage documentation.
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Proposed role
+      options:
+        - Canonical source that can verify current jobs
+        - Discovery evidence that can only suggest candidates
+        - Funding or hiring signal evidence
+    validations:
+      required: true
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority and rights
+      description: Explain who publishes the data and why access, processing, and factual reuse are permitted.
+    validations:
+      required: true
+  - type: textarea
+    id: completeness
+    attributes:
+      label: Completeness contract
+      description: How can the adapter prove that a successful response is complete enough to create, update, or close a record?
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Access limits and failure behavior
+      description: Document authentication, robots rules, pagination, rate limits, response bounds, retries, and fail-closed behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: identity
+    attributes:
+      label: Stable identity and evidence
+      description: Identify stable company/job keys and the canonical URLs retained for verification.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I read `docs/discovery-sources.md`.
+          required: true
+        - label: The proposal does not bypass authentication, anti-bot controls, robots rules, terms, or rate limits.
+          required: true
+        - label: I have not included private credentials, personal data, or copied job descriptions.
+          required: true
