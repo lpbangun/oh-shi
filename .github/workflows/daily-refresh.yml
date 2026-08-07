@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload private review artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stage_review' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: discovery-review-${{ github.run_id }}
           path: artifacts/discovery-review-*
