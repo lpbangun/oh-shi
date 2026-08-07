@@ -41,7 +41,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
   font-family: var(--font-plex-mono), monospace; font-size: 10.5px;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
 }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
 /* ── header ─────────────────────────────────────────── */
 .site-header {
@@ -64,7 +64,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 .nav-link:hover { color: var(--acc); background: var(--bg2); }
 .theme-toggle {
   font-family: var(--font-plex-mono), monospace; font-size: 11px; color: var(--muted);
-  background: none; border: 1px solid var(--line2); border-radius: 2px; padding: 6px 10px; cursor: pointer;
+  min-height: 32px; background: none; border: 1px solid var(--line2); border-radius: 2px; padding: 6px 10px; cursor: pointer;
 }
 .theme-toggle:hover { border-color: var(--ink); color: var(--ink); }
 /* the label follows the attribute the pre-paint script sets, so it needs no state */
@@ -238,6 +238,9 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 .job-row .sector, .job-row .dept, .job-row .loc {
   color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.job-row .sector { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; white-space: normal; }
+.job-row .sector .category-name { overflow: hidden; color: var(--ink2); font-size: 12.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.job-row .sector .industry-note { overflow: hidden; color: var(--muted); font-size: 9.5px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .job-row .comp {
   font-family: var(--font-plex-mono), monospace; font-size: 11px; color: var(--ink2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -364,6 +367,7 @@ th .info-explainer { margin-left: 5px; }
 .sector-tile.down { background: var(--dn-soft); }
 .sector-tile.selected { outline: 2px solid var(--acc); outline-offset: -2px; }
 .sector-tile .name { font-size: 13.5px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+.sector-tile .category-detail { min-height: 2.45em; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.25; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .sector-tile .value {
   font-family: var(--font-plex-mono), monospace; font-size: 22px; font-weight: 500;
   letter-spacing: -0.04em; margin-top: 5px; line-height: 1;
@@ -461,6 +465,7 @@ th.right, td.right { text-align: right; padding-right: 0; }
 td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; vertical-align: middle; }
 tbody tr { cursor: pointer; transition: background 0.1s; }
 tbody tr:hover { background: var(--bg2); }
+tbody tr:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; background: var(--bg2); }
 .cell-company { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .logo {
   width: 22px; height: 22px; flex: none; border: 1px solid var(--line); border-radius: 2px;
@@ -470,6 +475,9 @@ tbody tr:hover { background: var(--bg2); }
 .logo span { font-family: var(--font-plex-mono), monospace; font-size: 8.5px; font-weight: 600; color: var(--muted); }
 .cell-company b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dim { color: var(--muted); font-size: 12.5px; }
+.industry-cell { min-width: 150px; color: var(--ink2); }
+.industry-cell b { display: block; font-size: 12.5px; font-weight: 500; line-height: 1.25; }
+.industry-cell small { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
 .mono { font-family: var(--font-plex-mono), monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
 .signal-cell { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .signal-cell .bar { width: 52px; height: 4px; background: var(--line); position: relative; flex: none; }
@@ -498,7 +506,7 @@ tbody tr:hover { background: var(--bg2); }
 }
 .point { background: var(--panel); padding: 26px 24px 30px; }
 .point .number { font-family: var(--font-plex-mono), monospace; font-size: 10.5px; letter-spacing: 0.16em; color: var(--acc); }
-.point h4 { font-size: 18px; font-weight: 600; letter-spacing: -0.025em; margin: 16px 0 10px; line-height: 1.25; }
+.point h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.025em; margin: 16px 0 10px; line-height: 1.25; }
 .point p { font-size: 14.5px; line-height: 1.62; color: var(--ink2); }
 .row-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(28px, 4vw, 60px); align-items: start; margin-top: 52px; }
 .block-head {
@@ -551,6 +559,7 @@ pre b { color: var(--ink); font-weight: 600; }
 .modal-head { display: flex; align-items: flex-start; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
 .modal-head h3 { font-size: 23px; letter-spacing: -0.03em; }
 .modal-head .sub { margin-top: 6px; font-size: 14px; color: var(--ink2); }
+.modal-head .sub-secondary { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .modal-close {
   margin-left: auto; flex: none; font-size: 19px; line-height: 1; background: none;
   border: 1px solid var(--line); border-radius: 2px; width: 32px; height: 32px; cursor: pointer; color: var(--muted);
@@ -635,6 +644,8 @@ pre b { color: var(--ink); font-weight: 600; }
 .company-avatar-xl { width: 60px; height: 60px; font-size: 18px; }
 .company-hero-copy h1 { font-size: clamp(28px, 4vw, 46px); margin: 10px 0 12px; }
 .company-hero-copy p { font-size: 15.5px; line-height: 1.6; color: var(--ink2); max-width: 62ch; }
+.company-taxonomy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; }
+.company-taxonomy .industry-label { color: var(--muted); font-size: 12px; }
 .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .big-signal { text-align: right; }
 .big-signal strong { display: block; font-family: var(--font-plex-mono), monospace; font-size: 46px; font-weight: 500; letter-spacing: -0.05em; line-height: 1; }
@@ -676,6 +687,8 @@ pre b { color: var(--ink); font-weight: 600; }
 .company-timeline a { font-family: var(--font-plex-mono), monospace; font-size: 11px; color: var(--acc); white-space: nowrap; }
 .job-detail-hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: clamp(28px, 4vw, 56px); margin-top: 26px; padding-bottom: 34px; border-bottom: 1px solid var(--ink); align-items: start; }
 .job-company-link { font-family: var(--font-plex-mono), monospace; font-size: 12px; color: var(--acc); }
+.job-taxonomy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; color: var(--muted); font-family: var(--font-plex-mono), monospace; font-size: 10.5px; }
+.job-taxonomy span + span::before { content: "·"; margin-right: 14px; color: var(--line2); }
 .job-detail-hero h1 { font-size: clamp(28px, 4vw, 46px); margin: 12px 0 14px; }
 .job-detail-hero > div > p { font-size: 15.5px; line-height: 1.6; color: var(--ink2); max-width: 60ch; }
 .job-status-panel { border: 1px solid var(--line); padding: 22px; background: var(--panel); display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
@@ -853,6 +866,7 @@ pre b { color: var(--ink); font-weight: 600; }
   .company-row .names { grid-column: 2; grid-row: 1; min-width: 0; }
   .company-row .names b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .company-row .names .sub { display: block; font-size: 11.5px; line-height: 1.35; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .company-row .names .sub-industry { display: block; overflow: hidden; color: var(--muted); font-family: var(--font-plex-mono), monospace; font-size: 9.5px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
   .company-row .right { grid-column: 3; grid-row: 1; display: flex; align-items: baseline; gap: 8px; }
   .company-row .score { display: inline-flex; align-items: baseline; gap: 4px; font-family: var(--font-plex-mono), monospace; font-size: 17px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.2; }
   .company-row .score small { color: var(--muted); font-size: 8px; font-weight: 400; letter-spacing: 0.03em; text-transform: uppercase; }
@@ -865,7 +879,7 @@ pre b { color: var(--ink); font-weight: 600; }
   .points { grid-template-columns: 1fr; gap: 0; background: none; border-bottom: 0; }
   .point { padding: 18px 0 20px; }
   .point + .point { border-top: 1px solid var(--line); }
-  .point h4 { font-size: 16px; margin: 11px 0 7px; }
+  .point h3 { font-size: 16px; margin: 11px 0 7px; }
   .point p { font-size: 13.5px; }
   .row-split { gap: 30px; margin-top: 30px; }
   .recipe > div { grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 10px 0; }

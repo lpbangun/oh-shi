@@ -3,7 +3,7 @@ import {
   companyDeltas,
   companyDiverseJobs,
   fundingMovements,
-  normalizeSector,
+  sectorForCompany,
   sectorDayMovements,
   sectorStats,
 } from "@/lib/derive";
@@ -147,7 +147,7 @@ function rawMovements(
           : change.changeType === "job_closed"
             ? "closed"
             : "funding",
-      sector: company?.sector || normalizeSector(company?.industry || ""),
+      sector: company ? sectorForCompany(company) : "Other",
       companyId: company?.id || null,
       companySlug: company?.slug || null,
       openedCount: change.changeType === "job_opened" ? 1 : 0,
@@ -254,7 +254,7 @@ export async function GET(request: Request) {
             companyFilter &&
             ![company?.id, company?.slug, company?.name].some((value) => contains(value, companyFilter))
           ) return false;
-          if (sector && lower(company?.sector || normalizeSector(company?.industry || "")) !== lower(sector)) return false;
+          if (sector && lower(company ? sectorForCompany(company) : "Other") !== lower(sector)) return false;
           if (roleFamily && lower(job.roleFamily) !== lower(roleFamily)) return false;
           if (!contains(job.location, location)) return false;
           if (!contains(job.remoteStatus, remoteStatus)) return false;
@@ -294,7 +294,7 @@ export async function GET(request: Request) {
           };
         })
         .filter((company) => {
-          if (sector && lower(company.sector || normalizeSector(company.industry)) !== lower(sector)) return false;
+          if (sector && lower(sectorForCompany(company)) !== lower(sector)) return false;
           if (minSignal !== null && company.hiringScore < minSignal) return false;
           if (minConfidence !== null && company.evidenceConfidence < minConfidence) return false;
           if (investor && !company.investors?.some((value) => lower(value) === lower(investor))) return false;

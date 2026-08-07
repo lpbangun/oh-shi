@@ -22,15 +22,21 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
   return (
     <main className="detail-page">
       <Link href="/" className="back-link">Back to all companies</Link>
-      <section className="company-hero">
-        <div className="company-avatar company-avatar-xl">{company.name.slice(0, 2).toUpperCase()}</div>
+      <section className="company-hero" aria-labelledby="company-name">
+        <div className="company-avatar company-avatar-xl" aria-hidden="true">{company.name.slice(0, 2).toUpperCase()}</div>
         <div className="company-hero-copy">
-          <span className="eyebrow">{company.industry}</span><h1>{company.name}</h1><p>{company.description}</p>
+          <div className="company-taxonomy" aria-label={`Category ${company.sector}; source industry ${company.industry}`}>
+            <span className="eyebrow">Category · {company.sector}</span>
+            <span className="industry-label">Source industry: {company.industry}</span>
+          </div>
+          <h1 id="company-name">{company.name}</h1><p>{company.description}</p>
           <div className="detail-actions"><a href={company.careersUrl} target="_blank" rel="noreferrer" className="primary-cta">Canonical careers</a><Link href={`/api/v1/companies/${company.id}`} className="secondary-cta">JSON record</Link></div>
         </div>
         <div className="big-signal"><strong>{receipts.hiring.value}</strong><span>Hiring momentum score (0-100)</span><small>Evidence confidence {receipts.evidence.value}/100</small></div>
       </section>
       <section className="fact-strip">
+        <div><span>Category</span><strong>{company.sector}</strong></div>
+        <div><span>Source industry</span><strong>{company.industry}</strong></div>
         <div><span>Stage</span><strong>{company.stage}</strong></div>
         <div><span>Founded</span><strong>{company.foundedYear || "Unknown"}</strong></div>
         <div><span>Team</span><strong>{company.employeeRange}</strong></div>
@@ -72,7 +78,10 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
           </dl>
         </aside>
       </div>
-      <section className="company-timeline"><div className="section-heading compact"><h2>Evidence trail</h2></div>{changes.map((change) => <article key={change.id}><time>{new Date(change.occurredAt).toLocaleDateString("en-US", { timeZone: "UTC" })}</time><div><strong>{change.title}</strong><p>{change.description}</p></div><a href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a></article>)}</section>
+      <section className="company-timeline" aria-labelledby="evidence-trail-heading">
+        <div className="section-heading compact"><h2 id="evidence-trail-heading">Evidence trail</h2></div>
+        {changes.length ? changes.map((change) => <article key={change.id}><time>{new Date(change.occurredAt).toLocaleDateString("en-US", { timeZone: "UTC" })}</time><div><strong>{change.title}</strong><p>{change.description}</p></div><a href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a></article>) : <p className="empty-state">No recorded changes for this company yet.</p>}
+      </section>
     </main>
   );
 }

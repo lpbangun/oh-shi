@@ -95,11 +95,12 @@ Transitions and branches:
 ### Sector breadth
 
 - Preserve `industry` as the detailed factual label.
-- Add a normalized `sector` drawn from the published taxonomy: Artificial
-  Intelligence, Healthcare, Financial Technology, Education Technology, Climate
-  Technology, Food & Commerce, Developer Tools, Cybersecurity, Media &
-  Entertainment, Real Estate, Legal Technology, Science & Research, Consumer,
-  Enterprise Software, Industrial Technology, Human Resources, and Other.
+- Add a normalized `sector` drawn from the published taxonomy: Healthcare,
+  Biotechnology & Life Sciences, Artificial Intelligence, Developer Tools,
+  Enterprise Software, Science & Research, Food & Commerce, Financial
+  Technology, Education Technology, Climate & Energy, Consumer, Cybersecurity,
+  Logistics & Mobility, Media & Entertainment, Hardware & Robotics, Government
+  & Defense, Real Estate, Human Resources, Legal Technology, and Other.
 - A sector is shown only when at least one tracked, source-verified company maps to
   it. The UI must not manufacture empty breadth.
 - Production readiness requires at least 12 tracked companies across at least eight

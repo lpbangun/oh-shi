@@ -19,6 +19,7 @@ import {
 } from "./refresh-contract";
 import { linksFromHtml, permittedFetch } from "./public-web";
 import { normalizeDomain, sourceKey } from "./source-registry";
+import { normalizeSector } from "./types";
 
 export type Candidate = {
   id: string;
@@ -263,17 +264,30 @@ export async function activateDiscoveredCandidate(
   const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
   const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
   const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
+  // Discovery has no permitted source industry field. Keep that absence honest,
+  // but use strong labels in the already-persisted company name/domain as
+  // context so an AI, fintech, or robotics startup is not stranded in Other.
+  const discoveredIndustry = "Not published";
+  const discoveredSector = normalizeSector(discoveredIndustry, {
+    name: candidate.companyName,
+    domain: candidate.normalizedDomain,
+  });
   await env.DB.batch([
     env.DB.prepare(`INSERT OR IGNORE INTO companies (
       id, slug, name, domain, description, founded_year, headquarters, employee_range,
       industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
       evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
       source_url, open_job_count, last_verified_at
-    ) VALUES (?, ?, ?, ?, 'Profile discovered from an official investor portfolio.',
-      NULL, 'Not published', 'Not published', 'Other', 'Other', 'Not published',
+    ) VALUES (?, ?, ?, ?, 'Profile discovered from an official investor portfolio; industry not published.',
+      NULL, 'Not published', 'Not published', ?, ?, 'Not published',
       'Not published', 'active', 0, 0, 'Not published', NULL, ?, ?, 0, ?)`)
       .bind(companyId, slug, candidate.companyName, candidate.normalizedDomain,
+        discoveredIndustry, discoveredSector,
         detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now),
+    env.DB.prepare(`UPDATE companies SET sector=? WHERE id=?
+      AND lower(trim(industry)) IN ('', 'other', 'unknown', 'not published',
+        'not specified', 'unspecified', 'n/a', 'na', 'none', 'general')`)
+      .bind(discoveredSector, companyId),
     env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
       id, company_id, provider, board_id, careers_url, enabled, discovery_status,
       first_discovered_at, consecutive_failures, review_notes

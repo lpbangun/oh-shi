@@ -77,6 +77,32 @@ async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
   }
 }
 
+/**
+ * Reconcile the stored sector from the source industry and the context already
+ * present on the company row. This is intentionally additive and idempotent:
+ * it never rewrites `industry`, drops rows, or needs a schema migration.
+ */
+async function backfillCompanySectors() {
+  const companies = await env.DB.prepare(`SELECT id, name, domain, description,
+    industry, sector FROM companies`).all<{
+    id: string;
+    name: string;
+    domain: string;
+    description: string;
+    industry: string;
+    sector: string;
+  }>();
+  const statements = companies.results.flatMap((company) => {
+    const normalized = normalizeSector(company.industry, company);
+    return company.sector === normalized
+      ? []
+      : [env.DB.prepare("UPDATE companies SET sector=? WHERE id=?")
+          .bind(normalized, company.id)];
+  });
+  if (statements.length) await batchInChunks(statements);
+  return statements.length;
+}
+
 async function initializeDatabase() {
   if (!env.DB) throw new Error("D1 binding DB is unavailable.");
 
@@ -520,17 +546,7 @@ async function initializeDatabase() {
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signal_promotions_company_idx
       ON hiring_signal_promotions(company_id, verified_at)`),
   ]);
-  const sectors = await env.DB.prepare(
-    "SELECT id, industry, sector FROM companies"
-  ).all<{ id: string; industry: string; sector: string }>();
-  for (const company of sectors.results) {
-    const normalized = normalizeSector(company.industry);
-    if (company.sector !== normalized) {
-      await env.DB.prepare("UPDATE companies SET sector = ? WHERE id = ?")
-        .bind(normalized, company.id)
-        .run();
-    }
-  }
+  await backfillCompanySectors();
 
   const existing = await env.DB.prepare("SELECT COUNT(*) as count FROM companies").first<{ count: number }>();
   const hadCompanies = Number(existing?.count || 0) > 0;
@@ -780,7 +796,12 @@ async function prepareDatabase() {
       EXISTS(SELECT idempotency_key FROM canonical_snapshot_applications LIMIT 0) as snapshotApplicationsReady,
       EXISTS(SELECT clean_miss_count FROM fragile_job_misses LIMIT 0) as fragileMissesReady
     `).first<{ hasCompanies: number }>();
-    if (Number(readiness?.hasCompanies || 0) > 0) return;
+    if (Number(readiness?.hasCompanies || 0) > 0) {
+      // Ready databases skip table creation, but must still receive taxonomy
+      // corrections when a new classifier is deployed.
+      await backfillCompanySectors();
+      return;
+    }
   } catch (error) {
     if (!isMissingDatabaseSchema(error)) throw error;
   }

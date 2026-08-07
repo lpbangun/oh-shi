@@ -1,5 +1,7 @@
 export const SECTOR_TAXONOMY = [
   "Healthcare",
+  "Biotechnology & Life Sciences",
+  "Artificial Intelligence",
   "Developer Tools",
   "Enterprise Software",
   "Science & Research",
@@ -11,6 +13,7 @@ export const SECTOR_TAXONOMY = [
   "Cybersecurity",
   "Logistics & Mobility",
   "Media & Entertainment",
+  "Hardware & Robotics",
   "Government & Defense",
   "Real Estate",
   "Human Resources",
@@ -20,44 +23,311 @@ export const SECTOR_TAXONOMY = [
 
 export type SectorName = (typeof SECTOR_TAXONOMY)[number];
 
+export type SectorContext = {
+  /** Company name is source data and may be used when no industry is published. */
+  name?: string | null;
+  /** A stored company description may contain an explicit product category. */
+  description?: string | null;
+  /** Domain context is only used for explicit category words in the hostname. */
+  domain?: string | null;
+};
+
+const normalizeSectorText = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[\/_&+-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+const hasAny = (value: string, patterns: RegExp[]) => patterns.some((pattern) => pattern.test(value));
+
+/**
+ * Return a sector only when the label contains a recognizable category signal.
+ * Rules are ordered from specific/domain-led to broad/platform-led so a label
+ * such as "AI / Healthcare" stays in Healthcare rather than the generic AI
+ * bucket. The original industry value is never rewritten.
+ */
+function classifyIndustryLabel(value: string): SectorName | null {
+  if (hasAny(value, [
+    /\bbiotech(?:nology)?\b/,
+    /\blife science(?:s)?\b/,
+    /\bgenomic(?:s)?\b/,
+    /\bgenetic(?:s)?\b/,
+    /\bdrug discovery\b/,
+    /\bsynthetic biolog(?:y|ies)\b/,
+    /\bbioinformatics\b/,
+    /\bpharma(?:ceutical)?s?\b/,
+    /\btherapeutics?\b/,
+    /\bmolecular biolog(?:y|ies)\b/,
+  ])) return "Biotechnology & Life Sciences";
+
+  if (hasAny(value, [
+    /\bhealth(?:care| tech|tech)?\b/,
+    /\bdigital health\b/,
+    /\bmedical\b/,
+    /\bmedicine\b/,
+    /\bclinical\b/,
+    /\bmedtech\b/,
+    /\bpatient\b/,
+    /\bhospital\b/,
+    /\bdiagnostic(?:s)?\b/,
+    /\btelehealth\b/,
+    /\bprecision medicine\b/,
+    /\bcare delivery\b/,
+  ])) return "Healthcare";
+
+  if (hasAny(value, [
+    /\bfintech\b/,
+    /\bfinancial technology\b/,
+    /\bfinancial service(?:s)?\b/,
+    /\bbanking\b/,
+    /\bpayments?\b/,
+    /\bpayment processing\b/,
+    /\blending\b/,
+    /\bcredit\b/,
+    /\binsur(?:ance|tech)\b/,
+    /\bwealth(?:tech)?\b/,
+    /\binvest(?:ment|ing)\b/,
+    /\baccounting\b/,
+    /\bexpense management\b/,
+    /\bcorporate cards?\b/,
+    /\bbusiness finance\b/,
+  ])) return "Financial Technology";
+
+  if (hasAny(value, [
+    /\beducation\b/,
+    /\bedtech\b/,
+    /\blearning\b/,
+    /\bschool\b/,
+    /\bstudent\b/,
+    /\btutoring\b/,
+    /\buniversity\b/,
+  ])) return "Education Technology";
+
+  if (hasAny(value, [
+    /\bcyber(?:security)?\b/,
+    /\binformation security\b/,
+    /\binfosec\b/,
+    /\bapp(?:lication)? security\b/,
+    /\bnetwork security\b/,
+    /\bidentity(?: and access)?\b/,
+    /\biam\b/,
+    /\bfraud detection\b/,
+    /\btrust management\b/,
+    /\bsecurity\b/,
+  ])) return "Cybersecurity";
+
+  if (hasAny(value, [
+    /\bclimate\b/,
+    /\bclimate tech\b/,
+    /\bclean(?:tech| tech| technology| energy)\b/,
+    /\brenewable(?: energy)?\b/,
+    /\bcarbon\b/,
+    /\bemissions?\b/,
+    /\bsustainab(?:ility|le)\b/,
+    /\bdecarbon(?:ization|isation)?\b/,
+    /\bsolar\b/,
+    /\bwind energy\b/,
+    /\benergy storage\b/,
+  ])) return "Climate & Energy";
+
+  if (hasAny(value, [
+    /\blogistics\b/,
+    /\bmobility\b/,
+    /\btransport(?:ation)?\b/,
+    /\bsupply chain\b/,
+    /\bdelivery\b/,
+    /\bfreight\b/,
+    /\bfleet\b/,
+    /\bwarehouse\b/,
+    /\bshipping\b/,
+    /\blast mile\b/,
+    /\bev charging\b/,
+    /\bautonomous vehicle(?:s)?\b/,
+  ])) return "Logistics & Mobility";
+
+  if (hasAny(value, [
+    /\bmedia\b/,
+    /\bentertainment\b/,
+    /\bgaming\b/,
+    /\bgame studio\b/,
+    /\bmusic\b/,
+    /\bcreator(?: economy)?\b/,
+    /\bcontent\b/,
+    /\bstreaming\b/,
+    /\bpublishing\b/,
+    /\bpodcast(?:s)?\b/,
+    /\bvideo\b/,
+  ])) return "Media & Entertainment";
+
+  if (hasAny(value, [
+    /\bgovernment\b/,
+    /\bdefen[cs]e\b/,
+    /\bpublic sector\b/,
+    /\bcivic\b/,
+    /\bgovtech\b/,
+    /\bmilitary\b/,
+  ])) return "Government & Defense";
+
+  if (hasAny(value, [
+    /\breal estate\b/,
+    /\bproptech\b/,
+    /\bproperty tech\b/,
+    /\bproperty management\b/,
+    /\bconstruction\b/,
+    /\bhomebuilding\b/,
+    /\bhousing\b/,
+  ])) return "Real Estate";
+
+  if (hasAny(value, [
+    /\bhuman resources\b/,
+    /\bhr tech\b/,
+    /\bhrtech\b/,
+    /\bpeople operations\b/,
+    /\bpeople ops\b/,
+    /\brecruit(?:ing|ment)?\b/,
+    /\btalent management\b/,
+    /\bworkforce management\b/,
+    /\bpayroll\b/,
+  ])) return "Human Resources";
+
+  if (hasAny(value, [
+    /\blegal\b/,
+    /\blaw\b/,
+    /\blaw firm\b/,
+    /\blegaltech\b/,
+    /\bcontract management\b/,
+    /\blitigation\b/,
+    /\battorney\b/,
+    /\blegal ops\b/,
+    /\bcompliance\b/,
+  ])) return "Legal Technology";
+
+  if (hasAny(value, [
+    /\bdeveloper\b/,
+    /\bdevtools?\b/,
+    /\bdeveloper tools?\b/,
+    /\bsoftware engineering\b/,
+    /\bprogramming\b/,
+    /\bcoding\b/,
+    /\bcode hosting\b/,
+    /\bapi platform\b/,
+    /\bbackend infrastructure\b/,
+    /\bfrontend\b/,
+  ])) return "Developer Tools";
+
+  if (hasAny(value, [
+    /\bscience\b/,
+    /\bresearch\b/,
+    /\blaborator(?:y|ies)\b/,
+    /\blab\b/,
+    /\bdiscovery\b/,
+    /\bquantum\b/,
+    /\bmaterials science\b/,
+    /\bscientific\b/,
+  ])) return "Science & Research";
+
+  if (hasAny(value, [
+    /\bhardware\b/,
+    /\brobotics?\b/,
+    /\bsemiconductor(?:s)?\b/,
+    /\bchips?\b/,
+    /\belectronics\b/,
+    /\bindustrial tech\b/,
+    /\bmanufacturing\b/,
+    /\biot\b/,
+    /\binternet of things\b/,
+    /\bdrones?\b/,
+    /\b3d printing\b/,
+  ])) return "Hardware & Robotics";
+
+  if (hasAny(value, [
+    /\bfood\b/,
+    /\brestaurant\b/,
+    /\bgrocery\b/,
+    /\bretail\b/,
+    /\bcommerce\b/,
+    /\be commerce\b/,
+    /\becommerce\b/,
+    /\bmarketplace\b/,
+    /\bconsumer goods\b/,
+    /\bhospitality\b/,
+  ])) return "Food & Commerce";
+
+  if (hasAny(value, [
+    /\benterprise\b/,
+    /\bsaas\b/,
+    /\bsoftware as a service\b/,
+    /\bb2b\b/,
+    /\bbusiness software\b/,
+    /\bworkflow\b/,
+    /\bautomation\b/,
+    /\bcrm\b/,
+    /\berp\b/,
+    /\bvertical software\b/,
+    /\bcloud software\b/,
+    /\boperations software\b/,
+    /\binfrastructure software\b/,
+  ])) return "Enterprise Software";
+
+  if (hasAny(value, [
+    /\bartificial intelligence\b/,
+    /\bmachine learning\b/,
+    /\bdeep learning\b/,
+    /\bgenerative ai\b/,
+    /\blarge language model\b/,
+    /\bllm\b/,
+    /\bfoundation model\b/,
+    /\bcomputer vision\b/,
+    /\bnatural language processing\b/,
+    /\bai agents?\b/,
+    /\bautonomous software\b/,
+    /\bai\b/,
+    /\bml\b/,
+  ])) return "Artificial Intelligence";
+
+  if (hasAny(value, [
+    /\bconsumer\b/,
+    /\bsocial\b/,
+    /\btravel\b/,
+    /\bpersonal\b/,
+    /\blifestyle\b/,
+    /\bwellness\b/,
+    /\bdating\b/,
+    /\bpets?\b/,
+    /\bhome services\b/,
+  ])) return "Consumer";
+
+  return null;
+}
+
+const contextEligibleIndustry = (value: string) =>
+  !value || /^(?:other|unknown|not published|not specified|unspecified|n ?a|none|general)$/i.test(value);
+
+function classifyContext(context: SectorContext) {
+  const nameAndDomain = normalizeSectorText(
+    [context.name, context.domain].filter(Boolean).join(" ")
+  );
+  const fromName = classifyIndustryLabel(nameAndDomain);
+  if (fromName) return fromName;
+
+  // Descriptions are consulted only when the industry field is a placeholder.
+  // This keeps generic employer copy from overriding an explicit source label.
+  return classifyIndustryLabel(normalizeSectorText(context.description || ""));
+}
+
 /**
  * Convert source-provided industry labels into the stable public taxonomy.
  *
  * Industry remains the verbatim source label; sector is deliberately broader
  * so consumers do not need to reconcile dozens of near-duplicate labels.
  */
-export function normalizeSector(industry: string): SectorName {
-  const value = industry.trim().toLowerCase();
-  const matches = (pattern: RegExp) => pattern.test(value);
-
-  if (matches(/health|medical|medicine|clinical|biotech|pharma|life science/)) {
-    return "Healthcare";
-  }
-  if (matches(/developer|devtool|software engineering|code|programming/)) {
-    return "Developer Tools";
-  }
-  if (matches(/cyber|security|identity|fraud/)) return "Cybersecurity";
-  if (matches(/fintech|financial|banking|payments|insurance/)) {
-    return "Financial Technology";
-  }
-  if (matches(/education|edtech|learning|school/)) return "Education Technology";
-  if (matches(/climate|energy|carbon|sustainab|cleantech/)) return "Climate & Energy";
-  if (matches(/logistics|mobility|transport|supply chain|delivery/)) {
-    return "Logistics & Mobility";
-  }
-  if (matches(/media|entertainment|gaming|music|creator/)) {
-    return "Media & Entertainment";
-  }
-  if (matches(/government|defense|public sector|civic/)) return "Government & Defense";
-  if (matches(/real estate|proptech|property|construction/)) return "Real Estate";
-  if (matches(/human resources|hr tech|recruit|people operations/)) return "Human Resources";
-  if (matches(/legal|law|compliance/)) return "Legal Technology";
-  if (matches(/science|research|laboratory|discovery/)) return "Science & Research";
-  if (matches(/food|restaurant|commerce|retail|marketplace/)) return "Food & Commerce";
-  if (matches(/enterprise|b2b|business software|saas|automation/)) {
-    return "Enterprise Software";
-  }
-  if (matches(/consumer|social|travel|wellness|personal/)) return "Consumer";
+export function normalizeSector(industry: string, context: SectorContext = {}): SectorName {
+  const value = normalizeSectorText(industry);
+  const fromIndustry = classifyIndustryLabel(value);
+  if (fromIndustry) return fromIndustry;
+  if (contextEligibleIndustry(value)) return classifyContext(context) || "Other";
   return "Other";
 }
 

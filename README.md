@@ -97,7 +97,7 @@ a deterministic next-page cursor.
 | [`/api/v1/signals`](https://ohshi.work/api/v1/signals) | Active off-board hiring signals |
 | [`companies.jsonl`](https://ohshi.work/exports/companies.jsonl) | Stream-friendly company export |
 | [`jobs.jsonl`](https://ohshi.work/exports/jobs.jsonl) | Stream-friendly job export |
-| [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Daily openings, closures, funding, and company changes |
+| [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Daily changes export: openings, closures, funding, and company changes |
 | [`llms.txt`](https://ohshi.work/llms.txt) | Machine-readable interface guide and request recipes |
 
 Individual company and job records are available at
@@ -129,13 +129,19 @@ For the refresh sequence, storage model, and code paths, read
 
 ## Scores
 
-`hiringScore` is a deterministic 0–100 measure of observed hiring momentum. It
-combines verified role volume, 90-day role growth, funding recency and stage,
-and board freshness. It is directional, not a probability or prediction.
+`hiringScore` is a deterministic 0–100 measure of observed hiring momentum. Its
+components are open-role volume (0–30), net role growth over 90 days (0–30),
+funding stage and recency (0–25), and canonical-board freshness (0–15). It is
+directional, not a probability or calibrated forecast.
 
 `evidenceConfidence` is a separate 0–100 measure of verification recency,
-freshly verified coverage, record completeness, and corroboration. It measures
-evidence quality, not company attractiveness.
+canonical-board coverage, record completeness, and independent-source
+corroboration. Its component weights are 40, 30, 20, and 10 respectively. It
+measures evidence quality, not company attractiveness.
+
+Source industry labels are retained and normalized into public sectors for
+filtering and aggregation. The 30-day change shown in the product is roles
+opened minus roles closed from the change feed during the last 30 days.
 
 The formulas live in [`lib/hiring-score.ts`](lib/hiring-score.ts); coverage and
 movement derivations live in [`lib/derive.ts`](lib/derive.ts).

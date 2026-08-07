@@ -11,15 +11,16 @@ export function CompanyLogo({ domain, name }: { domain: string; name: string }) 
   const monogram = name.slice(0, 2).toUpperCase();
 
   if (!domain || failed) {
-    return <span className="logo"><span>{monogram}</span></span>;
+    return <span className="logo" aria-hidden="true"><span>{monogram}</span></span>;
   }
   return (
-    <span className="logo">
+    <span className="logo" aria-hidden="true">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
         alt=""
         loading="lazy"
+        decoding="async"
         onError={() => setFailed(true)}
       />
     </span>
