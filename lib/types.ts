@@ -28,7 +28,7 @@ export type SectorContext = {
   name?: string | null;
   /** A stored company description may contain an explicit product category. */
   description?: string | null;
-  /** Domain context is only used for explicit category words in the hostname. */
+  /** Domain context may contain a high-confidence company override or category word. */
   domain?: string | null;
 };
 
@@ -43,6 +43,153 @@ const normalizeSectorText = (value: string) =>
 const hasAny = (value: string, patterns: RegExp[]) => patterns.some((pattern) => pattern.test(value));
 
 /**
+ * Discovery records often arrive without a source industry. These are the
+ * small set of domain-level signals that are strong enough to classify a
+ * known company without pretending that every brand name is self-describing.
+ * Unknown domains continue through the conservative phrase matcher below and
+ * ultimately remain Other when the evidence is not sufficient.
+ */
+const CONTEXT_DOMAIN_OVERRIDES: Record<string, SectorName> = {
+  "methodfi.com": "Financial Technology",
+  "alloy.app": "Financial Technology",
+  "flagright.com": "Financial Technology",
+  "numeral.com": "Financial Technology",
+  "middesk.com": "Financial Technology",
+  "kalshi.com": "Financial Technology",
+  "novig.com": "Financial Technology",
+  "moderntreasury.com": "Financial Technology",
+  "harperinsure.com": "Financial Technology",
+  "ltse.com": "Financial Technology",
+  "alpaca.markets": "Financial Technology",
+  "getfinvest.com": "Financial Technology",
+  "fazeshift.com": "Financial Technology",
+  "grey.co": "Financial Technology",
+  "malga.io": "Financial Technology",
+  "onechronos.com": "Financial Technology",
+
+  "instawork.com": "Human Resources",
+  "checkr.com": "Human Resources",
+  "humaninterest.com": "Human Resources",
+  "gusto.com": "Human Resources",
+  "humanly.io": "Human Resources",
+  "lattice.com": "Human Resources",
+
+  "givecampus.com": "Education Technology",
+  "hackerrank.com": "Education Technology",
+  "cambly.com": "Education Technology",
+
+  "hightouch.com": "Developer Tools",
+  "firecrawl.dev": "Developer Tools",
+  "mintlify.com": "Developer Tools",
+  "fivetran.com": "Developer Tools",
+  "docker.com": "Developer Tools",
+  "airbyte.com": "Developer Tools",
+  "kombo.dev": "Developer Tools",
+  "magicpatterns.com": "Developer Tools",
+  "ion.design": "Developer Tools",
+  "nango.dev": "Developer Tools",
+  "lancedb.com": "Developer Tools",
+  "deepnote.com": "Developer Tools",
+  "depot.dev": "Developer Tools",
+  "glideapps.com": "Developer Tools",
+  "lightdash.com": "Developer Tools",
+  "golinks.io": "Developer Tools",
+  "agentmail.to": "Developer Tools",
+  "insforge.dev": "Developer Tools",
+
+  "goteleport.com": "Cybersecurity",
+  "oneleet.com": "Cybersecurity",
+  "infisical.com": "Cybersecurity",
+  "doppler.com": "Cybersecurity",
+
+  "legora.com": "Legal Technology",
+  "legalist.com": "Legal Technology",
+
+  "get-carrot.com": "Healthcare",
+  "metriport.com": "Healthcare",
+  "novel.care": "Healthcare",
+  "joinhealthspark.com": "Healthcare",
+  "freshpaint.io": "Healthcare",
+  "careswift.com": "Healthcare",
+  "papa.com": "Healthcare",
+  "joinloula.com": "Healthcare",
+
+  "generalproximity.bio": "Biotechnology & Life Sciences",
+  "invertbio.com": "Biotechnology & Life Sciences",
+  "multiplylabs.com": "Biotechnology & Life Sciences",
+  "culturebiosciences.com": "Biotechnology & Life Sciences",
+  "junction.bio": "Biotechnology & Life Sciences",
+  "adaptyvbio.com": "Biotechnology & Life Sciences",
+  "nomic.bio": "Biotechnology & Life Sciences",
+  "medium.bio": "Biotechnology & Life Sciences",
+  "feanixbio.com": "Biotechnology & Life Sciences",
+
+  "heartaerospace.com": "Hardware & Robotics",
+  "mashgin.com": "Hardware & Robotics",
+  "hubble.com": "Hardware & Robotics",
+  "eightsleep.com": "Consumer",
+
+  "flexport.com": "Logistics & Mobility",
+  "curri.com": "Logistics & Mobility",
+  "goradar.com": "Logistics & Mobility",
+
+  "odeko.com": "Food & Commerce",
+  "faire.com": "Food & Commerce",
+  "nabis.com": "Food & Commerce",
+  "justflip.com": "Food & Commerce",
+  "hokali.com": "Food & Commerce",
+  "airgoods.com": "Food & Commerce",
+  "goatgroup.com": "Consumer",
+  "courtyard.io": "Consumer",
+
+  "deepgram.com": "Artificial Intelligence",
+  "gumloop.com": "Artificial Intelligence",
+  "furtherai.com": "Artificial Intelligence",
+  "nanonets.com": "Artificial Intelligence",
+  "netomi.com": "Artificial Intelligence",
+  "greptile.com": "Artificial Intelligence",
+  "guildai.co": "Developer Tools",
+  "anara.com": "Artificial Intelligence",
+
+  "mixpanel.com": "Enterprise Software",
+  "front.com": "Enterprise Software",
+  "mutinyhq.com": "Enterprise Software",
+  "demodesk.com": "Enterprise Software",
+  "colabsoftware.com": "Enterprise Software",
+  "mattermost.com": "Enterprise Software",
+  "hockeystack.com": "Enterprise Software",
+  "mangodesk.com": "Enterprise Software",
+  "getsquire.com": "Enterprise Software",
+  "influxdata.com": "Developer Tools",
+  "inkeep.com": "Artificial Intelligence",
+
+  "govdash.com": "Government & Defense",
+  "goveagle.com": "Government & Defense",
+  "coperniq.io": "Climate & Energy",
+  "bitmovin.com": "Media & Entertainment",
+  "mux.com": "Media & Entertainment",
+};
+
+const normalizeContextDomain = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z\d+.-]*:\/\//, "")
+    .split(/[/?#]/, 1)[0]
+    .replace(/^www\./, "");
+
+function contextDomainOverride(domain: string) {
+  const normalized = normalizeContextDomain(domain);
+  if (!normalized) return null;
+  const direct = CONTEXT_DOMAIN_OVERRIDES[normalized];
+  if (direct) return direct;
+  const suffix = Object.keys(CONTEXT_DOMAIN_OVERRIDES).find((knownDomain) =>
+    normalized.endsWith(`.${knownDomain}`)
+  );
+  return suffix ? CONTEXT_DOMAIN_OVERRIDES[suffix] : null;
+}
+
+/**
  * Return a sector only when the label contains a recognizable category signal.
  * Rules are ordered from specific/domain-led to broad/platform-led so a label
  * such as "AI / Healthcare" stays in Healthcare rather than the generic AI
@@ -50,7 +197,8 @@ const hasAny = (value: string, patterns: RegExp[]) => patterns.some((pattern) =>
  */
 function classifyIndustryLabel(value: string): SectorName | null {
   if (hasAny(value, [
-    /\bbiotech(?:nology)?\b/,
+    /\bbiotech(?:nology|nologies)?\b/,
+    /\bbioscience[s]?\b/,
     /\blife science(?:s)?\b/,
     /\bgenomic(?:s)?\b/,
     /\bgenetic(?:s)?\b/,
@@ -80,6 +228,7 @@ function classifyIndustryLabel(value: string): SectorName | null {
   if (hasAny(value, [
     /\bfintech\b/,
     /\bfinancial technology\b/,
+    /\bfinancial\b/,
     /\bfinancial service(?:s)?\b/,
     /\bbanking\b/,
     /\bpayments?\b/,
@@ -89,6 +238,11 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\binsur(?:ance|tech)\b/,
     /\bwealth(?:tech)?\b/,
     /\binvest(?:ment|ing)\b/,
+    /\btrading\b/,
+    /\bbrokerage\b/,
+    /\bsecurities\b/,
+    /\bcapital markets?\b/,
+    /\btreasury\b/,
     /\baccounting\b/,
     /\bexpense management\b/,
     /\bcorporate cards?\b/,
@@ -189,6 +343,11 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\brecruit(?:ing|ment)?\b/,
     /\btalent management\b/,
     /\bworkforce management\b/,
+    /\bstaffing\b/,
+    /\bflexible workforce\b/,
+    /\bbackground checks?\b/,
+    /\bemployee benefits?\b/,
+    /\bpeople platform\b/,
     /\bpayroll\b/,
   ])) return "Human Resources";
 
@@ -213,6 +372,14 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\bcoding\b/,
     /\bcode hosting\b/,
     /\bapi platform\b/,
+    /\bdata (?:integration|pipeline|platform|warehouse|activation)\b/,
+    /\bobservability\b/,
+    /\bdocumentation\b/,
+    /\bcloud infrastructure\b/,
+    /\bdevops\b/,
+    /\bsecrets management\b/,
+    /\bsoftware development\b/,
+    /\bdesign tools?\b/,
     /\bbackend infrastructure\b/,
     /\bfrontend\b/,
   ])) return "Developer Tools";
@@ -240,6 +407,9 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\binternet of things\b/,
     /\bdrones?\b/,
     /\b3d printing\b/,
+    /\baerospace\b/,
+    /\bsatellite\b/,
+    /\bspace technology\b/,
   ])) return "Hardware & Robotics";
 
   if (hasAny(value, [
@@ -252,6 +422,8 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\becommerce\b/,
     /\bmarketplace\b/,
     /\bconsumer goods\b/,
+    /\bwholesale\b/,
+    /\bshopping\b/,
     /\bhospitality\b/,
   ])) return "Food & Commerce";
 
@@ -269,6 +441,11 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\bcloud software\b/,
     /\boperations software\b/,
     /\binfrastructure software\b/,
+    /\bcustomer support\b/,
+    /\bmarketing automation\b/,
+    /\bmarketing software\b/,
+    /\bsales software\b/,
+    /\bcollaboration software\b/,
   ])) return "Enterprise Software";
 
   if (hasAny(value, [
@@ -283,6 +460,8 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\bnatural language processing\b/,
     /\bai agents?\b/,
     /\bautonomous software\b/,
+    /\bai native\b/,
+    /\bmachine intelligence\b/,
     /\bai\b/,
     /\bml\b/,
   ])) return "Artificial Intelligence";
@@ -297,6 +476,7 @@ function classifyIndustryLabel(value: string): SectorName | null {
     /\bdating\b/,
     /\bpets?\b/,
     /\bhome services\b/,
+    /\bsleep technology\b/,
   ])) return "Consumer";
 
   return null;
@@ -305,7 +485,10 @@ function classifyIndustryLabel(value: string): SectorName | null {
 const contextEligibleIndustry = (value: string) =>
   !value || /^(?:other|unknown|not published|not specified|unspecified|n ?a|none|general)$/i.test(value);
 
-function classifyContext(context: SectorContext) {
+export function classifyCompanyContext(context: SectorContext): SectorName | null {
+  const fromDomainOverride = contextDomainOverride(context.domain || "");
+  if (fromDomainOverride) return fromDomainOverride;
+
   const nameAndDomain = normalizeSectorText(
     [context.name, context.domain].filter(Boolean).join(" ")
   );
@@ -327,7 +510,7 @@ export function normalizeSector(industry: string, context: SectorContext = {}): 
   const value = normalizeSectorText(industry);
   const fromIndustry = classifyIndustryLabel(value);
   if (fromIndustry) return fromIndustry;
-  if (contextEligibleIndustry(value)) return classifyContext(context) || "Other";
+  if (contextEligibleIndustry(value)) return classifyCompanyContext(context) || "Other";
   return "Other";
 }
 

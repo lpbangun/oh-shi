@@ -78,11 +78,18 @@ async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
 }
 
 /**
- * Reconcile the stored sector from the source industry and the context already
- * present on the company row. This is intentionally additive and idempotent:
- * it never rewrites `industry`, drops rows, or needs a schema migration.
+ * Reconcile the stored sector from the source industry and company context.
+ *
+ * Portfolio discovery cannot publish an industry label. Older discovered rows
+ * used `Other` for that absence, so normalize only those clearly marked
+ * discovery profiles to `Not published`; an explicitly sourced `Other` label
+ * remains untouched. The sector update is idempotent and does not need a
+ * schema migration.
  */
 async function backfillCompanySectors() {
+  await env.DB.prepare(`UPDATE companies SET industry='Not published'
+    WHERE lower(trim(industry))='other'
+      AND lower(description) LIKE 'profile discovered from an official investor portfolio%'`).run();
   const companies = await env.DB.prepare(`SELECT id, name, domain, description,
     industry, sector FROM companies`).all<{
     id: string;
