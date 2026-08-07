@@ -13,22 +13,51 @@ Please read:
 - [`docs/discovery-sources.md`](docs/discovery-sources.md) before changing
   discovery, source access, or evidence handling.
 
+For substantial features, new public interfaces, or new external sources,
+open an issue before investing in an implementation. Bug fixes, tests, and
+documentation improvements can usually go straight to a pull request.
+
 ## Local development
 
-Use Node.js 22.13 or newer and pnpm 11.17.0 or newer.
+Use Node.js 22.13 or newer and pnpm 11.17.0 or newer. The version in
+[`.nvmrc`](.nvmrc) matches the CI runtime.
 
 ```bash
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Before opening a pull request, run the narrowest useful check while iterating,
-then the full gate:
+Open <http://localhost:3000>. Normal UI and public API development requires no
+secret or production data. The local runtime creates a D1-compatible database
+and seeds a small inspectable data set.
+
+Create a focused branch from an up-to-date default branch:
 
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm eval
+git switch -c <type>/<short-description>
+```
+
+Common prefixes are `fix/`, `feat/`, `docs/`, and `test/`. The prefix is a
+convenience rather than a merge requirement.
+
+## Choose the right check
+
+Run the smallest relevant check while iterating:
+
+| Change | Minimum useful check |
+| --- | --- |
+| TypeScript or data logic | `pnpm typecheck && pnpm eval` |
+| Styles or UI behavior | `pnpm lint && pnpm e2e` |
+| Public API or agent contract | `pnpm eval` and the relevant Playwright spec |
+| Documentation only | Check links, commands, and rendered Markdown |
+| Dependency update | `pnpm quality:ci` and `pnpm audit --prod --audit-level high` |
+
+Before opening a pull request, install Chromium once if needed and run the full
+gate:
+
+```bash
+pnpm e2e:install
 pnpm quality:ci
 ```
 
@@ -41,6 +70,13 @@ accessibility/usability checks.
 Keep a change focused and explain the user or operator outcome in the PR body.
 For changes that affect data behavior, include the invariant that should remain
 true and the test that protects it.
+
+- Link the issue when one exists.
+- Include before/after screenshots for visible UI changes.
+- Call out migrations, new configuration, and operational follow-up explicitly.
+- Avoid drive-by formatting or dependency changes in an unrelated pull request.
+- Expect CI to pass before review; a maintainer may ask for a narrower test or
+  source-rights receipt.
 
 Use this checklist when it applies:
 
@@ -73,3 +109,15 @@ If a UI change materially alters the first viewport or core interaction, update
 the screenshot in `docs/assets/` and its caption in `README.md`. Keep diagrams in
 Mermaid or another source-controlled format so contributors can review and
 update them alongside the implementation.
+
+## Reporting bugs and security issues
+
+Use the GitHub issue templates for reproducible bugs, feature proposals, and
+new-source proposals. Include public evidence links, but never paste tokens,
+private data, or licensed source material into an issue.
+
+Do not report a vulnerability publicly. Follow [`SECURITY.md`](SECURITY.md) so
+maintainers can assess and coordinate a fix before disclosure.
+
+By participating, you agree to follow the project
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).

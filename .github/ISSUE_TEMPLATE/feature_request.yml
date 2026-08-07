@@ -1,0 +1,39 @@
+name: Feature proposal
+description: Propose a focused improvement to the product, API, or contributor experience.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user, contributor, or operator problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable result without prescribing more implementation than necessary.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Note existing interfaces or workarounds you considered.
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and evidence impact
+      description: Could this change public fields, pagination, job state, scoring, source rights, or operator workflow?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and pull requests for this proposal.
+          required: true
+        - label: This proposal does not depend on bypassing source access controls or terms.
+          required: true

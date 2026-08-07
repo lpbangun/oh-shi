@@ -1,0 +1,62 @@
+name: Bug report
+description: Report reproducible incorrect behavior in the app, API, or tooling.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve OH SHI. Do not include secrets, personal information, or private source material.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Website or accessibility
+        - Public API or export
+        - Data quality or job state
+        - Local development or tests
+        - Scheduled operation or ingestion
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Give the smallest reliable sequence, request, or public URL that reproduces the problem.
+      placeholder: |
+        1. Open ...
+        2. Request ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: For example, production, local commit SHA, browser, Node version, or viewport.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Public evidence
+      description: Add screenshots, logs with sensitive values removed, or canonical public source URLs.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: This report contains no credentials, private data, or licensed source content.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
