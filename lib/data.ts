@@ -87,9 +87,6 @@ async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
  * schema migration.
  */
 async function backfillCompanySectors() {
-  await env.DB.prepare(`UPDATE companies SET industry='Not published'
-    WHERE lower(trim(industry))='other'
-      AND lower(description) LIKE 'profile discovered from an official investor portfolio%'`).run();
   const companies = await env.DB.prepare(`SELECT id, name, domain, description,
     industry, sector FROM companies`).all<{
     id: string;
@@ -100,11 +97,17 @@ async function backfillCompanySectors() {
     sector: string;
   }>();
   const statements = companies.results.flatMap((company) => {
-    const normalized = normalizeSector(company.industry, company);
-    return company.sector === normalized
+    const discoveredPlaceholder =
+      /^(?:other)$/i.test(company.industry.trim()) &&
+      company.description.trim().toLowerCase().startsWith(
+        "profile discovered from an official investor portfolio"
+      );
+    const industry = discoveredPlaceholder ? "Not published" : company.industry;
+    const normalized = normalizeSector(industry, company);
+    return company.industry === industry && company.sector === normalized
       ? []
-      : [env.DB.prepare("UPDATE companies SET sector=? WHERE id=?")
-          .bind(normalized, company.id)];
+      : [env.DB.prepare("UPDATE companies SET industry=?, sector=? WHERE id=?")
+          .bind(industry, normalized, company.id)];
   });
   if (statements.length) await batchInChunks(statements);
   return statements.length;
