@@ -85,7 +85,9 @@ curl -fsSL "https://ohshi.work/api/v1/intelligence?view=jobs&status=verified_ope
 
 Supported views are `jobs`, `companies`, `movements`, and `sectors`. Filters are
 validated, unknown parameters return HTTP 400, and collection responses expose
-a deterministic next-page cursor.
+a deterministic next-page cursor. Job search defaults to verified-open roles,
+executes filtering/counting/sorting/pagination in D1, and reports the complete
+matching total in `page.total`.
 
 | Interface | Purpose |
 | --- | --- |
@@ -102,6 +104,29 @@ a deterministic next-page cursor.
 
 Individual company and job records are available at
 `/api/v1/companies/:id` and `/api/v1/jobs/:id`.
+
+### Jobsss and other incremental consumers
+
+Use the initial jobs response and its `incremental` receipt as one workflow:
+
+1. Query `/api/v1/intelligence?view=jobs...` and store the filters plus
+   `incremental.after`.
+2. Read `incremental.changes_url`, then follow `page.next_cursor` on
+   `/api/v1/changes?cursor=...`. Pages are bounded to 100 events and ordered by
+   the exclusive `(occurredAt, id)` tuple, so equal timestamps are safe.
+3. For every `job_opened`, `job_updated`, or `job_closed` event, refresh
+   `/api/v1/jobs/:entityId` and re-evaluate the saved filters. This is how a
+   consumer detects a job entering or leaving a filtered result.
+4. Commit a cursor only after committing its complete page. Retry the same
+   cursor after transient failures and deduplicate by event ID. On HTTP 410
+   `checkpoint_expired`, run a fresh initial query and start from its new receipt.
+
+`firstSeenAt` is Oh Shi's first observation; `lastSeenAt` is the latest complete
+source observation; `sourceUpdatedAt` is source-provided when available;
+`lastVerifiedAt` is Oh Shi's canonical verification time; `closedAt` is confirmed
+closure time; and change `occurredAt` is the event observation time. Jobsss owns
+profiles, saved searches, shortlists, application tracking, alerts, and delivery;
+Oh Shi intentionally remains a public discovery and read service.
 
 ## How it works
 

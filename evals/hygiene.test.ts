@@ -265,7 +265,7 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
   assert.match(canonicalRefreshStore, /status === "quarantined"/);
   assert.match(canonicalRefreshStore, /discovery_status='quarantined'/);
   assert.match(canonicalRefreshStore, /canonical_source_snapshots/);
-  assert.match(canonicalRefreshStore, /last_successful_at=\?, last_error=NULL/);
+  assert.match(canonicalRefreshStore, /last_successful_at=CASE[\s\S]+?last_error=NULL/);
   for (const table of [
     "canonical_snapshot_members",
     "canonical_snapshot_applications",

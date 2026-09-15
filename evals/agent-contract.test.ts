@@ -224,13 +224,22 @@ test("off-board signals remain distinct public API surfaces without an empty hom
   assert.doesNotMatch(board, /offBoardOpenings/);
 });
 
-test("all default public job surfaces use the shared company-diverse order", async () => {
-  const [data, intelligence, board] = await Promise.all([
+test("all public job surfaces use the shared bounded server query", async () => {
+  const [data, intelligence, board, dashboard, compatibility, search] = await Promise.all([
     read("lib/data.ts"),
     read("app/api/v1/intelligence/route.ts"),
     read("app/components/JobBoard.tsx"),
+    read("app/api/v1/dashboard/jobs/route.ts"),
+    read("app/api/v1/jobs/route.ts"),
+    read("lib/job-search.ts"),
   ]);
-  assert.match(data, /includeClosed \? jobs : companyDiverseJobs\(jobs, companies\)/);
-  assert.match(intelligence, /companyDiverseJobs\(/);
-  assert.match(board, /companyDiverseJobs\(rows, companies\)/);
+  assert.match(data, /buildJobSearchSql/);
+  assert.match(intelligence, /searchJobs\(query\)/);
+  assert.match(dashboard, /searchJobs\(query\)/);
+  assert.match(compatibility, /searchJobs\(query\)/);
+  assert.match(search, /ROW_NUMBER\(\) OVER/);
+  assert.match(search, /jobs\.id ASC/);
+  assert.match(search, /statusRaw \|\| "verified_open"/);
+  assert.doesNotMatch(board, /const rows = jobs\.filter\(/);
+  assert.match(board, /\/api\/v1\/dashboard\/jobs\?/);
 });

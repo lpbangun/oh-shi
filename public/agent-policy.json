@@ -13,9 +13,11 @@
     "off_board_openings": "/api/v1/off-board-openings"
   },
   "coverage": "/api/v1/coverage",
-  "pagination": "Pass page.next_cursor unchanged with the same view and filters.",
+  "pagination": "Pass page.next_cursor unchanged with the same view and filters; job page.total is the complete matching count.",
   "default_job_order": "Deterministic company-diverse ranked round-robin.",
-  "change_feed": "/api/v1/changes",
+  "change_feed": "/api/v1/changes?after={initial.incremental.after}; then pass the exclusive tuple cursor unchanged",
+  "change_events": ["job_opened", "job_updated", "job_closed"],
+  "checkpoint_recovery": "Retry a page until committed; on HTTP 410 checkpoint_expired, run a fresh initial jobs query.",
   "instructions": "/llms.txt",
   "canonical_job_rule": "A job is verified open only when its canonical source still lists it.",
   "license": "MIT software; CC BY 4.0 project-owned factual exports; third-party rights remain with their owners."

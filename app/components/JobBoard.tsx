@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { companyDiverseJobs, facetValues, type MarketMovement, type SectorStat } from "@/lib/derive";
+import { facetValues, type MarketMovement, type SectorStat } from "@/lib/derive";
 import type {
   ChangeEvent,
   Company,
@@ -46,16 +46,6 @@ const SORT_LABELS: Record<SortId, string> = {
 };
 
 const DESCENDING = new Set<SortId>(["signal", "title_desc", "company_desc", "comp_high", "recent"]);
-
-/** Lowest quoted figure in a compensation string; unquoted ranges sort last. */
-function compensationFloor(value: string) {
-  const match = value.match(/\$\s?([\d.]+)\s?([km])?/i);
-  if (!match) return -1;
-  const amount = Number.parseFloat(match[1]);
-  if (!Number.isFinite(amount)) return -1;
-  const unit = (match[2] || "").toLowerCase();
-  return unit === "m" ? amount * 1_000_000 : unit === "k" ? amount * 1_000 : amount;
-}
 
 const directionOf = (value: number) => (value > 0 ? "up" : value < 0 ? "down" : "flat");
 const arrowOf = (value: number) => (value > 0 ? "▲" : value < 0 ? "▼" : "—");
@@ -119,9 +109,13 @@ export function JobBoard({
   generatedAt,
 }: Props) {
   const [jobs, setJobs] = useState(initialJobs);
-  const [jobIndexStatus, setJobIndexStatus] = useState<"loading" | "ready" | "partial">("loading");
+  const [jobIndexStatus, setJobIndexStatus] = useState<"loading" | "ready" | "error">("ready");
+  const [jobError, setJobError] = useState("");
+  const [jobTotal, setJobTotal] = useState(coverage.verifiedOpenJobs);
+  const [jobReload, setJobReload] = useState(0);
+  const [urlReady, setUrlReady] = useState(false);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("verified_open");
   const [sector, setSector] = useState("");
   const [dept, setDept] = useState("");
   const [loc, setLoc] = useState("");
@@ -144,31 +138,83 @@ export function JobBoard({
   // Phones get shorter pages; 20 rows is about one thumb-scroll.
   const [perPage, setPerPage] = useState(50);
   useEffect(() => {
+    const applyUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      setQuery(params.get("q") || "");
+      setStatus(params.get("status") || "verified_open");
+      setSector(params.get("sector") || "");
+      setDept(params.get("role_family") || "");
+      setLoc(params.get("location") || "");
+      setCompanyFilter(params.get("company") || "");
+      setInvestor(params.get("investor") || "");
+      setProvider(params.get("provider") || "");
+      setNewOnly(params.get("new") === "1");
+      setSort((params.get("sort") as SortId) || "signal");
+      setPage(Math.max(0, Number(params.get("page") || 1) - 1));
+      setUrlReady(true);
+    };
+    applyUrl();
+    window.addEventListener("popstate", applyUrl);
+    return () => window.removeEventListener("popstate", applyUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!urlReady) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      fetch("/api/v1/dashboard/jobs", {
+      setJobIndexStatus("loading");
+      setJobError("");
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      if (status !== "verified_open") params.set("status", status);
+      if (sector) params.set("sector", sector);
+      if (dept) params.set("role_family", dept);
+      if (loc) params.set("location", loc);
+      if (companyFilter) params.set("company", companyFilter);
+      if (investor) params.set("investor", investor);
+      if (provider) params.set("provider", provider);
+      if (newOnly) {
+        params.set("new", "1");
+      }
+      if (sort !== "signal") params.set("sort", sort);
+      if (page > 0) params.set("page", String(page + 1));
+      const desiredSearch = params.size ? `?${params}` : "";
+      if (window.location.search !== desiredSearch) {
+        const nextUrl = `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`;
+        window.history.pushState(null, "", nextUrl);
+      }
+      const requestParams = new URLSearchParams(params);
+      requestParams.delete("new");
+      if (newOnly) requestParams.set("new_since", new Date(Date.parse(generatedAt) - 86_400_000).toISOString());
+      requestParams.set("status", status);
+      requestParams.set("sort", sort);
+      requestParams.set("page", String(page + 1));
+      requestParams.set("limit", String(perPage));
+      fetch(`/api/v1/dashboard/jobs?${requestParams}`, {
         headers: { accept: "application/json" },
         signal: controller.signal,
       })
         .then((response) => {
           if (!response.ok) throw new Error(`Dashboard index returned ${response.status}`);
-          return response.json() as Promise<{ data?: DashboardJob[] }>;
+          return response.json() as Promise<{ data?: DashboardJob[]; page?: { total?: number } }>;
         })
         .then((payload) => {
           if (!Array.isArray(payload.data)) throw new Error("Dashboard index is malformed");
           setJobs(payload.data);
+          setJobTotal(Number(payload.page?.total || 0));
           setJobIndexStatus("ready");
         })
         .catch((error: unknown) => {
           if (error instanceof Error && error.name === "AbortError") return;
-          setJobIndexStatus("partial");
+          setJobError(error instanceof Error ? error.message : "Could not load roles");
+          setJobIndexStatus("error");
         });
-    }, 500);
+    }, query ? 250 : 0);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, []);
+  }, [companyFilter, dept, generatedAt, investor, jobReload, loc, newOnly, page, perPage, provider, query, sector, sort, status, urlReady]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 680px)");
@@ -207,66 +253,16 @@ export function JobBoard({
       ])
     );
   }, [companies]);
-  const sectorOf = useCallback(
-    (job: DashboardJob) => companyById.get(job.companyId)?.sector || "Other",
-    [companyById]
-  );
-  const scoreOf = useCallback(
-    (job: DashboardJob) => companyById.get(job.companyId)?.hiringScore || 0,
-    [companyById]
-  );
-
-  const visibleJobs = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const rows = jobs.filter((job) => {
-      const company = companyById.get(job.companyId);
-      if (needle) {
-        const haystack = `${job.title} ${company?.name || ""} ${job.roleFamily} ${job.location} ${job.employmentType} ${company?.sector || ""} ${company?.industry || ""}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      if (status === "open" && job.status !== "verified_open") return false;
-      if (status === "closed" && job.status === "verified_open") return false;
-      if (sector && sectorOf(job) !== sector) return false;
-      if (dept && job.roleFamily !== dept) return false;
-      if (loc && job.location !== loc) return false;
-      if (companyFilter && company?.name !== companyFilter) return false;
-      if (investor && !company?.investors?.includes(investor)) return false;
-      if (provider && (job.provider || job.source).toLowerCase() !== provider.toLowerCase()) return false;
-      if (newOnly && Date.parse(job.firstSeenAt) < Date.parse(generatedAt) - 86_400_000) return false;
-      return true;
-    });
-
-    const byTitle = (a: DashboardJob, b: DashboardJob) => a.title.localeCompare(b.title);
-    const nameOf = (job: DashboardJob) => companyById.get(job.companyId)?.name || "";
-    const comparators: Record<SortId, (a: DashboardJob, b: DashboardJob) => number> = {
-      signal: (a, b) => scoreOf(b) - scoreOf(a) || byTitle(a, b),
-      title: byTitle,
-      title_desc: (a, b) => b.title.localeCompare(a.title),
-      company: (a, b) => nameOf(a).localeCompare(nameOf(b)) || byTitle(a, b),
-      company_desc: (a, b) => nameOf(b).localeCompare(nameOf(a)) || byTitle(a, b),
-      sector: (a, b) => sectorOf(a).localeCompare(sectorOf(b)) || byTitle(a, b),
-      dept: (a, b) => a.roleFamily.localeCompare(b.roleFamily) || byTitle(a, b),
-      loc: (a, b) => a.location.localeCompare(b.location) || byTitle(a, b),
-      comp_low: (a, b) => compensationFloor(a.compensation) - compensationFloor(b.compensation),
-      comp_high: (a, b) => compensationFloor(b.compensation) - compensationFloor(a.compensation),
-      recent: (a, b) => b.lastVerifiedAt.localeCompare(a.lastVerifiedAt) || scoreOf(b) - scoreOf(a),
-      oldest: (a, b) => a.lastVerifiedAt.localeCompare(b.lastVerifiedAt) || scoreOf(b) - scoreOf(a),
-    };
-    return sort === "signal"
-      ? companyDiverseJobs(rows, companies)
-      : rows.sort(comparators[sort]);
-  }, [companies, companyById, companyFilter, dept, generatedAt, investor, jobs, loc, newOnly, provider, query, scoreOf, sector, sectorOf, sort, status]);
-
-  const pageCount = Math.max(1, Math.ceil(visibleJobs.length / perPage));
+  const pageCount = Math.max(1, Math.ceil(jobTotal / perPage));
   const safePage = Math.min(page, pageCount - 1);
   const pageStart = safePage * perPage;
-  const pageRows = visibleJobs.slice(pageStart, pageStart + perPage);
-  const pageEnd = Math.min(pageStart + perPage, visibleJobs.length);
+  const pageRows = jobs;
+  const pageEnd = Math.min(pageStart + jobs.length, jobTotal);
   const uniqueCompanies = new Set(pageRows.map((job) => job.companyId)).size;
-  const filtersActive = Boolean(query || status || sector || dept || loc || companyFilter || investor || provider || newOnly) || sort !== "signal";
+  const filtersActive = Boolean(query || status !== "verified_open" || sector || dept || loc || companyFilter || investor || provider || newOnly) || sort !== "signal";
 
   const clearFilters = useCallback(() => {
-    setQuery(""); setStatus(""); setSector(""); setDept(""); setLoc("");
+    setQuery(""); setStatus("verified_open"); setSector(""); setDept(""); setLoc("");
     setCompanyFilter(""); setInvestor(""); setProvider(""); setNewOnly(false);
     setSort("signal"); setPage(0);
   }, []);
@@ -482,11 +478,10 @@ export function JobBoard({
 
           <div className="result-count" aria-live="polite">
             <span>
-              <b>{visibleJobs.length}</b> role{visibleJobs.length === 1 ? "" : "s"} across {new Set(visibleJobs.map((job) => job.companyId)).size} compan{new Set(visibleJobs.map((job) => job.companyId)).size === 1 ? "y" : "ies"} · {uniqueCompanies} on this page
+              <b>{jobTotal}</b> matching role{jobTotal === 1 ? "" : "s"} · {uniqueCompanies} compan{uniqueCompanies === 1 ? "y" : "ies"} on this page
               <span className="job-index-status" role="status" aria-live="polite">
-                {jobIndexStatus === "loading" ? " · loading full index…" : null}
-                {jobIndexStatus === "ready" ? ` · ${jobs.length} roles loaded` : null}
-                {jobIndexStatus === "partial" ? " · recent roles shown" : null}
+                {jobIndexStatus === "loading" ? " · loading…" : null}
+                {jobIndexStatus === "error" ? " · results unavailable" : null}
               </span>
               {filtersActive ? <button className="clear-filters" type="button" onClick={clearFilters}>Clear filters ✕</button> : null}
             </span>
@@ -504,9 +499,9 @@ export function JobBoard({
                 {
                   heading: "Show",
                   options: [
-                    { id: "status:", label: "All roles", selected: status === "" },
-                    { id: "status:open", label: "Open only", selected: status === "open" },
-                    { id: "status:closed", label: "Closed only", selected: status === "closed" },
+                    { id: "status:all", label: "All roles", selected: status === "all" },
+                    { id: "status:verified_open", label: "Open only", selected: status === "verified_open" },
+                    { id: "status:verified_closed", label: "Closed only", selected: status === "verified_closed" },
                   ],
                 },
               ]}
@@ -551,7 +546,14 @@ export function JobBoard({
           </div>
 
           <div>
-            {pageRows.length === 0 ? (
+            {jobIndexStatus === "loading" ? (
+              <div className="empty-state" role="status">Loading matching roles…</div>
+            ) : jobIndexStatus === "error" ? (
+              <div className="empty-state" role="alert">
+                Could not load roles: {jobError}.{" "}
+                <button type="button" onClick={() => setJobReload((value) => value + 1)}>Try again</button>
+              </div>
+            ) : pageRows.length === 0 && jobIndexStatus === "ready" ? (
               <div className="empty-state">
                 No roles match those filters. <button type="button" onClick={clearFilters}>Clear them</button>
               </div>
@@ -562,6 +564,7 @@ export function JobBoard({
                 return (
                   <div
                     key={job.id}
+                    data-job-id={job.id}
                     className={`job-row job-cols${isOpen ? "" : " closed"}`}
                   >
                     <span className="state" aria-hidden="true">{isOpen ? "■" : "□"}</span>
@@ -595,7 +598,18 @@ export function JobBoard({
                       <span className="loc">{job.location}</span>
                       <span className="comp">{job.compensation}</span>
                     </span>
-                    <span className="verified">{job.lastVerifiedAt.slice(5, 10)}</span>
+                    <span className="verified">
+                      <time dateTime={job.lastVerifiedAt}>verified {job.lastVerifiedAt.slice(0, 10)}</time>
+                      <a
+                        className="posting-link"
+                        href={job.canonicalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`View posting for ${job.title} at ${company?.name}`}
+                      >
+                        View posting · {sourceLabel(job.canonicalUrl)} ↗
+                      </a>
+                    </span>
                   </div>
                 );
               })
@@ -604,12 +618,12 @@ export function JobBoard({
 
           <div className="pager">
             <span className="pager-status">
-              {visibleJobs.length ? `Showing ${pageStart + 1}–${pageEnd} of ${visibleJobs.length}` : "0 results"}
+              {jobTotal ? `Showing ${pageStart + 1}–${pageEnd} of ${jobTotal}` : "0 results"}
             </span>
             <div className="pager-buttons">
               <button type="button" disabled={safePage === 0} onClick={() => { setPage(safePage - 1); scrollToJobs(); }}>← Prev</button>
               <span className="pager-page">Page {safePage + 1} / {pageCount}</span>
-              <button type="button" className="primary" disabled={pageEnd >= visibleJobs.length} onClick={() => { setPage(safePage + 1); scrollToJobs(); }}>Next →</button>
+              <button type="button" className="primary" disabled={pageEnd >= jobTotal} onClick={() => { setPage(safePage + 1); scrollToJobs(); }}>Next →</button>
             </div>
           </div>
         </div>

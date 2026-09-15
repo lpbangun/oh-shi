@@ -219,7 +219,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 /* ── dense job index ────────────────────────────────── */
 .job-cols {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1.85fr) minmax(0, 1.05fr) 108px 118px minmax(0, 0.92fr) 92px 74px;
+  grid-template-columns: 16px minmax(0, 1.85fr) minmax(0, 1.05fr) 108px 118px minmax(0, 0.92fr) 92px 132px;
   gap: 12px; align-items: center;
 }
 .job-head { padding: 9px 0; border-bottom: 1px solid var(--ink); }
@@ -253,8 +253,10 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 }
 .job-row .verified {
   font-family: var(--font-plex-mono), monospace; font-size: 10.5px; color: var(--muted);
-  text-align: right; white-space: nowrap;
+  text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
 }
+.job-row .posting-link { color: var(--acc); font-family: var(--font-plex-mono), monospace; font-size: 9px; white-space: nowrap; text-decoration: none; }
+.job-row .posting-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 .job-row.closed .title { color: var(--muted); text-decoration: line-through; }
 .job-row.closed .state { color: var(--muted); }
 .empty-state { padding: 56px 0; text-align: center; color: var(--muted); font-size: 14.5px; border-bottom: 1px solid var(--line); }
@@ -708,12 +710,12 @@ pre b { color: var(--ink); font-weight: 600; }
 
 /* ══ responsive ════════════════════════════════════════ */
 @media (max-width: 1220px) {
-  .job-cols { grid-template-columns: 16px minmax(0, 1.9fr) minmax(0, 1.05fr) 116px minmax(0, 0.95fr) 92px 74px; }
+  .job-cols { grid-template-columns: 16px minmax(0, 1.9fr) minmax(0, 1.05fr) 116px minmax(0, 0.95fr) 92px 132px; }
   .job-cols .sector { display: none; }
   .brand-expansion { display: none; }
 }
 @media (max-width: 1000px) {
-  .job-cols { grid-template-columns: 16px minmax(0, 2fr) minmax(0, 1.1fr) minmax(0, 1fr) 92px 74px; }
+  .job-cols { grid-template-columns: 16px minmax(0, 2fr) minmax(0, 1.1fr) minmax(0, 1fr) 92px 132px; }
   .job-cols .dept { display: none; }
   .company-hero { grid-template-columns: 44px minmax(0, 1fr); }
   .big-signal { grid-column: 2; text-align: left; }
@@ -735,6 +737,7 @@ pre b { color: var(--ink); font-weight: 600; }
   .job-row .state { grid-column: 1; grid-row: 1; align-self: center; }
   .job-row .title { grid-column: 2; grid-row: 1; }
   .job-row .verified { grid-column: 3; grid-row: 1; }
+  .job-row .verified time { display: none; }
   .job-meta {
     display: block; grid-column: 2 / -1; grid-row: 2; min-width: 0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--muted);

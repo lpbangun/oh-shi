@@ -1,7 +1,6 @@
 import {
   companyDayMovements,
   companyDeltas,
-  companyDiverseJobs,
   fundingMovements,
   sectorForCompany,
   sectorDayMovements,
@@ -25,7 +24,8 @@ import {
   validateParameters,
   type IntelligenceView,
 } from "@/lib/intelligence-query";
-import { getCoverageMetrics, listChanges, listCompanies, listJobs } from "@/lib/data";
+import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } from "@/lib/data";
+import { JobSearchError, parseJobSearch } from "@/lib/job-search";
 import { isBoardTracked } from "@/lib/tracked-boards";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
 
@@ -34,9 +34,8 @@ export const dynamic = "force-dynamic";
 const SCHEMA_VERSION = "1.1";
 const LICENSE =
   "CC BY 4.0 applies only to project-owned material; source rights remain with their owners.";
-const STATUS_VALUES = ["verified_open", "verified_closed"] as const;
 const MOVEMENT_GROUPS = ["company_day", "sector_day", "none"] as const;
-const MOVEMENT_TYPES = ["opened", "closed", "funding", "mixed"] as const;
+const MOVEMENT_TYPES = ["opened", "updated", "closed", "funding", "mixed"] as const;
 
 const capabilities = {
   preferred_entrypoint: "/api/v1/intelligence",
@@ -44,7 +43,7 @@ const capabilities = {
   views: {
     jobs: {
       default_limit: 25,
-      default_order: "company-diverse ranked round-robin",
+      default_order: "company-diverse ranked round-robin with stable job id tie-breaker",
       filters: [
         "q",
         "status",
@@ -56,6 +55,7 @@ const capabilities = {
         "provider",
         "investor",
         "new_since",
+        "sort",
         "limit",
         "cursor",
       ],
@@ -118,7 +118,13 @@ function companyReceipts(
   return { signal: receipts.hiring, confidence: receipts.evidence };
 }
 
-function movementType(item: { openedCount: number; closedCount: number; jobs: unknown[] }) {
+function movementType(item: {
+  openedCount: number;
+  closedCount: number;
+  jobs: unknown[];
+  type?: string;
+}) {
+  if (item.type === "updated") return "updated";
   if (item.jobs.length === 0) return "funding";
   if (item.openedCount > 0 && item.closedCount > 0) return "mixed";
   return item.openedCount > 0 ? "opened" : "closed";
@@ -146,7 +152,9 @@ function rawMovements(
           ? "opened"
           : change.changeType === "job_closed"
             ? "closed"
-            : "funding",
+            : change.changeType === "job_updated"
+              ? "updated"
+              : "funding",
       sector: company ? sectorForCompany(company) : "Other",
       companyId: company?.id || null,
       companySlug: company?.slug || null,
@@ -209,6 +217,40 @@ export async function GET(request: Request) {
       );
     }
 
+    if (view === "jobs") {
+      const changeFeedStart = new Date().toISOString();
+      const query = parseJobSearch(url.searchParams, { defaultLimit: 25 });
+      const [result, coverage] = await Promise.all([searchJobs(query), getCoverageMetrics()]);
+      const dataAsOf = coverage.lastCanonicalRefresh || latestTimestamp([], result.jobs, []);
+      return Response.json({
+        ...responseEnvelope("jobs", dataAsOf, {
+          q: query.q,
+          status: query.status,
+          company: query.company,
+          sector: query.sector,
+          role_family: query.roleFamily,
+          location: query.location,
+          remote_status: query.remoteStatus,
+          provider: query.provider,
+          investor: query.investor,
+          new_since: query.newSince,
+          sort: query.sort,
+          limit: query.limit,
+        }, result.jobs, {
+          limit: result.limit,
+          returned: result.jobs.length,
+          next_cursor: result.nextOffset === null ? null : `v2.jobs.${result.nextOffset}`,
+          total: result.total,
+        }),
+        coverage,
+        incremental: {
+          after: changeFeedStart,
+          changes_url: `/api/v1/changes?after=${encodeURIComponent(changeFeedStart)}`,
+          instruction: "Process every job event, refresh /api/v1/jobs/:id, then re-evaluate this filter.",
+        },
+      }, { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } });
+    }
+
     const [companies, jobs, changes, coverage] = await Promise.all([
       listCompanies(),
       listJobs(true),
@@ -225,52 +267,7 @@ export async function GET(request: Request) {
 
     let rows: unknown[];
 
-    if (view === "jobs") {
-      const status = enumFilter(url.searchParams, "status", STATUS_VALUES);
-      const companyFilter = stringFilter(url.searchParams, "company");
-      const sector = stringFilter(url.searchParams, "sector");
-      const roleFamily = stringFilter(url.searchParams, "role_family");
-      const location = stringFilter(url.searchParams, "location");
-      const remoteStatus = stringFilter(url.searchParams, "remote_status");
-      const provider = stringFilter(url.searchParams, "provider");
-      const investor = stringFilter(url.searchParams, "investor");
-      const newSince = parseIsoFilter(url.searchParams, "new_since");
-      Object.assign(appliedFilters, {
-        status,
-        company: companyFilter,
-        sector,
-        role_family: roleFamily,
-        location,
-        remote_status: remoteStatus,
-        provider,
-        investor,
-        new_since: newSince,
-      });
-      rows = companyDiverseJobs(
-        jobs.filter((job) => {
-          const company = companyById.get(job.companyId);
-          if (status && job.status !== status) return false;
-          if (
-            companyFilter &&
-            ![company?.id, company?.slug, company?.name].some((value) => contains(value, companyFilter))
-          ) return false;
-          if (sector && lower(company ? sectorForCompany(company) : "Other") !== lower(sector)) return false;
-          if (roleFamily && lower(job.roleFamily) !== lower(roleFamily)) return false;
-          if (!contains(job.location, location)) return false;
-          if (!contains(job.remoteStatus, remoteStatus)) return false;
-          if (provider && lower(job.provider || job.source) !== lower(provider)) return false;
-          if (investor && !company?.investors?.some((value) => lower(value) === lower(investor))) return false;
-          if (newSince && job.firstSeenAt < newSince) return false;
-          if (
-            q &&
-            ![job.title, job.roleFamily, job.location, company?.name, company?.sector, company?.industry]
-              .some((value) => contains(value, q))
-          ) return false;
-          return true;
-        }),
-        companies
-      );
-    } else if (view === "companies") {
+    if (view === "companies") {
       const sector = stringFilter(url.searchParams, "sector");
       const minSignal = parseNumberFilter(url.searchParams, "min_signal");
       const minConfidence = parseNumberFilter(url.searchParams, "min_confidence");
@@ -360,7 +357,7 @@ export async function GET(request: Request) {
       { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } }
     );
   } catch (error) {
-    if (error instanceof IntelligenceQueryError) {
+    if (error instanceof IntelligenceQueryError || error instanceof JobSearchError) {
       return Response.json(
         {
           schema_version: SCHEMA_VERSION,

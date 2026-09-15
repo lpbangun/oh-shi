@@ -15,6 +15,43 @@ type IntelligencePayload<T> = {
 };
 
 test.describe("unified agent contract", () => {
+  test("change feed is bounded, replayable, tuple-ordered, and expires stale checkpoints", async ({ request }) => {
+    const firstResponse = await request.get("/api/v1/changes?limit=2");
+    expect(firstResponse.status()).toBe(200);
+    const first = await firstResponse.json();
+    expect(first.data.length).toBeLessThanOrEqual(2);
+    expect(first.page.limit).toBe(2);
+    expect(first.page.next_cursor).toBeTruthy();
+    const firstTuples = first.data.map((event: { occurredAt: string; id: string }) =>
+      `${event.occurredAt}\u0000${event.id}`
+    );
+    expect(firstTuples).toEqual([...firstTuples].sort());
+
+    const nextUrl = `/api/v1/changes?limit=2&cursor=${encodeURIComponent(first.page.next_cursor)}`;
+    const [nextResponse, replayResponse] = await Promise.all([
+      request.get(nextUrl),
+      request.get(nextUrl),
+    ]);
+    expect(nextResponse.status()).toBe(200);
+    expect(replayResponse.status()).toBe(200);
+    const next = await nextResponse.json();
+    const replay = await replayResponse.json();
+    expect(replay.data).toEqual(next.data);
+    expect(next.data.some((event: { id: string }) =>
+      first.data.some((prior: { id: string }) => prior.id === event.id)
+    )).toBe(false);
+
+    const expired = `v1.${Buffer.from(JSON.stringify({
+      t: "1970-01-01T00:00:00.000Z",
+      i: "",
+    })).toString("base64url")}`;
+    const expiredResponse = await request.get(
+      `/api/v1/changes?cursor=${encodeURIComponent(expired)}`
+    );
+    expect(expiredResponse.status()).toBe(410);
+    expect((await expiredResponse.json()).error).toBe("checkpoint_expired");
+  });
+
   test("default job APIs share the company-diverse order", async ({ request }) => {
     const compatibilityResponse = await request.get("/api/v1/jobs");
     expect(compatibilityResponse.status()).toBe(200);

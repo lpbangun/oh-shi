@@ -130,6 +130,29 @@ test.describe("desktop hiring intelligence", () => {
     await expect(funding.locator(".movement-source")).toHaveAttribute("target", "_blank");
   });
 
+  test("job search matches the API and survives reload and Back", async ({ page, request }) => {
+    const search = page.getByLabel("Search jobs");
+    await search.fill("engineer");
+    await expect(page).toHaveURL(/q=engineer/);
+    await expect(page.locator("#jobs .job-index-status")).not.toContainText("loading");
+    const browserIds = await page.locator("#jobs [data-job-id]").evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("data-job-id"))
+    );
+    const apiResponse = await request.get("/api/v1/intelligence?view=jobs&q=engineer&limit=50");
+    expect(apiResponse.status()).toBe(200);
+    const api = await apiResponse.json();
+    expect(browserIds).toEqual(api.data.map((job: { id: string }) => job.id));
+    await expect(page.locator("#jobs .pager-status")).toContainText(`of ${api.page.total}`);
+    await expect(page.locator("#jobs .posting-link").first()).toHaveAttribute("href", /^https:\/\//);
+
+    await page.reload();
+    await expect(search).toHaveValue("engineer");
+    await search.fill("designer");
+    await expect(page).toHaveURL(/q=designer/);
+    await page.goBack();
+    await expect(search).toHaveValue("engineer");
+  });
+
   test("companies paginate ten at a time without duplicates", async ({ page }) => {
     const signal = page.locator("#signal");
     const pager = signal.locator(".pager").filter({ hasText: /companies/i });

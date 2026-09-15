@@ -662,6 +662,13 @@ export type CoverageMetrics = {
   companyGrowthWarning: boolean;
   investors: Record<string, number>;
   providers: Record<string, number>;
+  sourceCoverage: {
+    configured: number;
+    healthy: number;
+    failed: number;
+    stale: number;
+    quarantined: number;
+  };
   sourceFailures: Array<{
     sourceId: string;
     provider: string;

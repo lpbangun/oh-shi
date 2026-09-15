@@ -264,6 +264,11 @@ test("D1 quarantine prevents mutation, recovers, and later permits a narrow clos
   assert.equal(recovered.opened, 0);
   assert.equal(recovered.closed, 0);
   assert.deepEqual(
+    await database.prepare(`SELECT change_type AS changeType, entity_id AS entityId
+      FROM changes WHERE change_type='job_updated' AND entity_id='job-existing-0'`).first(),
+    { changeType: "job_updated", entityId: "job-existing-0" }
+  );
+  assert.deepEqual(
     await database.prepare(`SELECT discovery_status AS discoveryStatus,
       last_successful_at AS lastSuccessfulAt, last_error AS lastError,
       consecutive_failures AS consecutiveFailures
@@ -451,6 +456,11 @@ test("D1 quarantine prevents mutation, recovers, and later permits a narrow clos
       { provider: "ashby", status: "verified_closed" },
       { provider: "workable", status: "verified_open" },
     ]
+  );
+  assert.deepEqual(
+    await database.prepare(`SELECT provider, canonical_url AS canonicalUrl
+      FROM jobs WHERE id='job-existing-0'`).first(),
+    { provider: "workable", canonicalUrl: "https://apply.workable.com/j/ALTERNATE0/" }
   );
   const allObservationsGone = await persistCanonicalSource(
     database,

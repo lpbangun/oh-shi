@@ -13,6 +13,7 @@ import type { FundingDiscovery } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
+import { buildJobSearchSql, type JobSearchInput } from "./job-search";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
 import {
   listActiveHiringSignalRecords,
@@ -45,17 +46,20 @@ const companyColumns = `
 `;
 
 const jobColumns = `
-  id, company_id as companyId, external_id as externalId, provider, source_id as sourceId, title,
-  role_family as roleFamily, location, remote_status as remoteStatus,
-  employment_type as employmentType, compensation, canonical_url as canonicalUrl,
-  source, status, first_seen_at as firstSeenAt, last_seen_at as lastSeenAt,
-  source_updated_at as sourceUpdatedAt, published_at as publishedAt,
-  last_verified_at as lastVerifiedAt, closed_at as closedAt,
-  raw_url as rawUrl, discovery_channel as discoveryChannel,
-  evidence_url as evidenceUrl, parser_version as parserVersion,
-  snapshot_run_id as snapshotRunId, linkedin_presence_state as linkedInPresenceState,
-  linkedin_evidence_url as linkedInEvidenceUrl, linkedin_checked_at as linkedInCheckedAt,
-  summary
+  jobs.id, jobs.company_id as companyId, jobs.external_id as externalId, jobs.provider,
+  jobs.source_id as sourceId, jobs.title, jobs.role_family as roleFamily,
+  jobs.location, jobs.remote_status as remoteStatus,
+  jobs.employment_type as employmentType, jobs.compensation,
+  jobs.canonical_url as canonicalUrl, jobs.source, jobs.status,
+  jobs.first_seen_at as firstSeenAt, jobs.last_seen_at as lastSeenAt,
+  jobs.source_updated_at as sourceUpdatedAt, jobs.published_at as publishedAt,
+  jobs.last_verified_at as lastVerifiedAt, jobs.closed_at as closedAt,
+  jobs.raw_url as rawUrl, jobs.discovery_channel as discoveryChannel,
+  jobs.evidence_url as evidenceUrl, jobs.parser_version as parserVersion,
+  jobs.snapshot_run_id as snapshotRunId,
+  jobs.linkedin_presence_state as linkedInPresenceState,
+  jobs.linkedin_evidence_url as linkedInEvidenceUrl,
+  jobs.linkedin_checked_at as linkedInCheckedAt, jobs.summary
 `;
 
 const changeColumns = `
@@ -1115,14 +1119,48 @@ async function listStoredJobs(includeClosed = false): Promise<Job[]> {
   return result.results;
 }
 
-export async function listDashboardJobs(limit?: number): Promise<DashboardJob[]> {
+export async function listDashboardJobs(limit?: number, includeClosed = false): Promise<DashboardJob[]> {
   await ensureDatabase();
-  const query = `SELECT ${dashboardJobColumns} FROM jobs ORDER BY first_seen_at DESC${
+  const query = `SELECT ${dashboardJobColumns} FROM jobs${includeClosed ? "" : " WHERE status='verified_open'"}
+    ORDER BY first_seen_at DESC, id ASC${
     limit ? " LIMIT ?" : ""
   }`;
   const statement = env.DB.prepare(query);
   const result = await (limit ? statement.bind(limit) : statement).all<DashboardJob>();
   return result.results;
+}
+
+export type JobSearchResult = {
+  jobs: Job[];
+  total: number;
+  companyCount: number;
+  offset: number;
+  limit: number;
+  nextOffset: number | null;
+};
+
+/** Execute the public browser/API job contract in D1, including the full count. */
+export async function searchJobs(input: JobSearchInput): Promise<JobSearchResult> {
+  await ensureDatabase();
+  const plan = buildJobSearchSql(input, jobColumns);
+  const [count, rows, companies] = await Promise.all([
+    env.DB.prepare(plan.countSql).bind(...plan.bindings).first<{ total: number }>(),
+    env.DB.prepare(plan.dataSql).bind(...plan.bindings, input.limit, input.offset).all<Job>(),
+    listCompanies(),
+  ]);
+  const total = Number(count?.total || 0);
+  if (input.offset > total && total > 0) {
+    throw new Error("Requested job page is beyond the matching results.");
+  }
+  const attached = attachCompaniesToJobs(rows.results, companies);
+  return {
+    jobs: attached,
+    total,
+    companyCount: new Set(attached.map((job) => job.companyId)).size,
+    offset: input.offset,
+    limit: input.limit,
+    nextOffset: input.offset + attached.length < total ? input.offset + attached.length : null,
+  };
 }
 
 type MovementJob = Pick<DashboardJob, "id" | "companyId" | "title" | "canonicalUrl">;
@@ -1162,7 +1200,8 @@ async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMe
     (SELECT COUNT(*) FROM investor_sources WHERE enabled=1) as investorSourceCount,
     (SELECT COUNT(DISTINCT provider) FROM company_sources
       WHERE enabled=1 AND discovery_status='active') as providerCount,
-    (SELECT MAX(last_successful_at) FROM company_sources) as lastCanonicalRefresh`
+    (SELECT MAX(last_successful_at) FROM company_sources
+      WHERE enabled=1 AND discovery_status='active') as lastCanonicalRefresh`
   ).bind(weekAgo, dayAgo, nowIso).first<HomepageCoverageMetrics>();
   return {
     verifiedOpenJobs: Number(row?.verifiedOpenJobs || 0),
@@ -1233,7 +1272,7 @@ export async function listOffBoardVerifiedOpenings() {
 export async function listChanges(since?: string): Promise<ChangeEvent[]> {
   await ensureDatabase();
   const query = `SELECT ${changeColumns} FROM changes${since ? " WHERE occurred_at >= ?" : ""}
-    ORDER BY occurred_at DESC`;
+    ORDER BY occurred_at DESC, id DESC`;
   const statement = env.DB.prepare(query);
   const result = await (since ? statement.bind(since) : statement).all<ChangeEvent>();
   return result.results;
@@ -1244,7 +1283,7 @@ async function listHomepageChanges(since: string): Promise<ChangeEvent[]> {
   const result = await env.DB.prepare(
     `SELECT ${changeColumns} FROM changes
      WHERE occurred_at >= ? OR change_type='funding_announced'
-     ORDER BY occurred_at DESC`
+     ORDER BY occurred_at DESC, id DESC`
   ).bind(since).all<ChangeEvent>();
   return result.results;
 }
@@ -1343,7 +1382,8 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const nowIso = now.toISOString();
   const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
   const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
-  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry] =
+  const sixHoursAgo = new Date(now.valueOf() - 6 * 3_600_000).toISOString();
+  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, sourceCoverage] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
         FROM jobs WHERE status='verified_open'`).first<{ jobs: number; companies: number }>(),
@@ -1381,7 +1421,8 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         .all<CoverageMetrics["discoverySourceFailures"][number]>(),
       env.DB.prepare(`SELECT MAX(completed_at) as value FROM ingestion_runs`)
         .first<{ value: string | null }>(),
-      env.DB.prepare(`SELECT MAX(last_successful_at) as value FROM company_sources`)
+      env.DB.prepare(`SELECT MAX(last_successful_at) as value FROM company_sources
+        WHERE enabled=1 AND discovery_status='active'`)
         .first<{ value: string | null }>(),
       env.DB.prepare(`SELECT MAX(first_discovered_at) as value FROM company_sources
         WHERE discovery_status='active'`).first<{ value: string | null }>(),
@@ -1398,6 +1439,20 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
           pilot: number;
           pending: number;
           verifiedActive: number;
+        }>(),
+      env.DB.prepare(`SELECT
+        COUNT(*) as configured,
+        SUM(CASE WHEN discovery_status='active' AND last_error IS NULL
+          AND last_successful_at >= ? THEN 1 ELSE 0 END) as healthy,
+        SUM(CASE WHEN last_error IS NOT NULL THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN last_successful_at IS NULL OR last_successful_at < ? THEN 1 ELSE 0 END) as stale,
+        SUM(CASE WHEN discovery_status='quarantined' THEN 1 ELSE 0 END) as quarantined
+        FROM company_sources WHERE enabled=1`).bind(sixHoursAgo, sixHoursAgo).first<{
+          configured: number;
+          healthy: number;
+          failed: number;
+          stale: number;
+          quarantined: number;
         }>(),
     ]);
   const daysWithoutGrowth = latestCompany?.value
@@ -1422,6 +1477,13 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
     verifiedActiveStartupDomains: Number(registry?.verifiedActive || 0),
     investors: Object.fromEntries(investors.results.map((item) => [item.name, Number(item.count)])),
     providers: Object.fromEntries(providers.results.map((item) => [item.provider, Number(item.count)])),
+    sourceCoverage: {
+      configured: Number(sourceCoverage?.configured || 0),
+      healthy: Number(sourceCoverage?.healthy || 0),
+      failed: Number(sourceCoverage?.failed || 0),
+      stale: Number(sourceCoverage?.stale || 0),
+      quarantined: Number(sourceCoverage?.quarantined || 0),
+    },
     sourceFailures: failures.results,
     discoverySourceFailures: discoveryFailures.results,
   };
