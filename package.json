@@ -28,12 +28,12 @@
     "quality": "pnpm run typecheck && pnpm run eval && pnpm run build",
     "quality:ci": "pnpm run lint && pnpm run typecheck && pnpm run eval && pnpm run build && pnpm run e2e",
     "test": "pnpm run eval",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern playwright-report --ignore-pattern test-results",
+    "lint": "eslint . --ignore-pattern artifacts --ignore-pattern dist --ignore-pattern .next --ignore-pattern playwright-report --ignore-pattern test-results",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.3.3",
+    "next": "16.3.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "tldts": "7.4.9"
@@ -51,7 +51,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.3.5",
     "miniflare": "4.20260515.0",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",

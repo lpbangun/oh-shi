@@ -6,7 +6,9 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // The Vinext development worker can drop concurrent page-render streams.
+  // Keep tests within each file sequential while still parallelizing files.
+  fullyParallel: false,
   forbidOnly: ci,
   retries: ci ? 2 : 0,
   workers: ci ? 2 : 4,

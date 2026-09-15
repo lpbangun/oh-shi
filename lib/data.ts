@@ -1415,6 +1415,11 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const queuePermissionSql = discoveryPermissionSql("q");
   const queueRunnableSql = discoveryRunnableSql("q");
   const staleResolvingCutoff = new Date(now.valueOf() - 60 * 60 * 1_000).toISOString();
+  const queueRunnableBindings = [
+    DISCOVERY_PIPELINE_VERSION,
+    staleResolvingCutoff,
+    nowIso,
+  ] as const;
   const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, outcomeCounts, sourceCoverage] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
@@ -1535,15 +1540,11 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
           AND q.status IN ('discovered','canonical_source_found') THEN 1 ELSE 0 END) as retryDeferred,
         MIN(CASE WHEN ${queueRunnableSql} THEN first_discovered_at END) as oldestReadyAt
         FROM discovery_queue q`).bind(
-          DISCOVERY_PIPELINE_VERSION,
-          staleResolvingCutoff,
-          nowIso,
+          ...queueRunnableBindings,
           DISCOVERY_PIPELINE_VERSION,
           nowIso,
           nowIso,
-          DISCOVERY_PIPELINE_VERSION,
-          staleResolvingCutoff,
-          nowIso
+          ...queueRunnableBindings
         ).first<{
           total: number;
           autoEligible: number;

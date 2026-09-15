@@ -4,9 +4,10 @@ allowBuilds:
   unrs-resolver: true
   workerd: true
 overrides:
+  baseline-browser-mapping: 2.11.0
   browserslist: 4.28.7
   nanoid: 3.3.18
-  postcss: 8.5.18
+  postcss: 8.5.23
   sharp: 0.35.4
 minimumReleaseAgeExclude:
   - '@cloudflare/workers-types@5.20260723.1'
