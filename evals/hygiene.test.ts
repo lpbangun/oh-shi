@@ -89,8 +89,8 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   const pkg = JSON.parse(await read("package.json"));
   const workflow = await read(".github/workflows/ci.yml");
 
-  assert.equal(pkg.dependencies.next, "16.2.12");
-  assert.equal(pkg.devDependencies["eslint-config-next"], "16.2.12");
+  assert.equal(pkg.dependencies.next, "16.3.3");
+  assert.equal(pkg.devDependencies["eslint-config-next"], "16.3.3");
   assert.equal(pkg.packageManager, "pnpm@11.17.0");
   assert.ok(pkg.devDependencies["@playwright/test"]);
   assert.ok(pkg.devDependencies["@axe-core/playwright"]);
