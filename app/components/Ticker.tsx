@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import type { Company } from "@/lib/types";
 
@@ -26,20 +27,41 @@ function Countdown() {
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, []);
-  return <span className="ticker-next">{label}</span>;
+  return <span className="ticker-next" aria-hidden="true">{label}</span>;
 }
 
 export function Ticker({ companies, deltas }: { companies: Company[]; deltas: Record<string, number> }) {
+  const [paused, setPaused] = useState(false);
   const ranked = [...companies].sort((a, b) => b.hiringScore - a.hiringScore);
   if (ranked.length === 0) return null;
 
   // Duplicated so the marquee loops seamlessly at -50%.
   const lane = [...ranked, ...ranked];
+  // Keep the reading speed stable as the company list grows. At roughly twelve
+  // seconds per card, names and all three metrics remain comfortably legible.
+  const tickerStyle = {
+    "--ticker-duration": `${Math.max(180, ranked.length * 12)}s`,
+  } as CSSProperties;
 
   return (
-    <div className="ticker" aria-hidden="true">
-      <span className="ticker-label"><span className="live-dot" />Live</span>
-      <div className="ticker-viewport">
+    <div
+      className={`ticker${paused ? " paused" : ""}`}
+      role="region"
+      aria-label="Live hiring activity"
+      style={tickerStyle}
+    >
+      <button
+        type="button"
+        className="ticker-label ticker-toggle"
+        aria-label={paused ? "Resume live ticker" : "Pause live ticker"}
+        aria-pressed={paused}
+        onClick={() => setPaused((value) => !value)}
+      >
+        <span className="live-dot" aria-hidden="true" />
+        <span>Live</span>
+        <span className="ticker-control" aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span>
+      </button>
+      <div className="ticker-viewport" aria-hidden="true">
         <div className="ticker-track">
           {lane.map((company, index) => {
             const delta = deltas[company.id] || 0;

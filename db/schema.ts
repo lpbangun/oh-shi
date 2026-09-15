@@ -243,12 +243,19 @@ export const discoveryQueue = sqliteTable("discovery_queue", {
   status: text("status").notNull(),
   firstDiscoveredAt: text("first_discovered_at").notNull(),
   lastAttemptedAt: text("last_attempted_at"),
+  discoveryVersion: text("discovery_version"),
+  lastOutcome: text("last_outcome"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at"),
   lastError: text("last_error"),
   reviewNotes: text("review_notes").notNull().default(""),
 }, (table) => [
   check(
     "discovery_queue_status_check",
     sql`${table.status} IN ('discovered','resolving','canonical_source_found','active','needs_review','unsupported','rejected')`
+  ),
+  index("discovery_queue_retry_idx").on(
+    table.status, table.nextAttemptAt, table.firstDiscoveredAt
   ),
 ]);
 

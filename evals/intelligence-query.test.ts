@@ -11,6 +11,11 @@ import {
   parseView,
   validateParameters,
 } from "../lib/intelligence-query";
+import {
+  decodeChangeCursor,
+  encodeChangeCursor,
+  parseChangeFeedParams,
+} from "../lib/change-feed-contract";
 
 const params = (query: string) => new URLSearchParams(query);
 
@@ -63,4 +68,13 @@ test("numeric and ISO filters fail closed", () => {
     "2026-07-01T00:00:00.000Z"
   );
   assert.throws(() => parseIsoFilter(params("after=yesterday"), "after"));
+});
+
+test("change checkpoints require their version and explicit ISO timestamp values", () => {
+  const cursor = encodeChangeCursor({ occurredAt: "2026-07-01T00:00:00.000Z", id: "change-1" });
+  assert.equal(decodeChangeCursor(cursor).id, "change-1");
+  assert.throws(() => decodeChangeCursor(cursor.slice(3)), /Invalid change cursor/);
+  for (const query of ["after=", "cursor=", "after=2026-07-01"]) {
+    assert.throws(() => parseChangeFeedParams(params(query)), /must/);
+  }
 });

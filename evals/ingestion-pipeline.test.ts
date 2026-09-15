@@ -793,12 +793,16 @@ test("snapshot fingerprints are stable, order-independent, and identity-set-sens
   assert.notEqual(snapshotFingerprint(["a", "b"]), snapshotFingerprint(["a", "c"]));
 });
 
-test("partial refresh succeeds at threshold and change IDs deduplicate retries", () => {
+test("partial refresh succeeds and change IDs replay one revision without collapsing transitions", () => {
   const outcome = refreshOutcome([{ status: "success" }, { status: "failed" }], 0.5);
   assert.deepEqual(outcome, { successes: 1, failures: 1, partialSuccess: true, meetsThreshold: true });
-  assert.equal(
+  assert.notEqual(
     changeEventId("open", "job_1", "2026-07-28T01:00:00Z"),
     changeEventId("open", "job_1", "2026-07-28T23:00:00Z")
+  );
+  assert.equal(
+    changeEventId("open", "job_1", "run-123"),
+    changeEventId("open", "job_1", "run-123")
   );
 });
 

@@ -94,6 +94,54 @@ test("API envelopes remain versioned, incremental, and licensed", async () => {
   assert.match(dataSource, /new Date\(\)\.toISOString\(\)/);
 });
 
+test("public capability surfaces report live availability and support conditional requests", async () => {
+  const [coverage, intelligence, signals, offBoard, llms, policyText, worker] = await Promise.all([
+    read("app/api/v1/coverage/route.ts"),
+    read("app/api/v1/intelligence/route.ts"),
+    read("app/api/v1/signals/route.ts"),
+    read("app/api/v1/off-board-openings/route.ts"),
+    read("app/llms.txt/route.ts"),
+    read("public/agent-policy.json"),
+    read("worker/index.ts"),
+  ]);
+  assert.match(coverage, /conditionalJsonResponse/);
+  assert.match(intelligence, /coverage\.capabilityAvailability/);
+  assert.match(signals, /status: signals\.length > 0 \? "available" : "dormant"/);
+  assert.match(offBoard, /status: openings\.length > 0 \? "available" : "dormant"/);
+  assert.match(llms, /If-None-Match/);
+  assert.match(llms, /bounded to 100 records/);
+  const policy = JSON.parse(policyText);
+  assert.match(policy.capability_status, /capabilityAvailability/);
+  assert.match(policy.conditional_requests, /ETag/);
+  assert.match(worker, /request\.method === "OPTIONS" && isPublicAgentRoute/);
+  assert.match(worker, /"Access-Control-Allow-Headers": "Cache-Control, If-None-Match"/);
+  assert.match(worker, /headers\.set\("Access-Control-Allow-Origin", "\*"\)/);
+});
+
+test("discovery backlog exposes actionable stages and rechecks stale detector results", async () => {
+  const [data, discovery, policy, schema, migration, retryMigration] = await Promise.all([
+    read("lib/data.ts"),
+    read("lib/discovery.ts"),
+    read("lib/discovery-policy.ts"),
+    read("db/schema.ts"),
+    read("drizzle/0012_discovery_probe_version.sql"),
+    read("drizzle/0013_discovery_retry_outcomes.sql"),
+  ]);
+  assert.match(data, /eligibleNeverQueued/);
+  assert.match(data, /eligibleForPromotion/);
+  assert.match(data, /permissionExcluded/);
+  assert.match(data, /staleNeedsReview/);
+  assert.match(data, /needsReviewReasons/);
+  assert.match(data, /outcomeCounts/);
+  assert.match(policy, /status='needs_review'[\s\S]*discovery_version/);
+  assert.match(policy, /permission_status='permitted'/);
+  assert.match(discovery, /discoveryRetryAt/);
+  assert.match(schema, /discoveryVersion: text\("discovery_version"\)/);
+  assert.match(schema, /nextAttemptAt: text\("next_attempt_at"\)/);
+  assert.match(migration, /ALTER TABLE discovery_queue ADD COLUMN discovery_version TEXT/);
+  assert.match(retryMigration, /ALTER TABLE discovery_queue ADD COLUMN last_outcome TEXT/);
+});
+
 test("canonical refresh is protected", async () => {
   const source = await read("app/api/internal/refresh/route.ts");
   assert.match(source, /export function GET/);
@@ -224,13 +272,22 @@ test("off-board signals remain distinct public API surfaces without an empty hom
   assert.doesNotMatch(board, /offBoardOpenings/);
 });
 
-test("all default public job surfaces use the shared company-diverse order", async () => {
-  const [data, intelligence, board] = await Promise.all([
+test("all public job surfaces use the shared bounded server query", async () => {
+  const [data, intelligence, board, dashboard, compatibility, search] = await Promise.all([
     read("lib/data.ts"),
     read("app/api/v1/intelligence/route.ts"),
     read("app/components/JobBoard.tsx"),
+    read("app/api/v1/dashboard/jobs/route.ts"),
+    read("app/api/v1/jobs/route.ts"),
+    read("lib/job-search.ts"),
   ]);
-  assert.match(data, /includeClosed \? jobs : companyDiverseJobs\(jobs, companies\)/);
-  assert.match(intelligence, /companyDiverseJobs\(/);
-  assert.match(board, /companyDiverseJobs\(rows, companies\)/);
+  assert.match(data, /buildJobSearchSql/);
+  assert.match(intelligence, /searchJobs\(query\)/);
+  assert.match(dashboard, /searchJobs\(query\)/);
+  assert.match(compatibility, /searchJobs\(query\)/);
+  assert.match(search, /ROW_NUMBER\(\) OVER/);
+  assert.match(search, /jobs\.id ASC/);
+  assert.match(search, /statusRaw \|\| "verified_open"/);
+  assert.doesNotMatch(board, /const rows = jobs\.filter\(/);
+  assert.match(board, /\/api\/v1\/dashboard\/jobs\?/);
 });

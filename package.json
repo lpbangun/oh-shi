@@ -16,6 +16,7 @@
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:ui": "playwright test --ui",
+    "benchmark:loading": "node scripts/benchmark-loading.mjs",
     "pilot:domains": "tsx scripts/build-startup-domain-pilot.ts",
     "pilot:measure-yield": "tsx scripts/measure-startup-domain-yield.ts",
     "verify:structured": "tsx scripts/verify-structured-career-source.ts",
@@ -32,7 +33,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.2.12",
+    "next": "16.3.3",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "tldts": "7.4.9"
@@ -50,7 +51,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.3",
     "miniflare": "4.20260515.0",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",

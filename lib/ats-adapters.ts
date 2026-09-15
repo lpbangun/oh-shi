@@ -190,8 +190,24 @@ function normalized(input: {
   };
 }
 
+export function dedupeNormalizedJobs(rows: NormalizedJob[]) {
+  const identities = new Map<string, string>();
+  const unique: NormalizedJob[] = [];
+  for (const row of rows) {
+    const fingerprint = JSON.stringify(row);
+    const prior = identities.get(row.externalId);
+    if (prior && prior !== fingerprint) {
+      throw new Error(`Incomplete payload: conflicting duplicate external id ${row.externalId}.`);
+    }
+    if (prior) continue;
+    identities.set(row.externalId, fingerprint);
+    unique.push(row);
+  }
+  return unique;
+}
+
 export function normalizeAshby(payload: unknown): NormalizedJob[] {
-  return array(object(payload).jobs).flatMap((raw) => {
+  return dedupeNormalizedJobs(array(object(payload).jobs).flatMap((raw) => {
     const job = object(raw);
     if (job.isListed === false) return [];
     const result = normalized({
@@ -202,11 +218,11 @@ export function normalizeAshby(payload: unknown): NormalizedJob[] {
       url: job.jobUrl, publishedAt: job.publishedAt, description: job.descriptionPlain,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 export function normalizeGreenhouse(payload: unknown): NormalizedJob[] {
-  return array(object(payload).jobs).flatMap((raw) => {
+  return dedupeNormalizedJobs(array(object(payload).jobs).flatMap((raw) => {
     const job = object(raw);
     const metadata = array(job.metadata).map(object);
     const result = normalized({
@@ -219,11 +235,11 @@ export function normalizeGreenhouse(payload: unknown): NormalizedJob[] {
       url: job.absolute_url, publishedAt: job.updated_at, description: job.content,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 export function normalizeLever(payload: unknown): NormalizedJob[] {
-  return array(payload).flatMap((raw) => {
+  return dedupeNormalizedJobs(array(payload).flatMap((raw) => {
     const job = object(raw);
     const categories = object(job.categories);
     const result = normalized({
@@ -237,7 +253,7 @@ export function normalizeLever(payload: unknown): NormalizedJob[] {
       description: job.descriptionPlain || job.description,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 function workableRecords(payload: unknown) {
@@ -389,7 +405,7 @@ function recruiteeSalary(job: JsonRecord) {
 }
 
 export function normalizeRecruitee(payload: unknown): NormalizedJob[] {
-  return array(object(payload).offers).flatMap((raw) => {
+  return dedupeNormalizedJobs(array(object(payload).offers).flatMap((raw) => {
     const job = object(raw);
     const description = plain(`${text(job.description)} ${text(job.requirements)}`);
     if (text(job.status).toLowerCase() !== "published") return [];
@@ -411,7 +427,7 @@ export function normalizeRecruitee(payload: unknown): NormalizedJob[] {
       description,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 function personioHost(boardId: string) {
@@ -434,7 +450,7 @@ function personioSalary(salary: ReturnType<typeof parsePersonioPositions>[number
 export function normalizePersonio(payload: unknown, boardId: string): NormalizedJob[] {
   if (typeof payload !== "string") return [];
   const host = personioHost(boardId);
-  return parsePersonioPositions(payload).flatMap((job) => {
+  return dedupeNormalizedJobs(parsePersonioPositions(payload).flatMap((job) => {
     const description = job.descriptions.join(" ");
     if (
       /(?:general|open|speculative|unsolicited)\s+application/i.test(job.title) ||
@@ -454,7 +470,7 @@ export function normalizePersonio(payload: unknown, boardId: string): Normalized
       description,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 function smartRecruitersBoardId(boardId: string) {
@@ -502,7 +518,7 @@ function isApplicationPool(title: string, description: string) {
 }
 
 export function normalizeSmartRecruiters(payload: unknown): NormalizedJob[] {
-  return array(payload).flatMap((raw) => {
+  return dedupeNormalizedJobs(array(payload).flatMap((raw) => {
     const job = object(raw);
     const description = smartRecruitersDescription(job);
     if (job.active !== true || text(job.visibility) !== "PUBLIC") return [];
@@ -522,7 +538,7 @@ export function normalizeSmartRecruiters(payload: unknown): NormalizedJob[] {
       description,
     });
     return result ? [result] : [];
-  });
+  }));
 }
 
 export function canonicalEndpoint(provider: AtsProvider, boardId: string) {
@@ -557,18 +573,15 @@ export function normalizeProvider(provider: AtsProvider, payload: unknown, board
   return [];
 }
 
-function observedProviderJobs(provider: AtsProvider, payload: unknown) {
-  if (provider !== "ashby") return undefined;
-  return array(object(payload).jobs).flatMap((raw) => {
-    const job = object(raw);
-    const externalId = text(job.id);
-    const canonicalUrl = text(job.jobUrl);
-    return job.isListed !== false &&
-      externalId &&
-      /^https:\/\//.test(canonicalUrl)
-      ? [{ externalId, canonicalUrl }]
-      : [];
-  });
+function observedProviderJobs(provider: AtsProvider, payload: unknown, boardId: string) {
+  try {
+    return normalizeProvider(provider, payload, boardId).map(({ externalId, canonicalUrl }) => ({
+      externalId,
+      canonicalUrl,
+    }));
+  } catch {
+    return undefined;
+  }
 }
 
 export function isCompleteProviderPayload(provider: AtsProvider, payload: unknown) {
@@ -635,13 +648,13 @@ export function isCompleteProviderPayload(provider: AtsProvider, payload: unknow
   return records.every((raw) => {
     const job = object(raw);
     if (provider === "ashby") {
-      return Boolean(text(job.id) && text(job.title) && text(job.jobUrl));
+      return Boolean(text(job.id) && text(job.title) && /^https:\/\//.test(text(job.jobUrl)));
     }
     if (provider === "greenhouse") {
-      return Boolean(String(job.id ?? "").trim() && text(job.title) && text(job.absolute_url));
+      return Boolean(String(job.id ?? "").trim() && text(job.title) && /^https:\/\//.test(text(job.absolute_url)));
     }
     if (provider === "lever") {
-      return Boolean(text(job.id) && text(job.text) && text(job.hostedUrl || job.applyUrl));
+      return Boolean(text(job.id) && text(job.text) && /^https:\/\//.test(text(job.hostedUrl || job.applyUrl)));
     }
     if (provider === "recruitee") {
       return Boolean(
@@ -958,6 +971,15 @@ async function paceWorkableRequest() {
   release();
 }
 
+export async function paceCanonicalProviderRequest(
+  provider: AtsProvider,
+  fetcher: typeof fetch
+) {
+  if (provider === "workable" && fetcher === fetch) {
+    await paceWorkableRequest();
+  }
+}
+
 export async function fetchCanonicalBoard(
   provider: AtsProvider,
   boardId: string,
@@ -970,9 +992,7 @@ export async function fetchCanonicalBoard(
   if (provider === "smartrecruiters") {
     return fetchSmartRecruitersBoard(boardId, fetcher, timeoutMs);
   }
-  if (provider === "workable" && fetcher === fetch) {
-    await paceWorkableRequest();
-  }
+  await paceCanonicalProviderRequest(provider, fetcher);
   const response = await fetcher(canonicalEndpoint(provider, boardId), {
     headers: { "User-Agent": "OH-SHI/1.0 canonical-job-verifier" },
     signal: AbortSignal.timeout(timeoutMs),
@@ -1021,6 +1041,6 @@ export async function fetchCanonicalBoard(
   return {
     complete: true,
     jobs: normalizeProvider(provider, payload, boardId),
-    observedJobs: observedProviderJobs(provider, payload),
+    observedJobs: observedProviderJobs(provider, payload, boardId),
   };
 }

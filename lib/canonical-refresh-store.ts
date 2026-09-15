@@ -4,8 +4,10 @@ import {
 } from "./ats-adapters";
 import { STRUCTURED_CAREER_ADAPTER_VERSION } from "./structured-career-page";
 import {
+  changeEventId,
   planCanonicalClosures,
   snapshotFingerprint,
+  stableIdentityHash,
 } from "./ingestion-core";
 import {
   normalizeCanonicalJobUrl,
@@ -36,15 +38,17 @@ export type SourceRefreshResult = {
 };
 
 function stableJobId(source: CanonicalCompanySource, externalId: string) {
+  const identity = `${source.provider}\u0000${source.boardId}\u0000${externalId}`;
   const safe = `${source.provider}_${source.boardId}_${externalId}`
-    .toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 180);
-  return `job_${safe}`;
+    .replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 140);
+  return `job_${safe}_${stableIdentityHash(identity)}`;
 }
 
 function observationId(source: CanonicalCompanySource, externalId: string) {
+  const identity = `${source.provider}\u0000${source.id}\u0000${externalId}`;
   const safe = `${source.provider}_${source.id}_${externalId}`
-    .toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 180);
-  return `observation_${safe}`;
+    .replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 130);
+  return `observation_${safe}_${stableIdentityHash(identity)}`;
 }
 
 // D1 limits each Worker invocation to 1000 queries; a single canonical board
@@ -77,6 +81,7 @@ export async function persistCanonicalSource(
   now: string,
   runId: string
 ): Promise<SourceRefreshResult> {
+  if (!Number.isFinite(Date.parse(now))) throw new Error("Refresh time must be ISO-8601.");
   type ObservationRow = {
     id: string;
     jobId: string;
@@ -148,8 +153,9 @@ export async function persistCanonicalSource(
       database.prepare(`UPDATE company_sources SET last_attempted_at=?, last_error=?,
         consecutive_failures=consecutive_failures+1,
         discovery_status='quarantined', quarantine_snapshot_id=?,
-        quarantine_application_id=NULL WHERE id=?`)
-        .bind(now, error, snapshotId, source.id),
+        quarantine_application_id=NULL WHERE id=?
+        AND (last_attempted_at IS NULL OR last_attempted_at <= ?)`)
+        .bind(now, error, snapshotId, source.id, now),
     ]);
     return {
       sourceId: source.id,
@@ -167,12 +173,20 @@ export async function persistCanonicalSource(
   }
 
   const statements: D1PreparedStatement[] = [snapshotStatement];
+  type CanonicalMaterial = CanonicalJobCandidate & {
+    roleFamily: string;
+    remoteStatus: string;
+    compensation: string;
+    lastVerifiedAt: string;
+  };
   const canonical = await database.prepare(`SELECT id, company_id as companyId,
     provider, source_id as sourceId, external_id as externalId,
     canonical_url as canonicalUrl, title, location, employment_type as employmentType,
-    summary, published_at as publishedAt, status FROM jobs WHERE company_id=?`)
+    role_family as roleFamily, remote_status as remoteStatus, compensation,
+    summary, published_at as publishedAt, status, last_verified_at as lastVerifiedAt
+    FROM jobs WHERE company_id=?`)
     .bind(source.companyId)
-    .all<CanonicalJobCandidate>();
+    .all<CanonicalMaterial>();
   const canonicalById = new Map(canonical.results.map((item) => [item.id, item]));
   const candidates = [...canonical.results];
   for (const observation of observations.results) {
@@ -201,6 +215,7 @@ export async function persistCanonicalSource(
       );
     const id = match?.jobId || stableJobId(source, job.externalId);
     const primary = canonicalById.get(id);
+    if (primary && primary.lastVerifiedAt > now) continue;
     const wasOpen = primary?.status === "verified_open";
     const ownsCanonical = primary &&
       primary.provider === source.provider &&
@@ -223,7 +238,7 @@ export async function persistCanonicalSource(
           discoveryChannelFor(source.provider), job.canonicalUrl,
           parserVersionFor(source.provider), runId, job.summary
         ));
-      const added: CanonicalJobCandidate = {
+      const added: CanonicalMaterial = {
         id,
         companyId: source.companyId,
         provider: source.provider,
@@ -236,20 +251,43 @@ export async function persistCanonicalSource(
         summary: job.summary,
         publishedAt: job.publishedAt,
         status: "verified_open",
+        roleFamily: job.roleFamily,
+        remoteStatus: job.remoteStatus,
+        compensation: job.compensation,
+        lastVerifiedAt: now,
       };
       canonicalById.set(id, added);
       candidates.push(added);
     } else if (ownsCanonical) {
+      const materialBefore = [primary.title, primary.roleFamily, primary.location,
+        primary.remoteStatus, primary.employmentType, primary.compensation,
+        primary.canonicalUrl, primary.summary];
+      const materialAfter = [job.title, job.roleFamily, job.location,
+        job.remoteStatus, job.employmentType, job.compensation,
+        job.canonicalUrl, job.summary];
+      if (materialBefore.some((value, index) => value !== materialAfter[index])) {
+        const changed = ["title", "roleFamily", "location", "remoteStatus",
+          "employmentType", "compensation", "canonicalUrl", "summary"]
+          .filter((_, index) => materialBefore[index] !== materialAfter[index]);
+        statements.push(database.prepare(`INSERT OR IGNORE INTO changes (
+          id, entity_type, entity_id, change_type, title, description, occurred_at, source_url
+        ) VALUES (?, 'job', ?, 'job_updated', ?, ?, ?, ?)`).bind(
+          changeEventId("update", id, `${runId}\u0000${materialAfter.join("\u0000")}`),
+          id, `${job.title} updated`, `Material fields changed: ${changed.join(", ")}.`,
+          now, job.canonicalUrl
+        ));
+      }
       statements.push(database.prepare(`UPDATE jobs SET title=?, role_family=?,
         location=?, remote_status=?, employment_type=?, compensation=?,
         canonical_url=?, status='verified_open', last_seen_at=?,
-        source_updated_at=COALESCE(?, source_updated_at),
+        source_updated_at=CASE WHEN ? IS NULL THEN source_updated_at
+          WHEN source_updated_at IS NULL OR ? > source_updated_at THEN ? ELSE source_updated_at END,
         published_at=COALESCE(published_at, ?), last_verified_at=?, closed_at=NULL,
         raw_url=?, discovery_channel=?, evidence_url=?, parser_version=?,
         snapshot_run_id=?, summary=? WHERE id=?`).bind(
           job.title, job.roleFamily, job.location, job.remoteStatus,
           job.employmentType, job.compensation, job.canonicalUrl, now,
-          job.publishedAt, job.publishedAt, now, job.canonicalUrl,
+          job.publishedAt, job.publishedAt, job.publishedAt, job.publishedAt, now, job.canonicalUrl,
           discoveryChannelFor(source.provider), job.canonicalUrl,
           parserVersionFor(source.provider), runId, job.summary, id
         ));
@@ -299,7 +337,7 @@ export async function persistCanonicalSource(
       statements.push(database.prepare(`INSERT OR IGNORE INTO changes (
         id, entity_type, entity_id, change_type, title, description, occurred_at, source_url
       ) VALUES (?, 'job', ?, 'job_opened', ?, ?, ?, ?)`).bind(
-        `change_open_${id}_${now.slice(0, 10)}`, id, `${job.title} opened`,
+        changeEventId("open", id, runId), id, `${job.title} opened`,
         `Canonical ${source.provider} posting verified open.`, now, job.canonicalUrl
       ));
     }
@@ -374,7 +412,28 @@ export async function persistCanonicalSource(
       SET status='verified_closed', closed_at=?, last_verified_at=?
       WHERE provider=? AND source_id=? AND external_id=?`)
       .bind(now, now, source.provider, source.id, job.externalId));
-    if ((activeAfterRefresh.get(job.id) || 0) > 0 || canonicalClosures.has(job.id)) continue;
+    if ((activeAfterRefresh.get(job.id) || 0) > 0) {
+      const preferred = observations.results
+        .filter((item) => {
+          const key = `${item.provider}\n${item.sourceId}\n${item.externalId}`;
+          return item.jobId === job.id && item.status === "verified_open" &&
+            !closingObservationKeys.has(key);
+        })
+        .sort((left, right) =>
+          `${left.provider}:${left.sourceId}:${left.externalId}`.localeCompare(
+            `${right.provider}:${right.sourceId}:${right.externalId}`
+          )
+        )[0];
+      if (preferred) {
+        statements.push(database.prepare(`UPDATE jobs SET provider=?, source_id=?,
+          external_id=?, canonical_url=?, source=?, raw_url=?, evidence_url=? WHERE id=?`)
+          .bind(preferred.provider, preferred.sourceId, preferred.externalId,
+            preferred.canonicalUrl, preferred.provider, preferred.canonicalUrl,
+            preferred.canonicalUrl, job.id));
+      }
+      continue;
+    }
+    if (canonicalClosures.has(job.id)) continue;
     canonicalClosures.add(job.id);
     closed += 1;
     statements.push(database.prepare(`UPDATE jobs SET status='verified_closed',
@@ -384,7 +443,7 @@ export async function persistCanonicalSource(
       id, entity_type, entity_id, change_type, title, description, occurred_at, source_url
     ) SELECT ?, 'job', id, 'job_closed', title || ' closed', ?,
       ?, canonical_url FROM jobs WHERE id=?`).bind(
-      `change_close_${job.id}_${now.slice(0, 10)}`,
+      changeEventId("close", job.id, runId),
       source.provider === "structured"
         ? "First-party career source omitted this role in two clean snapshots 24–48 hours apart."
         : `Canonical ${source.provider} source no longer lists this role.`,
@@ -393,10 +452,13 @@ export async function persistCanonicalSource(
     ));
   }
 
-  statements.push(database.prepare(`UPDATE company_sources SET last_attempted_at=?,
-    last_successful_at=?, last_error=NULL, consecutive_failures=0,
+  statements.push(database.prepare(`UPDATE company_sources SET
+    last_attempted_at=CASE WHEN last_attempted_at IS NULL OR ? > last_attempted_at THEN ? ELSE last_attempted_at END,
+    last_successful_at=CASE WHEN last_successful_at IS NULL OR ? > last_successful_at THEN ? ELSE last_successful_at END,
+    last_error=NULL, consecutive_failures=0,
     discovery_status='active', quarantine_snapshot_id=NULL,
-    quarantine_application_id=NULL WHERE id=?`).bind(now, now, source.id));
+    quarantine_application_id=NULL WHERE id=? AND (last_attempted_at IS NULL OR last_attempted_at <= ?)`)
+    .bind(now, now, now, now, source.id, now));
   await batchInChunks(database, statements);
   return {
     sourceId: source.id,
@@ -432,7 +494,9 @@ export async function persistCanonicalFailure(
   const quarantineReason = unsafeSnapshotReason(error);
   if (!quarantineReason) {
     await database.prepare(`UPDATE company_sources SET last_attempted_at=?, last_error=?,
-      consecutive_failures=consecutive_failures+1 WHERE id=?`).bind(now, message, source.id).run();
+      consecutive_failures=consecutive_failures+1 WHERE id=?
+      AND (last_attempted_at IS NULL OR last_attempted_at <= ?)`)
+      .bind(now, message, source.id, now).run();
     return {
       sourceId: source.id,
       companyId: source.companyId,
@@ -474,8 +538,9 @@ export async function persistCanonicalFailure(
     database.prepare(`UPDATE company_sources SET last_attempted_at=?, last_error=?,
       consecutive_failures=consecutive_failures+1,
       discovery_status='quarantined', quarantine_snapshot_id=?,
-      quarantine_application_id=NULL WHERE id=?`)
-      .bind(now, message, snapshotId, source.id),
+      quarantine_application_id=NULL WHERE id=?
+      AND (last_attempted_at IS NULL OR last_attempted_at <= ?)`)
+      .bind(now, message, snapshotId, source.id, now),
   ]);
   return {
     sourceId: source.id,

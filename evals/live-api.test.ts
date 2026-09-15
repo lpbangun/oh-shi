@@ -3,7 +3,7 @@ import test from "node:test";
 
 const base =
   process.env.OH_SHI_BASE_URL ||
-  "https://oh-shi-intelligence.logsam-fans-triple3.chatgpt.site";
+  "https://ohshi.work";
 
 const delay = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -17,6 +17,11 @@ async function get(path: string) {
         signal: AbortSignal.timeout(15_000),
       });
       assert.equal(response.status, 200, `${path} must return 200`);
+      const contentType = response.headers.get("content-type") || "";
+      if (path !== "/") {
+        assert.doesNotMatch(contentType, /text\/html/i,
+          `${path} must not return a managed-challenge HTML page`);
+      }
       return response;
     } catch (error) {
       lastError = error;
@@ -65,6 +70,28 @@ test("preferred intelligence endpoint advertises all supported views", async () 
     "movements",
     "sectors",
   ]);
+});
+
+test("stable agent surfaces honor conditional requests", async () => {
+  for (const path of [
+    "/llms.txt",
+    "/api/v1/intelligence",
+    "/api/v1/coverage",
+    "/api/v1/jobs?limit=1",
+    "/api/v1/changes?limit=1",
+  ]) {
+    const first = await get(path);
+    const entityTag = first.headers.get("etag");
+    assert.ok(entityTag, `${path} must return ETag`);
+    const second = await fetch(`${base}${path}`, {
+      headers: {
+        "If-None-Match": entityTag,
+        "User-Agent": "OH-SHI-Evals/1.1",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    assert.equal(second.status, 304, `${path} must honor If-None-Match`);
+  }
 });
 
 test("live job records are recently verified and preserve canonical context", async () => {

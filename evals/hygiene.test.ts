@@ -47,7 +47,7 @@ test("Sites configuration is bound to the public project and D1", async () => {
   assert.equal(hosting.r2, null);
 });
 
-test("homepage cold starts avoid database write storms and cache rendered documents", async () => {
+test("homepage cold starts avoid write storms and defer the full job index", async () => {
   const data = await read("lib/data.ts");
   const homepage = await read("app/page.tsx");
   const worker = await read("worker/index.ts");
@@ -60,11 +60,15 @@ test("homepage cold starts avoid database write storms and cache rendered docume
   assert.match(homepage, /getHomepageData\(\)/);
   assert.doesNotMatch(homepage, /listJobs\(true\)/);
   assert.match(data, /const dashboardJobColumns/);
+  assert.match(data, /export async function listDashboardJobs/);
+  assert.match(data, /listDashboardJobs\(100\)/);
+  assert.match(data, /listMovementJobs\(since\)/);
+  assert.match(data, /listHomepageChanges\(since\)/);
+  assert.match(data, /getHomepageCoverageMetrics\(now\)/);
+  assert.match(homepage, /jobs\.slice\(0, HOMEPAGE_JOB_LIMIT\)/);
   assert.match(homepage, /changes\.slice\(0, HOMEPAGE_CHANGE_LIMIT\)/);
   assert.match(homepage, /movements\.slice\(0, HOMEPAGE_MOVEMENT_LIMIT\)/);
-  assert.match(worker, /__oh_shi_version/);
-  assert.match(worker, /edgeCache\.match\(cacheKey\)/);
-  assert.match(worker, /edgeCache\.put\(cacheKey, cacheable\.clone\(\)\)/);
+  assert.doesNotMatch(worker, /caches\.default/);
   assert.match(worker, /max-age=0, s-maxage=300/);
   assert.match(worker, /request\.headers\.get\("rsc"\) !== "1"/);
 });
@@ -85,8 +89,8 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   const pkg = JSON.parse(await read("package.json"));
   const workflow = await read(".github/workflows/ci.yml");
 
-  assert.equal(pkg.dependencies.next, "16.2.12");
-  assert.equal(pkg.devDependencies["eslint-config-next"], "16.2.12");
+  assert.equal(pkg.dependencies.next, "16.3.3");
+  assert.equal(pkg.devDependencies["eslint-config-next"], "16.3.3");
   assert.equal(pkg.packageManager, "pnpm@11.17.0");
   assert.ok(pkg.devDependencies["@playwright/test"]);
   assert.ok(pkg.devDependencies["@axe-core/playwright"]);
@@ -119,8 +123,9 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(workflow, /steps\.directory_sync\.outcome == 'failure'/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
   assert.match(refreshRunner, /Preflight failed/);
-  assert.match(refreshRunner, /refresh_run/);
-  assert.match(refreshRunner, /lastVerifiedAt/);
+  assert.match(refreshRunner, /new URL\("\/api\/v1\/coverage"/);
+  assert.match(refreshRunner, /verifiedCoverageTimestamp/);
+  assert.doesNotMatch(refreshRunner, /refresh_run/);
   assert.match(refreshRunner, /source_counts/);
   assert.match(refreshClient, /Idempotency-Key/);
   assert.match(refreshRunner, /runVersionedRefresh/);
@@ -130,21 +135,26 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(refreshRunner, /Company growth warning/);
   assert.match(homepage, /verified every two hours/);
   assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 2\)/);
+  assert.match(ticker, /Math\.max\(180, ranked\.length \* 12\)/);
+  assert.match(ticker, /Pause live ticker/);
   assert.match(readme, /minute 30 every two hours/);
   assert.doesNotMatch(homepage, /once a day|verified every day/);
 });
 
 test("terminal review candidates cannot starve newly discovered queue work", async () => {
-  const discovery = await read("lib/discovery.ts");
+  const [discovery, policy] = await Promise.all([
+    read("lib/discovery.ts"),
+    read("lib/discovery-policy.ts"),
+  ]);
   const review = await read("lib/discovery-review.ts");
-  assert.match(discovery, /q\.status IN \('discovered','canonical_source_found'\)/);
+  assert.match(policy, /status IN \('discovered','canonical_source_found'\)/);
   assert.doesNotMatch(
-    discovery,
-    /q\.status IN \('discovered','needs_review','canonical_source_found'\)/
+    policy,
+    /status IN \('discovered','needs_review','canonical_source_found'\)/
   );
   assert.match(discovery, /discovery_cursor as discoveryCursor/);
-  assert.match(discovery, /discovery_candidate_reviews review/);
-  assert.match(discovery, /review\.status NOT IN \('rejected','activated'\)/);
+  assert.match(policy, /discovery_candidate_reviews active_review/);
+  assert.match(policy, /active_review\.status NOT IN \('rejected','activated'\)/);
   assert.match(review, /activation: "none"/);
   assert.match(review, /publication: "none"/);
   assert.match(review, /canonical_board_changed_since_review/);
@@ -261,7 +271,7 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
   assert.match(canonicalRefreshStore, /status === "quarantined"/);
   assert.match(canonicalRefreshStore, /discovery_status='quarantined'/);
   assert.match(canonicalRefreshStore, /canonical_source_snapshots/);
-  assert.match(canonicalRefreshStore, /last_successful_at=\?, last_error=NULL/);
+  assert.match(canonicalRefreshStore, /last_successful_at=CASE[\s\S]+?last_error=NULL/);
   for (const table of [
     "canonical_snapshot_members",
     "canonical_snapshot_applications",

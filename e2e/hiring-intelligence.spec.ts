@@ -70,6 +70,20 @@ test.describe("desktop hiring intelligence", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  test("live ticker moves slowly and can be paused", async ({ page }) => {
+    const ticker = page.getByRole("region", { name: "Live hiring activity" });
+    const duration = await ticker.locator(".ticker-track").evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).animationDuration)
+    );
+    expect(duration).toBeGreaterThanOrEqual(180);
+
+    const toggle = ticker.locator(".ticker-toggle");
+    await expect(toggle).toHaveAccessibleName("Pause live ticker");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).toHaveAccessibleName("Resume live ticker");
+  });
+
   test("filter menu Escape closes and restores focus", async ({ page }) => {
     const trigger = page.getByRole("button", { name: /^Location\b/i });
     await trigger.click();
@@ -128,6 +142,29 @@ test.describe("desktop hiring intelligence", () => {
     await expect(funding.locator(".movement-signal small")).toHaveText("hiring signal");
     await expect(funding.locator(".movement-source")).toHaveAttribute("href", /^https:\/\//);
     await expect(funding.locator(".movement-source")).toHaveAttribute("target", "_blank");
+  });
+
+  test("job search matches the API and survives reload and Back", async ({ page, request }) => {
+    const search = page.getByLabel("Search jobs");
+    await search.fill("engineer");
+    await expect(page).toHaveURL(/q=engineer/);
+    await expect(page.locator("#jobs .job-index-status")).not.toContainText("loading");
+    const browserIds = await page.locator("#jobs [data-job-id]").evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("data-job-id"))
+    );
+    const apiResponse = await request.get("/api/v1/intelligence?view=jobs&q=engineer&limit=50");
+    expect(apiResponse.status()).toBe(200);
+    const api = await apiResponse.json();
+    expect(browserIds).toEqual(api.data.map((job: { id: string }) => job.id));
+    await expect(page.locator("#jobs .pager-status")).toContainText(`of ${api.page.total}`);
+    await expect(page.locator("#jobs .posting-link").first()).toHaveAttribute("href", /^https:\/\//);
+
+    await page.reload();
+    await expect(search).toHaveValue("engineer");
+    await search.fill("designer");
+    await expect(page).toHaveURL(/q=designer/);
+    await page.goBack();
+    await expect(search).toHaveValue("engineer");
   });
 
   test("companies paginate ten at a time without duplicates", async ({ page }) => {

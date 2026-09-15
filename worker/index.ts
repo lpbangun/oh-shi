@@ -2,8 +2,6 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 
-declare const __DEPLOYED_SHA__: string;
-
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
@@ -30,6 +28,24 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const isPublicAgentRoute =
+      url.pathname === "/llms.txt" ||
+      url.pathname === "/agent-policy.json" ||
+      url.pathname === "/robots.txt" ||
+      url.pathname.startsWith("/api/v1/") ||
+      url.pathname.startsWith("/exports/");
+
+    if (request.method === "OPTIONS" && isPublicAgentRoute) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+          "Access-Control-Allow-Headers": "Cache-Control, If-None-Match",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -49,51 +65,28 @@ const worker = {
       request.headers.get("accept")?.includes("text/html") &&
       request.headers.get("rsc") !== "1";
 
-    if (isHomepageDocument) {
-      // Some Sites deployments do not grant access to Cloudflare's global
-      // default cache. Treat that optional optimization as unavailable and
-      // render normally instead of allowing it to take down the homepage.
-      try {
-        const edgeCache = (caches as unknown as { default: Cache }).default;
-        const cacheUrl = new URL(request.url);
-        cacheUrl.searchParams.set("__oh_shi_version", __DEPLOYED_SHA__);
-        // The rendered public document is independent of browser-specific
-        // Accept/Vary headers. A canonical internal key prevents needless cache
-        // fragmentation while the deploy SHA keeps releases isolated.
-        const cacheKey = new Request(cacheUrl.toString(), {
-          headers: { accept: "text/html" },
-        });
-        const cached = await edgeCache.match(cacheKey);
-        if (cached) {
-          const headers = new Headers(cached.headers);
-          headers.set("x-oh-shi-cache", "HIT");
-          return new Response(cached.body, {
-            status: cached.status,
-            statusText: cached.statusText,
-            headers,
-          });
-        }
-
-        const response = await handler.fetch(request, env, ctx);
-        if (response.ok) {
-          const headers = new Headers(response.headers);
-          headers.set("cache-control", "public, max-age=0, s-maxage=300");
-          headers.set("x-oh-shi-cache", "MISS");
-          const cacheable = new Response(response.body, {
-            status: response.status,
-            statusText: response.statusText,
-            headers,
-          });
-          ctx.waitUntil(edgeCache.put(cacheKey, cacheable.clone()).catch(() => undefined));
-          return cacheable;
-        }
-        return response;
-      } catch {
-        return handler.fetch(request, env, ctx);
-      }
+    let response = await handler.fetch(request, env, ctx);
+    if (isPublicAgentRoute) {
+      const headers = new Headers(response.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Access-Control-Expose-Headers", "ETag, Content-Disposition");
+      response = new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
     }
+    if (!isHomepageDocument || !response.ok) return response;
 
-    return handler.fetch(request, env, ctx);
+    // Sites Workers cannot access the edge Cache API. Advertise shared freshness
+    // without making rendering depend on an unavailable runtime capability.
+    const headers = new Headers(response.headers);
+    headers.set("cache-control", "public, max-age=0, s-maxage=300");
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   },
 };
 

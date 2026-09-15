@@ -37,7 +37,10 @@ Also inspect the README links and image, the first viewport at desktop and
    and forward-only; never replace or recreate the production D1 database.
 4. Deploy the exact reviewed source revision.
 5. Check `/api/v1/coverage` and confirm existing company and job counts remain
-   present.
+   present. Confirm each discovery population reconciles
+   (`eligibleForPromotion + permissionExcluded = registry.promotionUniverse` and
+   `autoEligible + permissionExcluded = queue.total`) and that deferred retries
+   are not included in `readyToProcess`.
 6. Smoke-test the homepage, one company page, one job page,
    `/api/v1/intelligence`, `/exports/jobs.jsonl`, and `/llms.txt`.
 7. Trigger one canonical refresh and inspect its freshness receipt. Treat any

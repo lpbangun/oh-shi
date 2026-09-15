@@ -1,3 +1,5 @@
+import { conditionalResponse } from "@/lib/conditional-cache";
+
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const body = `# OH SHI - Startup Hiring Intelligence
@@ -37,9 +39,35 @@ invalid values, and malformed cursors return HTTP 400 rather than silently retur
 unfiltered data. Pass page.next_cursor unchanged with the same view and filters.
 Company pages default to 10 records; movement pages default to 25.
 Default job results use one shared deterministic company-diverse ranked
-round-robin order across the preferred and compatibility APIs.
+round-robin order across the browser, preferred API, and compatibility API.
+Job queries default to status=verified_open, execute in D1, and return page.total
+for the complete matching dataset. Supported job sorts are signal, title,
+title_desc, company, company_desc, sector, dept, loc, comp_low, comp_high,
+recent, and oldest; every order has a stable job-id tie-breaker.
+The compatibility /api/v1/jobs endpoint is bounded to 100 records per response
+(100 by default). Use its cursor or, preferably, the incremental flow below; do
+not plan for a whole-dataset response.
 The after movement filter is exclusive; use the exact ISO-8601 boundary you want
 excluded.
+
+Capability availability is live data, not a promise that a configured surface
+currently contains records. Read data.capabilityAvailability from /api/v1/coverage
+or data.availability on the signal endpoints. An unavailable investor filter has
+no published permitted relationships and will return no matches; dormant means a
+pipeline is configured but currently publishes zero qualifying records.
+Stable public representations include an ETag. Send If-None-Match with the saved
+ETag; an unchanged representation returns HTTP 304 without retransmitting its body.
+Coverage also separates the discovery registry from the operational queue in
+data.discoveryFunnel. The registry's eligibleForPromotion and permissionExcluded
+reconcile to promotionUniverse; the queue's autoEligible and permissionExcluded
+reconcile to queue.total. Permission-excluded candidates are never fetched
+automatically. eligibleNeverQueued and eligibleQueued partition permitted registry
+work. readyToProcess mirrors permission, review, version, and retry-time gates;
+reviewGated, retryDue, and retryDeferred expose held work. queue.outcomes contains
+normalized outcomes only for auto-eligible candidates, while needsReviewReasons retains bounded
+operator diagnostics without exposing company or domain identities.
+Protected operator review is an explicit manual workflow and is not the automatic
+discovery processor.
 
 ## Natural-language request recipes
 - "Open remote Operations jobs":
@@ -63,6 +91,29 @@ Funding movements use a separate daily discovery process, remain standalone comp
 movements, and always include a navigable official-company or reputable-publication source URL.
 The affected company's directional score is recomputed when newer funding is published.
 
+## Incremental job synchronization
+1. Run an initial jobs query and store its incremental.after value together with
+   your search filters. That value is captured before the query, so a concurrent
+   change may be replayed but cannot be skipped.
+2. Call incremental.changes_url. The feed is ordered by the exclusive tuple
+   (occurredAt, id), returns at most 100 events, and supplies page.next_cursor.
+3. Pass that cursor unchanged as /api/v1/changes?cursor=... until page.has_more is
+   false. Persist the returned cursor only after durably applying the whole page.
+4. For job_opened, job_updated, and job_closed, fetch /api/v1/jobs/:entityId and
+   re-evaluate the original filters. Insert/update a matching record; remove it from
+   that filtered result when it no longer matches. Closed jobs remain fetchable.
+
+Retries are safe: replay the same cursor until the whole page commits locally and
+deduplicate by event id. Events that share occurredAt are not skipped because id is
+part of the checkpoint. HTTP 410 checkpoint_expired means retained history no longer
+covers the checkpoint; discard the local checkpoint, run a fresh initial jobs query,
+and resume from its new incremental.after value.
+
+Timestamp meanings: firstSeenAt is Oh Shi's first observation; lastSeenAt is the most
+recent complete source observation; sourceUpdatedAt is a source-provided update time
+when available; lastVerifiedAt is Oh Shi's successful canonical verification time;
+closedAt is the confirmed closure time; occurredAt is the event observation time.
+
 ## Compatibility and bulk endpoints
 - Companies: ${origin}/api/v1/companies
 - Jobs: ${origin}/api/v1/jobs
@@ -74,7 +125,8 @@ The affected company's directional score is recomputed when newer funding is pub
 - Job JSONL: ${origin}/exports/jobs.jsonl
 - Daily changes export: ${origin}/exports/daily-changes.json
 
-Job states are verified_open or verified_closed. Treat canonicalUrl as the
+Job states are verified_open or verified_closed; collection queries default to open.
+Treat canonicalUrl as the
 application source. Job provenance includes rawUrl, evidenceUrl, discoveryChannel,
 parserVersion, snapshotRunId, firstSeenAt, lastSeenAt, sourceUpdatedAt, and
 lastVerifiedAt. linkedInPresenceState is confirmed, not_observed, or unknown;
@@ -91,5 +143,9 @@ employer or documented public-ATS source. They remain part of the canonical job
 count and are listed with their original evidence at /api/v1/off-board-openings.
 Software license: MIT. Project-owned factual exports: CC BY 4.0. Third-party source rights remain with their owners.
 `;
-  return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+  return conditionalResponse(request, body, {
+    contentType: "text/plain; charset=utf-8",
+    cacheControl: "public, max-age=3600",
+    validator: body,
+  });
 }

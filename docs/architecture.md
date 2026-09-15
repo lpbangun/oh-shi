@@ -36,9 +36,10 @@ flowchart LR
   ROUTES --> AGENTS["JSON, JSONL, and llms.txt"]
 ```
 
-The public site and public APIs read the same D1 records. The human interface
-does not have a separate copy of the data, so a person and an agent see the
-same canonical job state, timestamps, evidence URLs, and score receipts.
+The public site and public APIs use the same bounded D1 job-search query. Filters,
+sorts, totals, open-by-default behavior, and stable tie-breakers therefore agree;
+the browser does not download a separate full job index. People and agents see
+the same canonical job state, timestamps, evidence URLs, and score receipts.
 
 ## Refresh lifecycle
 
@@ -107,7 +108,11 @@ sequenceDiagram
 
 The preferred intelligence endpoint supports the `jobs`, `companies`,
 `movements`, and `sectors` views. Compatibility endpoints and JSONL exports use
-the same underlying data functions and deterministic ordering.
+the same underlying data functions and deterministic ordering. Incremental job
+consumers start from the receipt on an initial job query, then advance through
+bounded `/api/v1/changes` pages using the exclusive `(occurredAt, id)` checkpoint.
+Material updates, openings, and confirmed closures all produce stable events;
+expired checkpoints return HTTP 410 and require a fresh initial query.
 
 ## Main code paths
 

@@ -1,6 +1,7 @@
 import {
   REFRESH_CONTRACT_VERSION,
   runVersionedRefresh,
+  verifiedCoverageTimestamp,
 } from "../lib/refresh-client.mjs";
 
 const baseUrlValue = process.env.OH_SHI_BASE_URL?.trim();
@@ -57,24 +58,20 @@ async function verifyFreshness(refreshedAt) {
   let lastReason = "No response received.";
   for (let attempt = 1; attempt <= 6; attempt += 1) {
     try {
-      const url = new URL("/api/v1/jobs", baseUrl);
-      url.searchParams.set("include_closed", "true");
-      url.searchParams.set("refresh_run", `${runKey}-${attempt}`);
+      const url = new URL("/api/v1/coverage", baseUrl);
       const response = await fetchWithTimeout(url, {
-        headers: { "User-Agent": `OH-SHI-GitHub-Refresh/${REFRESH_CONTRACT_VERSION}` },
+        headers: {
+          "Cache-Control": "no-cache",
+          "User-Agent": `OH-SHI-GitHub-Refresh/${REFRESH_CONTRACT_VERSION}`,
+        },
       });
       if (!response.ok) {
-        lastReason = `jobs endpoint returned HTTP ${response.status}`;
+        lastReason = `coverage endpoint returned HTTP ${response.status}`;
       } else {
         const payload = await response.json();
-        const records = Array.isArray(payload.data) ? payload.data : [];
-        const freshRecords = records.filter(
-          (record) =>
-            typeof record.lastVerifiedAt === "string" &&
-            Date.parse(record.lastVerifiedAt) >= startedAt - 120_000
-        );
-        if (freshRecords.length > 0) return freshRecords.length;
-        lastReason = `${records.length} records returned, but none were freshly verified`;
+        const observedRefresh = verifiedCoverageTimestamp(payload, refreshedAt);
+        if (observedRefresh) return observedRefresh;
+        lastReason = `lastCanonicalRefresh was ${String(observedRefresh || "missing")}`;
       }
     } catch (error) {
       lastReason = error instanceof Error ? error.message : String(error);
@@ -86,7 +83,7 @@ async function verifyFreshness(refreshedAt) {
   );
 }
 
-const freshRecords = await verifyFreshness(result.canonical.refreshed_at);
+const verifiedRefresh = await verifyFreshness(result.canonical.refreshed_at);
 const discoveryCounts = result.discovery.source_counts;
 console.log(
   `Contract ${preflight.contract_version} at ${preflight.deployed_sha}; run ${result.run_key}.`
@@ -100,7 +97,7 @@ console.log(
 console.log(
   `Refresh verified ${result.canonical.successful_sources}/${result.canonical.boards} boards, ` +
     `${result.canonical.verified} roles checked, ${result.canonical.opened} opened, ` +
-    `${result.canonical.closed} closed, ${freshRecords} fresh API records.`
+    `${result.canonical.closed} closed; coverage confirms ${verifiedRefresh}.`
 );
 console.log(
   `Coverage: ${result.coverage.activeCompanies} companies with verified-open jobs; ` +
@@ -118,7 +115,7 @@ for (const source of result.source_receipts.discovery.filter((item) => item.stat
 }
 if (result.coverage.companyGrowthWarning) {
   console.warn(
-    `Company growth warning: below 50 active companies with ` +
-      `${result.coverage.consecutiveDaysWithoutCompanyGrowth} consecutive days without growth.`
+    `Company growth warning: ${result.coverage.pendingStartupDomains} pending registry domains and ` +
+      `${result.coverage.consecutiveDaysWithoutCompanyGrowth} consecutive days without company growth.`
   );
 }

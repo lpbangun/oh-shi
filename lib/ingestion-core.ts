@@ -196,6 +196,18 @@ export async function attemptWithFallback<T>(
   }
 }
 
-export function changeEventId(kind: "open" | "close", jobId: string, occurredAt: string) {
-  return `change_${kind}_${jobId}_${occurredAt.slice(0, 10)}`;
+export function stableIdentityHash(value: string) {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (const byte of new TextEncoder().encode(value)) {
+    first = Math.imul(first ^ byte, 0x01000193);
+    second = Math.imul(second ^ byte, 0x85ebca6b);
+  }
+  return `${(first >>> 0).toString(16).padStart(8, "0")}${
+    (second >>> 0).toString(16).padStart(8, "0")
+  }`;
+}
+
+export function changeEventId(kind: "open" | "close" | "update", jobId: string, revision: string) {
+  return `change_${kind}_${jobId}_${stableIdentityHash(revision)}`;
 }

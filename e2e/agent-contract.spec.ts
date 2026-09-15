@@ -15,6 +15,43 @@ type IntelligencePayload<T> = {
 };
 
 test.describe("unified agent contract", () => {
+  test("change feed is bounded, replayable, tuple-ordered, and expires stale checkpoints", async ({ request }) => {
+    const firstResponse = await request.get("/api/v1/changes?limit=2");
+    expect(firstResponse.status()).toBe(200);
+    const first = await firstResponse.json();
+    expect(first.data.length).toBeLessThanOrEqual(2);
+    expect(first.page.limit).toBe(2);
+    expect(first.page.next_cursor).toBeTruthy();
+    const firstTuples = first.data.map((event: { occurredAt: string; id: string }) =>
+      `${event.occurredAt}\u0000${event.id}`
+    );
+    expect(firstTuples).toEqual([...firstTuples].sort());
+
+    const nextUrl = `/api/v1/changes?limit=2&cursor=${encodeURIComponent(first.page.next_cursor)}`;
+    const [nextResponse, replayResponse] = await Promise.all([
+      request.get(nextUrl),
+      request.get(nextUrl),
+    ]);
+    expect(nextResponse.status()).toBe(200);
+    expect(replayResponse.status()).toBe(200);
+    const next = await nextResponse.json();
+    const replay = await replayResponse.json();
+    expect(replay.data).toEqual(next.data);
+    expect(next.data.some((event: { id: string }) =>
+      first.data.some((prior: { id: string }) => prior.id === event.id)
+    )).toBe(false);
+
+    const expired = `v1.${Buffer.from(JSON.stringify({
+      t: "1970-01-01T00:00:00.000Z",
+      i: "",
+    })).toString("base64url")}`;
+    const expiredResponse = await request.get(
+      `/api/v1/changes?cursor=${encodeURIComponent(expired)}`
+    );
+    expect(expiredResponse.status()).toBe(410);
+    expect((await expiredResponse.json()).error).toBe("checkpoint_expired");
+  });
+
   test("default job APIs share the company-diverse order", async ({ request }) => {
     const compatibilityResponse = await request.get("/api/v1/jobs");
     expect(compatibilityResponse.status()).toBe(200);
@@ -37,6 +74,20 @@ test.describe("unified agent contract", () => {
     expect(
       new Set(compatibility.data.slice(0, 4).map((job) => job.companyId)).size
     ).toBe(4);
+  });
+
+  test("compatibility endpoints fail closed on invalid pagination and booleans", async ({ request }) => {
+    for (const path of [
+      "/api/v1/jobs?cursor=v2.jobs.9999999",
+      "/api/v1/jobs?include_closed=bogus",
+      "/api/v1/jobs?cursor=v2.jobs.100&offset=100",
+      "/api/v1/changes?after=",
+      "/api/v1/changes?after=2026-07-01",
+    ]) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(400);
+      expect((await response.json()).error, path).toBe("invalid_request");
+    }
   });
 
   test("capabilities and llms.txt expose one deterministic entrypoint", async ({
@@ -246,10 +297,10 @@ test.describe("unified agent contract", () => {
           Boolean(job.provider) && Boolean(job.sourceId) && job.sourceId !== "legacy"
       )
     ).toBe(true);
-    expect(coverage.data.verifiedOpenJobs).toBe(openJobs.length);
-    expect(coverage.data.activeCompanies).toBe(
+    expect(coverage.data.verifiedOpenJobs).toBe(jobs.page.total);
+    expect(
       new Set(openJobs.map((job: { companyId: string }) => job.companyId)).size
-    );
+    ).toBeLessThanOrEqual(coverage.data.activeCompanies);
     expect(coverage.data.investors).toBeTruthy();
     expect(coverage.data.providers).toBeTruthy();
     expect(signalPayload.data.classification).toBe(

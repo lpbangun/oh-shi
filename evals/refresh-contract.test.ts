@@ -5,6 +5,7 @@ import {
   postRefresh,
   preflightRefresh,
   runVersionedRefresh,
+  verifiedCoverageTimestamp,
 } from "../lib/refresh-client.mjs";
 import {
   refreshEnvelope,
@@ -19,6 +20,20 @@ import {
 
 const REVISION_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const REVISION_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+test("post-refresh verification accepts only coverage at or after the completed refresh", () => {
+  const refreshedAt = "2026-09-15T18:00:00.000Z";
+  assert.equal(verifiedCoverageTimestamp({
+    data: { lastCanonicalRefresh: "2026-09-15T18:00:01.000Z" },
+  }, refreshedAt), "2026-09-15T18:00:01.000Z");
+  assert.equal(verifiedCoverageTimestamp({
+    data: { lastCanonicalRefresh: "2026-09-15T17:59:59.000Z" },
+  }, refreshedAt), null);
+  assert.equal(verifiedCoverageTimestamp({ data: {} }, refreshedAt), null);
+  assert.equal(verifiedCoverageTimestamp({
+    data: { lastCanonicalRefresh: "not-a-date" },
+  }, refreshedAt), null);
+});
 
 function validRefreshResponse(runKey: string, revision = REVISION_A) {
   return refreshEnvelope({
