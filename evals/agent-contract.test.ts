@@ -119,18 +119,27 @@ test("public capability surfaces report live availability and support conditiona
 });
 
 test("discovery backlog exposes actionable stages and rechecks stale detector results", async () => {
-  const [data, discovery, schema, migration] = await Promise.all([
+  const [data, discovery, policy, schema, migration, retryMigration] = await Promise.all([
     read("lib/data.ts"),
     read("lib/discovery.ts"),
+    read("lib/discovery-policy.ts"),
     read("db/schema.ts"),
     read("drizzle/0012_discovery_probe_version.sql"),
+    read("drizzle/0013_discovery_retry_outcomes.sql"),
   ]);
   assert.match(data, /eligibleNeverQueued/);
+  assert.match(data, /eligibleForPromotion/);
+  assert.match(data, /permissionExcluded/);
   assert.match(data, /staleNeedsReview/);
   assert.match(data, /needsReviewReasons/);
-  assert.match(discovery, /q\.status='needs_review'[\s\S]*discovery_version/);
+  assert.match(data, /outcomeCounts/);
+  assert.match(policy, /status='needs_review'[\s\S]*discovery_version/);
+  assert.match(policy, /permission_status='permitted'/);
+  assert.match(discovery, /discoveryRetryAt/);
   assert.match(schema, /discoveryVersion: text\("discovery_version"\)/);
+  assert.match(schema, /nextAttemptAt: text\("next_attempt_at"\)/);
   assert.match(migration, /ALTER TABLE discovery_queue ADD COLUMN discovery_version TEXT/);
+  assert.match(retryMigration, /ALTER TABLE discovery_queue ADD COLUMN last_outcome TEXT/);
 });
 
 test("canonical refresh is protected", async () => {

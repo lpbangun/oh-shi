@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { companyDiverseJobs } from "./derive";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
+import { discoveryPermissionSql, discoveryRunnableSql } from "./discovery-policy";
 import {
   buildStartupDomainPilot,
   careerFingerprint,
@@ -289,7 +290,8 @@ async function initializeDatabase() {
         'discovered','resolving','canonical_source_found','active',
         'needs_review','unsupported','rejected'
       )), first_discovered_at TEXT NOT NULL,
-      last_attempted_at TEXT, discovery_version TEXT, last_error TEXT,
+      last_attempted_at TEXT, discovery_version TEXT, last_outcome TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT, last_error TEXT,
       review_notes TEXT NOT NULL DEFAULT ''
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS discovery_queue_investors (
@@ -455,6 +457,23 @@ async function initializeDatabase() {
       "ALTER TABLE discovery_queue ADD COLUMN discovery_version TEXT"
     ).run();
   }
+  if (!discoveryQueueInfo.results.some((column) => column.name === "last_outcome")) {
+    await env.DB.prepare(
+      "ALTER TABLE discovery_queue ADD COLUMN last_outcome TEXT"
+    ).run();
+  }
+  if (!discoveryQueueInfo.results.some((column) => column.name === "attempt_count")) {
+    await env.DB.prepare(
+      "ALTER TABLE discovery_queue ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0"
+    ).run();
+  }
+  if (!discoveryQueueInfo.results.some((column) => column.name === "next_attempt_at")) {
+    await env.DB.prepare(
+      "ALTER TABLE discovery_queue ADD COLUMN next_attempt_at TEXT"
+    ).run();
+  }
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS discovery_queue_retry_idx
+    ON discovery_queue(status, next_attempt_at, first_discovered_at)`).run();
   const jobInfo = await env.DB.prepare("PRAGMA table_info(jobs)").all<{ name: string }>();
   const jobColumnNames = new Set(jobInfo.results.map((column) => column.name));
   if (!jobColumnNames.has("provider")) {
@@ -801,7 +820,8 @@ async function prepareDatabase() {
       EXISTS(SELECT discovery_cursor FROM investor_sources LIMIT 0) as investorsReady,
       EXISTS(SELECT quarantine_application_id FROM company_sources LIMIT 0) as sourcesReady,
       EXISTS(SELECT company_id FROM company_investors LIMIT 0) as companyInvestorsReady,
-      EXISTS(SELECT discovery_version FROM discovery_queue LIMIT 0) as discoveryReady,
+      EXISTS(SELECT discovery_version, last_outcome, attempt_count, next_attempt_at
+        FROM discovery_queue LIMIT 0) as discoveryReady,
       EXISTS(SELECT candidate_id FROM discovery_queue_investors LIMIT 0) as discoveryInvestorsReady,
       EXISTS(SELECT ready_count FROM discovery_review_batches LIMIT 0) as reviewBatchesReady,
       EXISTS(SELECT fingerprint FROM discovery_candidate_reviews LIMIT 0) as reviewsReady,
@@ -1392,7 +1412,10 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
   const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
   const sixHoursAgo = new Date(now.valueOf() - 6 * 3_600_000).toISOString();
-  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, sourceCoverage] =
+  const queuePermissionSql = discoveryPermissionSql("q");
+  const queueRunnableSql = discoveryRunnableSql("q");
+  const staleResolvingCutoff = new Date(now.valueOf() - 60 * 60 * 1_000).toISOString();
+  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, outcomeCounts, sourceCoverage] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
         FROM jobs WHERE status='verified_open'`).first<{ jobs: number; companies: number }>(),
@@ -1444,33 +1467,53 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         SUM(CASE WHEN review_status='verified' AND activity_state='active' THEN 1 ELSE 0 END)
           as verifiedActive,
         SUM(CASE WHEN review_status='rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN review_status='pending' AND company_id IS NULL THEN 1 ELSE 0 END)
+          as promotionUniverse,
+        SUM(CASE WHEN review_status='pending' AND company_id IS NULL
+          AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
+          WHERE evidence.canonical_domain=startup_domains.canonical_domain
+            AND evidence.permission_status='permitted') THEN 1 ELSE 0 END) as eligibleForPromotion,
+        SUM(CASE WHEN review_status='pending' AND company_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM startup_domain_evidence evidence
+          WHERE evidence.canonical_domain=startup_domains.canonical_domain
+            AND evidence.permission_status='permitted') THEN 1 ELSE 0 END) as permissionExcluded,
         SUM(CASE WHEN review_status='pending' AND company_id IS NULL
           AND NOT EXISTS (SELECT 1 FROM discovery_queue queue
             WHERE queue.normalized_domain=startup_domains.canonical_domain)
           AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
             WHERE evidence.canonical_domain=startup_domains.canonical_domain
               AND evidence.permission_status='permitted') THEN 1 ELSE 0 END)
-          as eligibleNeverQueued
+          as eligibleNeverQueued,
+        SUM(CASE WHEN review_status='pending' AND company_id IS NULL
+          AND EXISTS (SELECT 1 FROM discovery_queue queue
+            WHERE queue.normalized_domain=startup_domains.canonical_domain)
+          AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
+            WHERE evidence.canonical_domain=startup_domains.canonical_domain
+              AND evidence.permission_status='permitted') THEN 1 ELSE 0 END)
+          as eligibleQueued
         FROM startup_domains`).first<{
           total: number;
           pilot: number;
           pending: number;
           verifiedActive: number;
           rejected: number;
+          promotionUniverse: number;
+          eligibleForPromotion: number;
+          permissionExcluded: number;
           eligibleNeverQueued: number;
+          eligibleQueued: number;
         }>(),
       env.DB.prepare(`SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN (q.status IN ('discovered','canonical_source_found')
-          OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?))
-          AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
-            WHERE review.candidate_id=q.id
-              AND review.status NOT IN ('rejected','activated'))
-          THEN 1 ELSE 0 END) as readyToProcess,
+        SUM(CASE WHEN ${queuePermissionSql} THEN 1 ELSE 0 END) as autoEligible,
+        SUM(CASE WHEN NOT ${queuePermissionSql} THEN 1 ELSE 0 END) as permissionExcluded,
+        SUM(CASE WHEN ${queueRunnableSql} THEN 1 ELSE 0 END) as readyToProcess,
         SUM(CASE WHEN q.status='resolving' THEN 1 ELSE 0 END) as inProgress,
+        SUM(CASE WHEN q.status='discovered' THEN 1 ELSE 0 END) as discovered,
         SUM(CASE WHEN q.status='canonical_source_found' THEN 1 ELSE 0 END) as canonicalSourceFound,
         SUM(CASE WHEN q.status='needs_review' THEN 1 ELSE 0 END) as needsReview,
         SUM(CASE WHEN q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?
+          AND ${queuePermissionSql}
           AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
             WHERE review.candidate_id=q.id
               AND review.status NOT IN ('rejected','activated'))
@@ -1478,21 +1521,36 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         SUM(CASE WHEN q.status='active' THEN 1 ELSE 0 END) as active,
         SUM(CASE WHEN q.status='unsupported' THEN 1 ELSE 0 END) as unsupported,
         SUM(CASE WHEN q.status='rejected' THEN 1 ELSE 0 END) as rejected,
-        SUM(CASE WHEN q.last_attempted_at IS NULL THEN 1 ELSE 0 END) as neverAttempted,
-        MIN(CASE WHEN (q.status IN ('discovered','canonical_source_found')
-          OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?))
-          AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
+        SUM(CASE WHEN ${queuePermissionSql}
+          AND q.last_attempted_at IS NULL THEN 1 ELSE 0 END) as neverAttempted,
+        SUM(CASE WHEN ${queuePermissionSql}
+          AND EXISTS (SELECT 1 FROM discovery_candidate_reviews review
             WHERE review.candidate_id=q.id
-              AND review.status NOT IN ('rejected','activated'))
-          THEN first_discovered_at END) as oldestReadyAt
+              AND review.status NOT IN ('rejected','activated')) THEN 1 ELSE 0 END) as reviewGated,
+        SUM(CASE WHEN ${queuePermissionSql}
+          AND q.next_attempt_at IS NOT NULL AND q.next_attempt_at <= ?
+          AND q.status IN ('discovered','canonical_source_found') THEN 1 ELSE 0 END) as retryDue,
+        SUM(CASE WHEN ${queuePermissionSql}
+          AND q.next_attempt_at > ?
+          AND q.status IN ('discovered','canonical_source_found') THEN 1 ELSE 0 END) as retryDeferred,
+        MIN(CASE WHEN ${queueRunnableSql} THEN first_discovered_at END) as oldestReadyAt
         FROM discovery_queue q`).bind(
           DISCOVERY_PIPELINE_VERSION,
+          staleResolvingCutoff,
+          nowIso,
           DISCOVERY_PIPELINE_VERSION,
-          DISCOVERY_PIPELINE_VERSION
+          nowIso,
+          nowIso,
+          DISCOVERY_PIPELINE_VERSION,
+          staleResolvingCutoff,
+          nowIso
         ).first<{
           total: number;
+          autoEligible: number;
+          permissionExcluded: number;
           readyToProcess: number;
           inProgress: number;
+          discovered: number;
           canonicalSourceFound: number;
           needsReview: number;
           staleNeedsReview: number;
@@ -1500,12 +1558,20 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
           unsupported: number;
           rejected: number;
           neverAttempted: number;
+          reviewGated: number;
+          retryDue: number;
+          retryDeferred: number;
           oldestReadyAt: string | null;
         }>(),
       env.DB.prepare(`SELECT COALESCE(last_error, 'unspecified') as reason,
-        COUNT(*) as count FROM discovery_queue WHERE status='needs_review'
+        COUNT(*) as count FROM discovery_queue q WHERE status='needs_review'
+          AND ${queuePermissionSql}
         GROUP BY COALESCE(last_error, 'unspecified') ORDER BY count DESC, reason`)
         .all<{ reason: string; count: number }>(),
+      env.DB.prepare(`SELECT COALESCE(last_outcome, 'unattempted') as outcome,
+        COUNT(*) as count FROM discovery_queue q WHERE ${queuePermissionSql}
+        GROUP BY COALESCE(last_outcome, 'unattempted') ORDER BY count DESC, outcome`)
+        .all<{ outcome: string; count: number }>(),
       env.DB.prepare(`SELECT
         COUNT(*) as configured,
         SUM(CASE WHEN discovery_status='active' AND last_error IS NULL
@@ -1572,12 +1638,19 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         pending: Number(registry?.pending || 0),
         verifiedActive: Number(registry?.verifiedActive || 0),
         rejected: Number(registry?.rejected || 0),
+        promotionUniverse: Number(registry?.promotionUniverse || 0),
+        eligibleForPromotion: Number(registry?.eligibleForPromotion || 0),
+        permissionExcluded: Number(registry?.permissionExcluded || 0),
         eligibleNeverQueued: Number(registry?.eligibleNeverQueued || 0),
+        eligibleQueued: Number(registry?.eligibleQueued || 0),
       },
       queue: {
         total: Number(discoveryQueue?.total || 0),
+        autoEligible: Number(discoveryQueue?.autoEligible || 0),
+        permissionExcluded: Number(discoveryQueue?.permissionExcluded || 0),
         readyToProcess: Number(discoveryQueue?.readyToProcess || 0),
         inProgress: Number(discoveryQueue?.inProgress || 0),
+        discovered: Number(discoveryQueue?.discovered || 0),
         canonicalSourceFound: Number(discoveryQueue?.canonicalSourceFound || 0),
         needsReview: Number(discoveryQueue?.needsReview || 0),
         staleNeedsReview: Number(discoveryQueue?.staleNeedsReview || 0),
@@ -1585,6 +1658,12 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         unsupported: Number(discoveryQueue?.unsupported || 0),
         rejected: Number(discoveryQueue?.rejected || 0),
         neverAttempted: Number(discoveryQueue?.neverAttempted || 0),
+        reviewGated: Number(discoveryQueue?.reviewGated || 0),
+        retryDue: Number(discoveryQueue?.retryDue || 0),
+        retryDeferred: Number(discoveryQueue?.retryDeferred || 0),
+        outcomes: Object.fromEntries(
+          outcomeCounts.results.map((item) => [item.outcome, Number(item.count)])
+        ),
       },
       needsReviewReasons: Object.fromEntries(
         reviewReasons.results.map((item) => [item.reason, Number(item.count)])

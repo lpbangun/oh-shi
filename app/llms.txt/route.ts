@@ -58,10 +58,16 @@ pipeline is configured but currently publishes zero qualifying records.
 Stable public representations include an ETag. Send If-None-Match with the saved
 ETag; an unchanged representation returns HTTP 304 without retransmitting its body.
 Coverage also separates the discovery registry from the operational queue in
-data.discoveryFunnel. eligibleNeverQueued is permitted registry work awaiting
-promotion; readyToProcess mirrors the automatic processor; staleNeedsReview is
-eligible for one re-check under the published pipelineVersion; needsReviewReasons
-shows terminal-review pressure without exposing company or domain identities.
+data.discoveryFunnel. The registry's eligibleForPromotion and permissionExcluded
+reconcile to promotionUniverse; the queue's autoEligible and permissionExcluded
+reconcile to queue.total. Permission-excluded candidates are never fetched
+automatically. eligibleNeverQueued and eligibleQueued partition permitted registry
+work. readyToProcess mirrors permission, review, version, and retry-time gates;
+reviewGated, retryDue, and retryDeferred expose held work. queue.outcomes contains
+normalized outcomes only for auto-eligible candidates, while needsReviewReasons retains bounded
+operator diagnostics without exposing company or domain identities.
+Protected operator review is an explicit manual workflow and is not the automatic
+discovery processor.
 
 ## Natural-language request recipes
 - "Open remote Operations jobs":

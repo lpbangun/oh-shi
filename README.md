@@ -102,6 +102,13 @@ matching total in `page.total`.
 | [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Daily changes export: openings, closures, funding, and company changes |
 | [`llms.txt`](https://ohshi.work/llms.txt) | Machine-readable interface guide and request recipes |
 
+The coverage response publishes a permission-aware employer-discovery funnel.
+Its registry and queue totals identify permission-excluded records separately;
+automatic probing is limited to explicit permitted evidence, transient failures
+use durable exponential backoff, and normalized outcomes distinguish ambiguity,
+blocked or failed probes, canonical fetch failures, empty U.S. boards, verified
+boards awaiting activation, and activated companies.
+
 Individual company and job records are available at
 `/api/v1/companies/:id` and `/api/v1/jobs/:id`.
 

@@ -142,16 +142,19 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
 });
 
 test("terminal review candidates cannot starve newly discovered queue work", async () => {
-  const discovery = await read("lib/discovery.ts");
+  const [discovery, policy] = await Promise.all([
+    read("lib/discovery.ts"),
+    read("lib/discovery-policy.ts"),
+  ]);
   const review = await read("lib/discovery-review.ts");
-  assert.match(discovery, /q\.status IN \('discovered','canonical_source_found'\)/);
+  assert.match(policy, /status IN \('discovered','canonical_source_found'\)/);
   assert.doesNotMatch(
-    discovery,
-    /q\.status IN \('discovered','needs_review','canonical_source_found'\)/
+    policy,
+    /status IN \('discovered','needs_review','canonical_source_found'\)/
   );
   assert.match(discovery, /discovery_cursor as discoveryCursor/);
-  assert.match(discovery, /discovery_candidate_reviews review/);
-  assert.match(discovery, /review\.status NOT IN \('rejected','activated'\)/);
+  assert.match(policy, /discovery_candidate_reviews active_review/);
+  assert.match(policy, /active_review\.status NOT IN \('rejected','activated'\)/);
   assert.match(review, /activation: "none"/);
   assert.match(review, /publication: "none"/);
   assert.match(review, /canonical_board_changed_since_review/);

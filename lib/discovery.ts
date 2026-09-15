@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
+import { CanonicalHttpError, fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
 import { probeAtsBySlug } from "./ats-slug-probe";
 import { YC_SOURCE_KIND } from "./startup-directory";
@@ -20,6 +20,12 @@ import {
 import { linksFromHtml, permittedFetch } from "./public-web";
 import { normalizeDomain, sourceKey } from "./source-registry";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
+import {
+  discoveryActivationDueAt,
+  discoveryRetryAt,
+  discoveryRunnableSql,
+  isTransientDiscoveryError,
+} from "./discovery-policy";
 import { normalizeSector } from "./types";
 
 export type Candidate = {
@@ -30,6 +36,7 @@ export type Candidate = {
   status: string;
   investorSourceId?: string;
   evidenceUrl?: string;
+  attemptCount?: number;
 };
 
 const hashId = (prefix: string, value: string) => {
@@ -218,26 +225,53 @@ async function discoverInvestorSource(source: {
   return { discovered, nextCursor, status: "completed" as const };
 }
 
-export async function resolveCanonicalSource(
+async function resolveCanonicalSourceResult(
   candidate: Candidate,
   fetcher: typeof fetch
-): Promise<AtsDetection | null> {
+): Promise<{
+  detection: AtsDetection | null;
+  outcome: "ambiguous" | "no_ats_detected" | "unsupported" | null;
+}> {
   const probe = await probeCanonicalSource(candidate.websiteUrl, { fetcher });
-  if (probe.detection) return probe.detection;
+  if (probe.detection) return { detection: probe.detection, outcome: null };
   // An ambiguous crawl means the site advertises more than one board; guessing
   // from the slug would only add a third answer, so leave it for review.
-  if (probe.detectionStatus === "ambiguous") return null;
+  if (probe.detectionStatus === "ambiguous") {
+    return { detection: null, outcome: "ambiguous" };
+  }
   const slugMatch = await probeAtsBySlug(
     candidate.normalizedDomain,
     candidate.companyName,
     { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
   );
-  if (!slugMatch || slugMatch.provider === "manual") return null;
-  return {
+  if (!slugMatch || slugMatch.provider === "manual") {
+    const allWebsiteFetchesBlocked = probe.pages.length > 0 && probe.pages.every(
+      (page) => page.status === "robots_or_network_error"
+    );
+    if (allWebsiteFetchesBlocked) {
+      const robotsBlocked = probe.pages.every((page) =>
+        /robots_policy_disallows_discovery/i.test(page.error || "")
+      );
+      if (robotsBlocked) throw new Error("robots_policy_disallows_all_website_probes");
+      throw new TypeError("website_probe_network_failure");
+    }
+    if (probe.externalCareerLinks.length > 0) {
+      return { detection: null, outcome: "unsupported" };
+    }
+    return { detection: null, outcome: "no_ats_detected" };
+  }
+  return { detection: {
     provider: slugMatch.provider,
     boardId: slugMatch.boardId,
     careersUrl: slugMatch.careersUrl,
-  };
+  }, outcome: null };
+}
+
+export async function resolveCanonicalSource(
+  candidate: Candidate,
+  fetcher: typeof fetch
+): Promise<AtsDetection | null> {
+  return (await resolveCanonicalSourceResult(candidate, fetcher)).detection;
 }
 
 /**
@@ -300,8 +334,9 @@ export async function activateDiscoveredCandidate(
     ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
       FROM discovery_queue_investors WHERE candidate_id=?`).bind(companyId, candidate.id),
     env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
+      last_outcome='activated', discovery_version=?, next_attempt_at=NULL,
       review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
-      .bind(candidate.id),
+      .bind(DISCOVERY_PIPELINE_VERSION, candidate.id),
     env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
       review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
       career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
@@ -325,43 +360,97 @@ async function processCandidate(
   now: string,
   allowActivation: boolean
 ) {
-  await env.DB.prepare("UPDATE discovery_queue SET status='resolving', last_attempted_at=? WHERE id=?")
-    .bind(now, candidate.id).run();
+  const attemptCount = Number(candidate.attemptCount || 0) + 1;
+  await env.DB.prepare(`UPDATE discovery_queue SET status='resolving',
+    last_attempted_at=?, attempt_count=?, next_attempt_at=NULL WHERE id=?`)
+    .bind(now, attemptCount, candidate.id).run();
   await env.DB.prepare(`UPDATE startup_domains SET
     last_discovery_attempt_at=?, last_seen_at=? WHERE canonical_domain=?`)
     .bind(now, now, candidate.normalizedDomain).run();
-  const detection = await resolveCanonicalSource(candidate, fetcher);
+  let resolution: Awaited<ReturnType<typeof resolveCanonicalSourceResult>>;
+  try {
+    resolution = await resolveCanonicalSourceResult(candidate, fetcher);
+  } catch (error) {
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    const blocked = /robots|permission|disallow/i.test(message);
+    const retryable = !blocked && isTransientDiscoveryError(error);
+    await env.DB.prepare(`UPDATE discovery_queue SET status=?, discovery_version=?,
+      last_outcome=?, next_attempt_at=?, last_error=?, review_notes=? WHERE id=?`).bind(
+        retryable ? "discovered" : "needs_review",
+        DISCOVERY_PIPELINE_VERSION,
+        blocked ? "probe_blocked" : "probe_failed",
+        retryable ? discoveryRetryAt(now, attemptCount) : null,
+        message,
+        retryable
+          ? "Transient board-discovery failure; retry deferred with exponential backoff."
+          : "Automatic board discovery was blocked or failed non-transiently; manual review required.",
+        candidate.id
+      ).run();
+    return { activated: false, boardDetected: false };
+  }
+  const detection = resolution.detection;
   if (!detection) {
-    await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-      discovery_version=?, last_error='canonical_ats_not_detected', review_notes=? WHERE id=?`)
-        .bind(DISCOVERY_PIPELINE_VERSION,
-          "Official website checked; no supported public ATS or actionable first-party career page was detected.", candidate.id).run();
+    await env.DB.prepare(`UPDATE discovery_queue SET status=?,
+      discovery_version=?, last_outcome=?, next_attempt_at=NULL,
+      last_error=?, review_notes=? WHERE id=?`)
+        .bind(
+          resolution.outcome === "unsupported" ? "unsupported" : "needs_review",
+          DISCOVERY_PIPELINE_VERSION,
+          resolution.outcome,
+          resolution.outcome === "ambiguous"
+            ? "multiple_canonical_ats_candidates"
+            : resolution.outcome === "unsupported"
+              ? "unsupported_external_career_system"
+              : "canonical_ats_not_detected",
+          resolution.outcome === "ambiguous"
+            ? "Official website advertised multiple canonical boards; manual review is required."
+            : resolution.outcome === "unsupported"
+              ? "Official website linked to an external career system without a supported canonical adapter."
+            : "Official website checked; no supported public ATS or actionable first-party career page was detected.",
+          candidate.id).run();
     return { activated: false, boardDetected: false };
   }
   try {
     const canonical = await fetchCanonicalBoard(detection.provider, detection.boardId, fetcher);
     if (!canonical.jobs.length) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-        discovery_version=?, last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
+        discovery_version=?, last_outcome='no_us_openings', next_attempt_at=NULL,
+        last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
         .bind(DISCOVERY_PIPELINE_VERSION,
           "Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
       return { activated: false, boardDetected: true };
     }
     if (!allowActivation) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='canonical_source_found',
-        discovery_version=?, last_error=NULL,
+        discovery_version=?, last_outcome='canonical_source_found', last_error=NULL,
+        next_attempt_at=?,
         review_notes='Canonical source verified; queued for a later activation slot.'
-        WHERE id=?`).bind(DISCOVERY_PIPELINE_VERSION, candidate.id).run();
+        WHERE id=?`).bind(
+          DISCOVERY_PIPELINE_VERSION,
+          discoveryActivationDueAt(now),
+          candidate.id
+        ).run();
       return { activated: false, boardDetected: true };
     }
     await activateDiscoveredCandidate(candidate, detection, now);
     return { activated: true, boardDetected: true };
   } catch (error) {
-    await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-      discovery_version=?, last_error=?,
-      review_notes='ATS detected but canonical verification failed.' WHERE id=?`)
-      .bind(DISCOVERY_PIPELINE_VERSION,
-        (error instanceof Error ? error.message : String(error)).slice(0, 500), candidate.id).run();
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    const retryable = isTransientDiscoveryError(error);
+    const retryAfter = error instanceof CanonicalHttpError ? error.retryAfterMs : null;
+    await env.DB.prepare(`UPDATE discovery_queue SET status=?,
+      discovery_version=?, last_outcome='canonical_fetch_failed', next_attempt_at=?, last_error=?,
+      review_notes=? WHERE id=?`)
+      .bind(
+        retryable ? "discovered" : "needs_review",
+        DISCOVERY_PIPELINE_VERSION,
+        retryable ? discoveryRetryAt(now, attemptCount, retryAfter) : null,
+        message,
+        retryable
+          ? "Transient canonical verification failure; retry deferred with exponential backoff."
+          : "ATS detected but canonical verification failed non-transiently; manual review required.",
+        candidate.id
+      ).run();
     return { activated: false, boardDetected: true };
   }
 }
@@ -503,27 +592,19 @@ export async function runDiscovery(options: {
   );
   candidatesDiscovered += promoted;
 
+  const runnableSql = discoveryRunnableSql("q");
   const queued = await env.DB.prepare(`SELECT q.id, q.normalized_domain as normalizedDomain,
     q.company_name as companyName, q.website_url as websiteUrl, q.status,
+    q.attempt_count as attemptCount,
     qi.investor_source_id as investorSourceId, qi.evidence_url as evidenceUrl
     FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
-    WHERE (
-      q.status IN ('discovered','canonical_source_found')
-      OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?)
-      OR (q.status='resolving' AND (
-        q.last_attempted_at IS NULL OR q.last_attempted_at < ?
-      ))
-    )
-      AND NOT EXISTS (
-        SELECT 1 FROM discovery_candidate_reviews review
-        WHERE review.candidate_id=q.id
-          AND review.status NOT IN ('rejected','activated')
-      )
+    WHERE ${runnableSql}
     GROUP BY q.id
     ORDER BY q.first_discovered_at, q.id LIMIT ?`)
     .bind(
       DISCOVERY_PIPELINE_VERSION,
       new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
+      now,
       options.processLimit || DEFAULT_PROCESS_LIMIT
     ).all<Candidate>();
   let canonicalBoardsDetected = 0;
@@ -541,9 +622,18 @@ export async function runDiscovery(options: {
     },
     async (candidate, error) => {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+      const attemptCount = Number(candidate.attemptCount || 0) + 1;
       await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
-        last_error=?, review_notes='Transient candidate processing failure; queued for retry.'
-        WHERE id=?`).bind(message, candidate.id).run();
+        discovery_version=?, last_outcome='probe_failed', attempt_count=MAX(attempt_count, ?),
+        next_attempt_at=?,
+        last_error=?, review_notes='Transient candidate processing failure; retry deferred with exponential backoff.'
+        WHERE id=?`).bind(
+          DISCOVERY_PIPELINE_VERSION,
+          attemptCount,
+          discoveryRetryAt(new Date().toISOString(), attemptCount),
+          message,
+          candidate.id
+        ).run();
     }
   );
   const failedCandidates = processed.failures.map(({ value, error }) => ({

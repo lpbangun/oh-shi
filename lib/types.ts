@@ -684,12 +684,19 @@ export type CoverageMetrics = {
       pending: number;
       verifiedActive: number;
       rejected: number;
+      promotionUniverse: number;
+      eligibleForPromotion: number;
+      permissionExcluded: number;
       eligibleNeverQueued: number;
+      eligibleQueued: number;
     };
     queue: {
       total: number;
+      autoEligible: number;
+      permissionExcluded: number;
       readyToProcess: number;
       inProgress: number;
+      discovered: number;
       canonicalSourceFound: number;
       needsReview: number;
       staleNeedsReview: number;
@@ -697,6 +704,10 @@ export type CoverageMetrics = {
       unsupported: number;
       rejected: number;
       neverAttempted: number;
+      reviewGated: number;
+      retryDue: number;
+      retryDeferred: number;
+      outcomes: Record<string, number>;
     };
     needsReviewReasons: Record<string, number>;
     oldestReadyAt: string | null;
