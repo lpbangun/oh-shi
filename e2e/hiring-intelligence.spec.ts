@@ -70,6 +70,20 @@ test.describe("desktop hiring intelligence", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  test("live ticker moves slowly and can be paused", async ({ page }) => {
+    const ticker = page.getByRole("region", { name: "Live hiring activity" });
+    const duration = await ticker.locator(".ticker-track").evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).animationDuration)
+    );
+    expect(duration).toBeGreaterThanOrEqual(180);
+
+    const toggle = ticker.locator(".ticker-toggle");
+    await expect(toggle).toHaveAccessibleName("Pause live ticker");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).toHaveAccessibleName("Resume live ticker");
+  });
+
   test("filter menu Escape closes and restores focus", async ({ page }) => {
     const trigger = page.getByRole("button", { name: /^Location\b/i });
     await trigger.click();

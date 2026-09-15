@@ -95,6 +95,10 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
   font-family: var(--font-plex-mono), monospace; font-size: 10px; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--ink); white-space: nowrap;
 }
+.ticker-toggle { border: 0; border-right: 1px solid var(--line); cursor: pointer; }
+.ticker-toggle:hover { color: var(--acc); }
+.ticker-toggle:focus-visible { outline: 2px solid var(--acc); outline-offset: -3px; }
+.ticker-control { min-width: 8px; color: var(--muted); font-size: 8px; letter-spacing: 0; }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--acc); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.2; } }
 .ticker-viewport { flex: 1; min-width: 0; overflow: hidden; position: relative; height: 38px; }
@@ -123,9 +127,12 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 #signal .changes { order: 5; }
 .ticker-track {
   position: absolute; top: 0; left: 0; height: 100%; display: flex; align-items: center;
-  white-space: nowrap; will-change: transform; animation: marquee 90s linear infinite;
+  white-space: nowrap; will-change: transform;
+  animation: marquee var(--ticker-duration, 180s) linear infinite;
 }
-.ticker:hover .ticker-track { animation-play-state: paused; }
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track,
+.ticker.paused .ticker-track { animation-play-state: paused; }
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .ticker-item {
   display: inline-flex; align-items: center; gap: 8px; padding: 0 18px;
