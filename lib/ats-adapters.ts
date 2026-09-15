@@ -971,6 +971,15 @@ async function paceWorkableRequest() {
   release();
 }
 
+export async function paceCanonicalProviderRequest(
+  provider: AtsProvider,
+  fetcher: typeof fetch
+) {
+  if (provider === "workable" && fetcher === fetch) {
+    await paceWorkableRequest();
+  }
+}
+
 export async function fetchCanonicalBoard(
   provider: AtsProvider,
   boardId: string,
@@ -983,9 +992,7 @@ export async function fetchCanonicalBoard(
   if (provider === "smartrecruiters") {
     return fetchSmartRecruitersBoard(boardId, fetcher, timeoutMs);
   }
-  if (provider === "workable" && fetcher === fetch) {
-    await paceWorkableRequest();
-  }
+  await paceCanonicalProviderRequest(provider, fetcher);
   const response = await fetcher(canonicalEndpoint(provider, boardId), {
     headers: { "User-Agent": "OH-SHI/1.0 canonical-job-verifier" },
     signal: AbortSignal.timeout(timeoutMs),

@@ -1,5 +1,6 @@
 import { apiEnvelope, searchJobs } from "@/lib/data";
 import { JOB_SEARCH_PARAMETERS, JobSearchError, parseJobSearch } from "@/lib/job-search";
+import { conditionalJsonResponse } from "@/lib/conditional-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     }
     const query = parseJobSearch(params, { defaultLimit: 100, allowOffset: true });
     const result = await searchJobs(query);
-    return Response.json({
+    const payload = {
       ...apiEnvelope(result.jobs),
       applied_filters: query,
       page: {
@@ -29,7 +30,11 @@ export async function GET(request: Request) {
         changes_url: `/api/v1/changes?after=${encodeURIComponent(changeFeedStart)}`,
         instruction: "Process every job event, refresh /api/v1/jobs/:id, then re-evaluate the search filters.",
       },
-    }, { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } });
+    };
+    return conditionalJsonResponse(request, payload, {
+      cacheControl: "public, max-age=180, s-maxage=600",
+      validator: JSON.stringify({ query, jobs: result.jobs, total: result.total }),
+    });
   } catch (error) {
     if (error instanceof JobSearchError) {
       return Response.json({ error: "invalid_request", message: error.message }, { status: 400 });

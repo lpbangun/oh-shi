@@ -37,6 +37,25 @@ test("compatibility include_closed maps to an explicit all-status query", () => 
   assert.doesNotMatch(plan.countSql, /jobs\.status = \?/);
 });
 
+test("compatibility pagination and booleans fail closed", () => {
+  for (const value of ["", "yes", "1", "TRUE"]) {
+    assert.throws(
+      () => parseJobSearch(new URLSearchParams(`include_closed=${value}`)),
+      /include_closed must be true or false/
+    );
+  }
+  assert.equal(
+    parseJobSearch(new URLSearchParams("include_closed=false")).status,
+    "verified_open"
+  );
+  assert.throws(
+    () => parseJobSearch(new URLSearchParams("cursor=v2.jobs.100&offset=100"), {
+      allowOffset: true,
+    }),
+    /do not combine pagination modes/
+  );
+});
+
 test("provider completeness rejects URLs normalization would discard", () => {
   assert.equal(isCompleteProviderPayload("ashby", {
     jobs: [{ id: "1", title: "Engineer", jobUrl: "http://example.test/job/1" }],

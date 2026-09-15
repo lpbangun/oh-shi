@@ -6,6 +6,7 @@ import "./funding-discovery.test";
 import "./market-intelligence.test";
 import "./refresh-scoring.test";
 import "./agent-contract.test";
+import "./conditional-cache.test";
 import "./public-job-contract.test";
 import "./intelligence-query.test";
 import "./hygiene.test";

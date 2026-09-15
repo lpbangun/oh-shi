@@ -243,6 +243,7 @@ export const discoveryQueue = sqliteTable("discovery_queue", {
   status: text("status").notNull(),
   firstDiscoveredAt: text("first_discovered_at").notNull(),
   lastAttemptedAt: text("last_attempted_at"),
+  discoveryVersion: text("discovery_version"),
   lastError: text("last_error"),
   reviewNotes: text("review_notes").notNull().default(""),
 }, (table) => [

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { companyDiverseJobs } from "./derive";
+import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import {
   buildStartupDomainPilot,
   careerFingerprint,
@@ -13,7 +14,7 @@ import type { FundingDiscovery } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
-import { buildJobSearchSql, type JobSearchInput } from "./job-search";
+import { buildJobSearchSql, JobSearchError, type JobSearchInput } from "./job-search";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
 import {
   listActiveHiringSignalRecords,
@@ -288,7 +289,8 @@ async function initializeDatabase() {
         'discovered','resolving','canonical_source_found','active',
         'needs_review','unsupported','rejected'
       )), first_discovered_at TEXT NOT NULL,
-      last_attempted_at TEXT, last_error TEXT, review_notes TEXT NOT NULL DEFAULT ''
+      last_attempted_at TEXT, discovery_version TEXT, last_error TEXT,
+      review_notes TEXT NOT NULL DEFAULT ''
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS discovery_queue_investors (
       candidate_id TEXT NOT NULL, investor_source_id TEXT NOT NULL, evidence_url TEXT NOT NULL,
@@ -444,6 +446,13 @@ async function initializeDatabase() {
   if (!snapshotInfo.results.some((column) => column.name === "board_id")) {
     await env.DB.prepare(
       "ALTER TABLE canonical_source_snapshots ADD COLUMN board_id TEXT"
+    ).run();
+  }
+  const discoveryQueueInfo = await env.DB.prepare("PRAGMA table_info(discovery_queue)")
+    .all<{ name: string }>();
+  if (!discoveryQueueInfo.results.some((column) => column.name === "discovery_version")) {
+    await env.DB.prepare(
+      "ALTER TABLE discovery_queue ADD COLUMN discovery_version TEXT"
     ).run();
   }
   const jobInfo = await env.DB.prepare("PRAGMA table_info(jobs)").all<{ name: string }>();
@@ -792,7 +801,7 @@ async function prepareDatabase() {
       EXISTS(SELECT discovery_cursor FROM investor_sources LIMIT 0) as investorsReady,
       EXISTS(SELECT quarantine_application_id FROM company_sources LIMIT 0) as sourcesReady,
       EXISTS(SELECT company_id FROM company_investors LIMIT 0) as companyInvestorsReady,
-      EXISTS(SELECT review_notes FROM discovery_queue LIMIT 0) as discoveryReady,
+      EXISTS(SELECT discovery_version FROM discovery_queue LIMIT 0) as discoveryReady,
       EXISTS(SELECT candidate_id FROM discovery_queue_investors LIMIT 0) as discoveryInvestorsReady,
       EXISTS(SELECT ready_count FROM discovery_review_batches LIMIT 0) as reviewBatchesReady,
       EXISTS(SELECT fingerprint FROM discovery_candidate_reviews LIMIT 0) as reviewsReady,
@@ -1150,7 +1159,7 @@ export async function searchJobs(input: JobSearchInput): Promise<JobSearchResult
   ]);
   const total = Number(count?.total || 0);
   if (input.offset > total && total > 0) {
-    throw new Error("Requested job page is beyond the matching results.");
+    throw new JobSearchError("Requested job page is beyond the matching results.");
   }
   const attached = attachCompaniesToJobs(rows.results, companies);
   return {
@@ -1383,7 +1392,7 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
   const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
   const sixHoursAgo = new Date(now.valueOf() - 6 * 3_600_000).toISOString();
-  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, sourceCoverage] =
+  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, sourceCoverage] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
         FROM jobs WHERE status='verified_open'`).first<{ jobs: number; companies: number }>(),
@@ -1433,13 +1442,70 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
           WHERE imports.status='completed') as pilot,
         SUM(CASE WHEN review_status='pending' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN review_status='verified' AND activity_state='active' THEN 1 ELSE 0 END)
-          as verifiedActive
+          as verifiedActive,
+        SUM(CASE WHEN review_status='rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN review_status='pending' AND company_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM discovery_queue queue
+            WHERE queue.normalized_domain=startup_domains.canonical_domain)
+          AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
+            WHERE evidence.canonical_domain=startup_domains.canonical_domain
+              AND evidence.permission_status='permitted') THEN 1 ELSE 0 END)
+          as eligibleNeverQueued
         FROM startup_domains`).first<{
           total: number;
           pilot: number;
           pending: number;
           verifiedActive: number;
+          rejected: number;
+          eligibleNeverQueued: number;
         }>(),
+      env.DB.prepare(`SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN (q.status IN ('discovered','canonical_source_found')
+          OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?))
+          AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
+            WHERE review.candidate_id=q.id
+              AND review.status NOT IN ('rejected','activated'))
+          THEN 1 ELSE 0 END) as readyToProcess,
+        SUM(CASE WHEN q.status='resolving' THEN 1 ELSE 0 END) as inProgress,
+        SUM(CASE WHEN q.status='canonical_source_found' THEN 1 ELSE 0 END) as canonicalSourceFound,
+        SUM(CASE WHEN q.status='needs_review' THEN 1 ELSE 0 END) as needsReview,
+        SUM(CASE WHEN q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?
+          AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
+            WHERE review.candidate_id=q.id
+              AND review.status NOT IN ('rejected','activated'))
+          THEN 1 ELSE 0 END) as staleNeedsReview,
+        SUM(CASE WHEN q.status='active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN q.status='unsupported' THEN 1 ELSE 0 END) as unsupported,
+        SUM(CASE WHEN q.status='rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN q.last_attempted_at IS NULL THEN 1 ELSE 0 END) as neverAttempted,
+        MIN(CASE WHEN (q.status IN ('discovered','canonical_source_found')
+          OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?))
+          AND NOT EXISTS (SELECT 1 FROM discovery_candidate_reviews review
+            WHERE review.candidate_id=q.id
+              AND review.status NOT IN ('rejected','activated'))
+          THEN first_discovered_at END) as oldestReadyAt
+        FROM discovery_queue q`).bind(
+          DISCOVERY_PIPELINE_VERSION,
+          DISCOVERY_PIPELINE_VERSION,
+          DISCOVERY_PIPELINE_VERSION
+        ).first<{
+          total: number;
+          readyToProcess: number;
+          inProgress: number;
+          canonicalSourceFound: number;
+          needsReview: number;
+          staleNeedsReview: number;
+          active: number;
+          unsupported: number;
+          rejected: number;
+          neverAttempted: number;
+          oldestReadyAt: string | null;
+        }>(),
+      env.DB.prepare(`SELECT COALESCE(last_error, 'unspecified') as reason,
+        COUNT(*) as count FROM discovery_queue WHERE status='needs_review'
+        GROUP BY COALESCE(last_error, 'unspecified') ORDER BY count DESC, reason`)
+        .all<{ reason: string; count: number }>(),
       env.DB.prepare(`SELECT
         COUNT(*) as configured,
         SUM(CASE WHEN discovery_status='active' AND last_error IS NULL
@@ -1458,10 +1524,15 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const daysWithoutGrowth = latestCompany?.value
     ? Math.max(0, Math.floor((now.valueOf() - Date.parse(latestCompany.value)) / 86_400_000))
     : 0;
+  const investorRelationshipCount = investors.results.reduce(
+    (sum, item) => sum + Number(item.count || 0), 0
+  );
+  const signalCount = Number(activeSignals?.count || 0);
+  const offBoardOpeningCount = Number(offBoardVerified?.openings || 0);
   return {
     verifiedOpenJobs: Number(totals?.jobs || 0),
-    activeHiringSignals: Number(activeSignals?.count || 0),
-    offBoardVerifiedOpenings: Number(offBoardVerified?.openings || 0),
+    activeHiringSignals: signalCount,
+    offBoardVerifiedOpenings: offBoardOpeningCount,
     offBoardVerifiedCompanies: Number(offBoardVerified?.companies || 0),
     activeCompanies: Number(totals?.companies || 0),
     companiesAddedLast7Days: Number(recentCompanies?.count || 0),
@@ -1470,7 +1541,56 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
     lastDiscoveryRun: discovery?.value || null,
     lastCanonicalRefresh: refresh?.value || null,
     consecutiveDaysWithoutCompanyGrowth: daysWithoutGrowth,
-    companyGrowthWarning: Number(totals?.companies || 0) < 50 && daysWithoutGrowth >= 3,
+    companyGrowthWarning: Number(registry?.pending || 0) > 0 && daysWithoutGrowth >= 3,
+    capabilityAvailability: {
+      investorFiltering: {
+        status: investorRelationshipCount > 0 ? "available" : "unavailable",
+        relationshipCount: investorRelationshipCount,
+        reason: investorRelationshipCount > 0
+          ? "Permitted investor-company relationships are published."
+          : "No permitted investor-company relationships are currently published; investor filters return no matches.",
+      },
+      hiringSignals: {
+        status: signalCount > 0 ? "available" : "dormant",
+        activeCount: signalCount,
+        reason: signalCount > 0
+          ? "Active, unexpired off-board hiring signals are published."
+          : "The evidence surface is configured but currently has no active, unexpired records.",
+      },
+      offBoardOpenings: {
+        status: offBoardOpeningCount > 0 ? "available" : "dormant",
+        verifiedOpenCount: offBoardOpeningCount,
+        reason: offBoardOpeningCount > 0
+          ? "Verified-open jobs promoted from permitted off-board evidence are published."
+          : "The promotion surface is configured but currently has no verified-open records.",
+      },
+    },
+    discoveryFunnel: {
+      pipelineVersion: DISCOVERY_PIPELINE_VERSION,
+      registry: {
+        total: Number(registry?.total || 0),
+        pending: Number(registry?.pending || 0),
+        verifiedActive: Number(registry?.verifiedActive || 0),
+        rejected: Number(registry?.rejected || 0),
+        eligibleNeverQueued: Number(registry?.eligibleNeverQueued || 0),
+      },
+      queue: {
+        total: Number(discoveryQueue?.total || 0),
+        readyToProcess: Number(discoveryQueue?.readyToProcess || 0),
+        inProgress: Number(discoveryQueue?.inProgress || 0),
+        canonicalSourceFound: Number(discoveryQueue?.canonicalSourceFound || 0),
+        needsReview: Number(discoveryQueue?.needsReview || 0),
+        staleNeedsReview: Number(discoveryQueue?.staleNeedsReview || 0),
+        active: Number(discoveryQueue?.active || 0),
+        unsupported: Number(discoveryQueue?.unsupported || 0),
+        rejected: Number(discoveryQueue?.rejected || 0),
+        neverAttempted: Number(discoveryQueue?.neverAttempted || 0),
+      },
+      needsReviewReasons: Object.fromEntries(
+        reviewReasons.results.map((item) => [item.reason, Number(item.count)])
+      ),
+      oldestReadyAt: discoveryQueue?.oldestReadyAt || null,
+    },
     startupDomains: Number(registry?.total || 0),
     pilotStartupDomains: Number(registry?.pilot || 0),
     pendingStartupDomains: Number(registry?.pending || 0),

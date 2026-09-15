@@ -1,7 +1,12 @@
-import { canonicalEndpoint, isCompleteProviderPayload } from "./ats-adapters";
+import {
+  canonicalEndpoint,
+  isCompleteProviderPayload,
+  paceCanonicalProviderRequest,
+} from "./ats-adapters";
 import type { AtsProvider } from "./source-registry";
+import { boundedText, PublicWebSession } from "./public-web";
 
-export const ATS_SLUG_PROBE_VERSION = "1.0";
+export const ATS_SLUG_PROBE_VERSION = "1.1";
 
 const PROBE_USER_AGENT = "OH-SHI/1.0 ats-slug-probe (https://ohshi.work/about)";
 
@@ -10,7 +15,9 @@ const PROBE_USER_AGENT = "OH-SHI/1.0 ats-slug-probe (https://ohshi.work/about)";
  * is usually the company's own name. Ordered by how commonly startups use them
  * so the first hit is also the most likely to be right.
  */
-const PROBED_PROVIDERS: AtsProvider[] = ["greenhouse", "lever", "ashby"];
+const PROBED_PROVIDERS: AtsProvider[] = [
+  "greenhouse", "lever", "ashby", "workable", "recruitee", "personio",
+];
 
 /**
  * Slugs short or generic enough that a match is more likely to be a different
@@ -59,10 +66,32 @@ async function fetchJson(url: string, fetcher: typeof fetch) {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("json")) return null;
   try {
-    return await response.json();
+    return JSON.parse(await boundedText(response, 5_000_000));
   } catch {
     return null;
   }
+}
+
+async function fetchProbePayload(
+  provider: AtsProvider,
+  url: string,
+  fetcher: typeof fetch
+) {
+  if (provider !== "personio") return fetchJson(url, fetcher);
+  const response = await fetcher(url, {
+    headers: { Accept: "application/xml, text/xml", "User-Agent": PROBE_USER_AGENT },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) return null;
+  const contentType = response.headers.get("content-type") || "";
+  if (!/(?:xml|text\/plain)/i.test(contentType)) return null;
+  return boundedText(response, 2_000_000);
+}
+
+function providerBoardIds(provider: AtsProvider, slug: string) {
+  return provider === "personio"
+    ? [`${slug}.jobs.personio.de`, `${slug}.jobs.personio.com`]
+    : [slug];
 }
 
 /** Greenhouse publishes the employer's display name on the board resource. */
@@ -93,36 +122,54 @@ export async function probeAtsBySlug(
   options: { fetcher?: typeof fetch; extraSlugs?: string[] } = {}
 ): Promise<SlugProbeResult | null> {
   const fetcher = options.fetcher || fetch;
+  const session = new PublicWebSession(fetcher, PROBE_USER_AGENT);
+  const guardedFetcher = (async (input: string | URL | Request) =>
+    session.fetch(String(input))) as typeof fetch;
+  let probeFailure: unknown = null;
   for (const slug of slugCandidates(domain, options.extraSlugs)) {
     for (const provider of PROBED_PROVIDERS) {
-      const endpoint = canonicalEndpoint(provider, slug);
-      if (!endpoint) continue;
-      const payload = await fetchJson(endpoint, fetcher);
-      if (!payload || !isCompleteProviderPayload(provider, payload)) continue;
-      if (provider === "greenhouse") {
-        const boardName = await greenhouseBoardName(slug, fetcher);
-        if (!boardNameMatches(boardName, companyName, slug)) continue;
-        return {
-          provider,
-          boardId: slug,
-          careersUrl: `https://job-boards.greenhouse.io/${slug}`,
-          confirmedBy: "board_name",
-        };
+      for (const boardId of providerBoardIds(provider, slug)) {
+        try {
+          const endpoint = canonicalEndpoint(provider, boardId);
+          if (!endpoint) continue;
+          await paceCanonicalProviderRequest(provider, fetcher);
+          const payload = await fetchProbePayload(provider, endpoint, guardedFetcher);
+          if (!payload || !isCompleteProviderPayload(provider, payload)) continue;
+          if (provider === "greenhouse") {
+            const boardName = await greenhouseBoardName(slug, guardedFetcher);
+            if (!boardNameMatches(boardName, companyName, slug)) continue;
+            return {
+              provider,
+              boardId,
+              careersUrl: `https://job-boards.greenhouse.io/${slug}`,
+              confirmedBy: "board_name",
+            };
+          }
+          // These APIs do not expose a trustworthy employer identity, so require
+          // the probed slug to come from the registrable domain, never an alias.
+          const domainLabel = domain.split(".")[0].toLowerCase().replace(/[^a-z0-9]+/g, "");
+          if (slug.replaceAll("-", "") !== domainLabel) continue;
+          const careersUrl = provider === "lever"
+            ? `https://jobs.lever.co/${slug}`
+            : provider === "ashby"
+              ? `https://jobs.ashbyhq.com/${slug}`
+              : provider === "workable"
+                ? `https://apply.workable.com/${slug}/`
+                : provider === "recruitee"
+                  ? `https://${slug}.recruitee.com/`
+                  : `https://${boardId}/`;
+          return {
+            provider,
+            boardId,
+            careersUrl,
+            confirmedBy: "board_url",
+          };
+        } catch (error) {
+          probeFailure ??= error;
+        }
       }
-      // Lever and Ashby do not publish an employer name, so the slug itself is
-      // the only identifier; require it to derive from the registrable domain
-      // rather than from a directory alias.
-      const domainLabel = domain.split(".")[0].toLowerCase().replace(/[^a-z0-9]+/g, "");
-      if (slug.replaceAll("-", "") !== domainLabel) continue;
-      return {
-        provider,
-        boardId: slug,
-        careersUrl: provider === "lever"
-          ? `https://jobs.lever.co/${slug}`
-          : `https://jobs.ashbyhq.com/${slug}`,
-        confirmedBy: "board_url",
-      };
     }
   }
+  if (probeFailure) throw probeFailure;
   return null;
 }

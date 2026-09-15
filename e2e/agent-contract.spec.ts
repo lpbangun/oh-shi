@@ -76,6 +76,20 @@ test.describe("unified agent contract", () => {
     ).toBe(4);
   });
 
+  test("compatibility endpoints fail closed on invalid pagination and booleans", async ({ request }) => {
+    for (const path of [
+      "/api/v1/jobs?cursor=v2.jobs.9999999",
+      "/api/v1/jobs?include_closed=bogus",
+      "/api/v1/jobs?cursor=v2.jobs.100&offset=100",
+      "/api/v1/changes?after=",
+      "/api/v1/changes?after=2026-07-01",
+    ]) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(400);
+      expect((await response.json()).error, path).toBe("invalid_request");
+    }
+  });
+
   test("capabilities and llms.txt expose one deterministic entrypoint", async ({
     request,
   }) => {
@@ -283,10 +297,10 @@ test.describe("unified agent contract", () => {
           Boolean(job.provider) && Boolean(job.sourceId) && job.sourceId !== "legacy"
       )
     ).toBe(true);
-    expect(coverage.data.verifiedOpenJobs).toBe(openJobs.length);
-    expect(coverage.data.activeCompanies).toBe(
+    expect(coverage.data.verifiedOpenJobs).toBe(jobs.page.total);
+    expect(
       new Set(openJobs.map((job: { companyId: string }) => job.companyId)).size
-    );
+    ).toBeLessThanOrEqual(coverage.data.activeCompanies);
     expect(coverage.data.investors).toBeTruthy();
     expect(coverage.data.providers).toBeTruthy();
     expect(signalPayload.data.classification).toBe(

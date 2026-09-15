@@ -62,7 +62,14 @@ export function parseJobSearch(
   options: { defaultLimit?: number; allowPage?: boolean; allowOffset?: boolean } = {}
 ): JobSearchInput {
   const statusRaw = one(params, "status");
-  const includeClosed = one(params, "include_closed") === "true";
+  const includeClosedRaw = one(params, "include_closed");
+  if (
+    params.has("include_closed") &&
+    !["true", "false"].includes(includeClosedRaw || "")
+  ) {
+    throw new JobSearchError("include_closed must be true or false.");
+  }
+  const includeClosed = includeClosedRaw === "true";
   const status = includeClosed && statusRaw === null ? "all" : statusRaw || "verified_open";
   if (!["verified_open", "verified_closed", "all"].includes(status)) {
     throw new JobSearchError("status must be verified_open, verified_closed, or all.");
@@ -74,6 +81,9 @@ export function parseJobSearch(
   const limit = boundedInteger(params, "limit", options.defaultLimit || 50, 1, 100);
   const page = options.allowPage ? boundedInteger(params, "page", 1, 1, 100_000) : 1;
   const cursor = one(params, "cursor");
+  if (cursor && (params.has("offset") || params.has("page"))) {
+    throw new JobSearchError("Use cursor, offset, or page; do not combine pagination modes.");
+  }
   let cursorOffset = 0;
   if (cursor) {
     const match = /^v2\.jobs\.(\d+)$/.exec(cursor);

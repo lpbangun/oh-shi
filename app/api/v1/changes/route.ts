@@ -1,18 +1,23 @@
 import { ChangeFeedError, readChangeFeed } from "@/lib/change-feed";
+import { conditionalJsonResponse } from "@/lib/conditional-cache";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
     const result = await readChangeFeed(new URL(request.url).searchParams);
-    return Response.json({
+    const payload = {
       schema_version: "1.1",
       generated_at: new Date().toISOString(),
       order: "occurredAt ASC, id ASC",
       checkpoint_semantics: "exclusive tuple (occurredAt, id)",
       license: "CC BY 4.0 applies only to project-owned material; source rights remain with their owners.",
       ...result,
-    }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=180" } });
+    };
+    return conditionalJsonResponse(request, payload, {
+      cacheControl: "public, max-age=60, s-maxage=180",
+      validator: JSON.stringify(result),
+    });
   } catch (error) {
     if (error instanceof ChangeFeedError) {
       return Response.json({

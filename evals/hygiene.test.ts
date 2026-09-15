@@ -123,8 +123,9 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(workflow, /steps\.directory_sync\.outcome == 'failure'/);
   assert.match(workflow, /node scripts\/run-canonical-refresh\.mjs/);
   assert.match(refreshRunner, /Preflight failed/);
-  assert.match(refreshRunner, /refresh_run/);
-  assert.match(refreshRunner, /lastVerifiedAt/);
+  assert.match(refreshRunner, /new URL\("\/api\/v1\/coverage"/);
+  assert.match(refreshRunner, /verifiedCoverageTimestamp/);
+  assert.doesNotMatch(refreshRunner, /refresh_run/);
   assert.match(refreshRunner, /source_counts/);
   assert.match(refreshClient, /Idempotency-Key/);
   assert.match(refreshRunner, /runVersionedRefresh/);

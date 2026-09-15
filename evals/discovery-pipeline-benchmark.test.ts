@@ -337,6 +337,49 @@ test("probeAtsBySlug returns Lever or Ashby only when slug equals the domain lab
   );
 });
 
+test("probeAtsBySlug uses the existing Workable, Recruitee, and Personio adapters", async () => {
+  const cases = [
+    {
+      provider: "workable",
+      match: "https://www.workable.com/api/accounts/acme?details=true",
+      response: () => jsonResponse({ jobs: [] }),
+      expected: {
+        provider: "workable", boardId: "acme",
+        careersUrl: "https://apply.workable.com/acme/", confirmedBy: "board_url",
+      },
+    },
+    {
+      provider: "recruitee",
+      match: "https://acme.recruitee.com/api/offers/",
+      response: () => jsonResponse({ offers: [] }),
+      expected: {
+        provider: "recruitee", boardId: "acme",
+        careersUrl: "https://acme.recruitee.com/", confirmedBy: "board_url",
+      },
+    },
+    {
+      provider: "personio",
+      match: "https://acme.jobs.personio.de/xml?language=en",
+      response: () => new Response("<workzag-jobs />", {
+        headers: { "content-type": "application/xml" },
+      }),
+      expected: {
+        provider: "personio", boardId: "acme.jobs.personio.de",
+        careersUrl: "https://acme.jobs.personio.de/", confirmedBy: "board_url",
+      },
+    },
+  ] as const;
+  for (const item of cases) {
+    const fetcher = (async (input: string | URL | Request) =>
+      String(input) === item.match ? item.response() : notFound()) as typeof fetch;
+    assert.deepEqual(
+      await probeAtsBySlug("acme.com", "Acme", { fetcher }),
+      item.expected,
+      `${item.provider} should be discovered through its complete public board payload`
+    );
+  }
+});
+
 test("probeAtsBySlug returns null when every endpoint 404s", async () => {
   const fetcher = (async () => notFound()) as typeof fetch;
   assert.equal(await probeAtsBySlug("missing.com", "Missing", { fetcher }), null);

@@ -660,6 +660,47 @@ export type CoverageMetrics = {
   lastCanonicalRefresh: string | null;
   consecutiveDaysWithoutCompanyGrowth: number;
   companyGrowthWarning: boolean;
+  capabilityAvailability: {
+    investorFiltering: {
+      status: "available" | "unavailable";
+      relationshipCount: number;
+      reason: string;
+    };
+    hiringSignals: {
+      status: "available" | "dormant";
+      activeCount: number;
+      reason: string;
+    };
+    offBoardOpenings: {
+      status: "available" | "dormant";
+      verifiedOpenCount: number;
+      reason: string;
+    };
+  };
+  discoveryFunnel: {
+    pipelineVersion: string;
+    registry: {
+      total: number;
+      pending: number;
+      verifiedActive: number;
+      rejected: number;
+      eligibleNeverQueued: number;
+    };
+    queue: {
+      total: number;
+      readyToProcess: number;
+      inProgress: number;
+      canonicalSourceFound: number;
+      needsReview: number;
+      staleNeedsReview: number;
+      active: number;
+      unsupported: number;
+      rejected: number;
+      neverAttempted: number;
+    };
+    needsReviewReasons: Record<string, number>;
+    oldestReadyAt: string | null;
+  };
   investors: Record<string, number>;
   providers: Record<string, number>;
   sourceCoverage: {

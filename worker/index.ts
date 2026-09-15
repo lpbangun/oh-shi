@@ -28,6 +28,24 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const isPublicAgentRoute =
+      url.pathname === "/llms.txt" ||
+      url.pathname === "/agent-policy.json" ||
+      url.pathname === "/robots.txt" ||
+      url.pathname.startsWith("/api/v1/") ||
+      url.pathname.startsWith("/exports/");
+
+    if (request.method === "OPTIONS" && isPublicAgentRoute) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+          "Access-Control-Allow-Headers": "Cache-Control, If-None-Match",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -47,7 +65,17 @@ const worker = {
       request.headers.get("accept")?.includes("text/html") &&
       request.headers.get("rsc") !== "1";
 
-    const response = await handler.fetch(request, env, ctx);
+    let response = await handler.fetch(request, env, ctx);
+    if (isPublicAgentRoute) {
+      const headers = new Headers(response.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Access-Control-Expose-Headers", "ETag, Content-Disposition");
+      response = new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
     if (!isHomepageDocument || !response.ok) return response;
 
     // Sites Workers cannot access the edge Cache API. Advertise shared freshness

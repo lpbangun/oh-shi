@@ -13,6 +13,9 @@
     "off_board_openings": "/api/v1/off-board-openings"
   },
   "coverage": "/api/v1/coverage",
+  "capability_status": "Read data.capabilityAvailability from /api/v1/coverage before using investor filters, signals, or off-board openings.",
+  "conditional_requests": "Stable documentation and aggregate capability surfaces return ETag and honor If-None-Match.",
+  "request_identification": "Send a descriptive User-Agent identifying your agent and operator; anonymous or browser-impersonating traffic may be challenged at the edge.",
   "pagination": "Pass page.next_cursor unchanged with the same view and filters; job page.total is the complete matching count.",
   "default_job_order": "Deterministic company-diverse ranked round-robin.",
   "change_feed": "/api/v1/changes?after={initial.incremental.after}; then pass the exclusive tuple cursor unchanged",

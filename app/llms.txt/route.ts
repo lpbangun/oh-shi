@@ -1,3 +1,5 @@
+import { conditionalResponse } from "@/lib/conditional-cache";
+
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const body = `# OH SHI - Startup Hiring Intelligence
@@ -42,8 +44,24 @@ Job queries default to status=verified_open, execute in D1, and return page.tota
 for the complete matching dataset. Supported job sorts are signal, title,
 title_desc, company, company_desc, sector, dept, loc, comp_low, comp_high,
 recent, and oldest; every order has a stable job-id tie-breaker.
+The compatibility /api/v1/jobs endpoint is bounded to 100 records per response
+(100 by default). Use its cursor or, preferably, the incremental flow below; do
+not plan for a whole-dataset response.
 The after movement filter is exclusive; use the exact ISO-8601 boundary you want
 excluded.
+
+Capability availability is live data, not a promise that a configured surface
+currently contains records. Read data.capabilityAvailability from /api/v1/coverage
+or data.availability on the signal endpoints. An unavailable investor filter has
+no published permitted relationships and will return no matches; dormant means a
+pipeline is configured but currently publishes zero qualifying records.
+Stable public representations include an ETag. Send If-None-Match with the saved
+ETag; an unchanged representation returns HTTP 304 without retransmitting its body.
+Coverage also separates the discovery registry from the operational queue in
+data.discoveryFunnel. eligibleNeverQueued is permitted registry work awaiting
+promotion; readyToProcess mirrors the automatic processor; staleNeedsReview is
+eligible for one re-check under the published pipelineVersion; needsReviewReasons
+shows terminal-review pressure without exposing company or domain identities.
 
 ## Natural-language request recipes
 - "Open remote Operations jobs":
@@ -119,5 +137,9 @@ employer or documented public-ATS source. They remain part of the canonical job
 count and are listed with their original evidence at /api/v1/off-board-openings.
 Software license: MIT. Project-owned factual exports: CC BY 4.0. Third-party source rights remain with their owners.
 `;
-  return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+  return conditionalResponse(request, body, {
+    contentType: "text/plain; charset=utf-8",
+    cacheControl: "public, max-age=3600",
+    validator: body,
+  });
 }

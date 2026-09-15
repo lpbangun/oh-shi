@@ -201,16 +201,18 @@ ingestion exists.
 
 ## Operational limits
 
-Each scheduled run attempts every enabled investor source, processes 25 queued
-candidates when available, and activates at most 10 verified companies. It
+Each scheduled run attempts every enabled investor source, processes 30 queued
+candidates when available, and activates at most 25 verified companies. It
 records failures and reasons per source and candidate. Scheduled refresh runs
 every two hours. Candidate and relationship writes are conflict-safe, making
 retries idempotent and preserving overlapping investor relationships.
 Each public portfolio keeps a durable bounded cursor so successive runs advance
 through its company pages. Candidates moved to `needs_review`, `unsupported`,
 or `rejected` remain available for operator review but do not starve newly
-discovered records; an operator must explicitly reset one to `discovered` to
-retry it.
+discovered records. Automatic `needs_review` outcomes are rechecked once when
+the deployed detector, slug probe, canonical probe, or adapter version changes.
+Unsupported, rejected, and actively reviewed candidates remain fail-closed until
+explicit operator action.
 
 ## Canonical snapshot quarantine
 

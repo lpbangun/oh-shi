@@ -25,6 +25,7 @@ import {
   type IntelligenceView,
 } from "@/lib/intelligence-query";
 import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } from "@/lib/data";
+import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { JobSearchError, parseJobSearch } from "@/lib/job-search";
 import { isBoardTracked } from "@/lib/tracked-boards";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
@@ -59,6 +60,9 @@ const capabilities = {
         "limit",
         "cursor",
       ],
+      filter_availability: {
+        investor: "See availability.investorFiltering; unavailable means the filter returns no matches.",
+      },
     },
     companies: {
       default_limit: 10,
@@ -87,6 +91,7 @@ const capabilities = {
   cursor: "Pass page.next_cursor unchanged to the same view and filters.",
   compatibility_endpoints: ["/api/v1/jobs", "/api/v1/companies", "/api/v1/changes"],
   coverage_endpoint: "/api/v1/coverage",
+  conditional_requests: "This capabilities representation returns ETag and honors If-None-Match.",
 };
 
 const lower = (value: string | null | undefined) => value?.trim().toLowerCase() || "";
@@ -211,10 +216,17 @@ export async function GET(request: Request) {
     validateParameters(url.searchParams, view);
 
     if (!view) {
-      return Response.json(
-        responseEnvelope("capabilities", new Date().toISOString(), {}, capabilities),
-        { headers: { "Cache-Control": "public, max-age=3600" } }
-      );
+      const coverage = await getCoverageMetrics();
+      const dataAsOf = coverage.lastCanonicalRefresh || coverage.lastDiscoveryRun || new Date(0).toISOString();
+      const data = {
+        ...capabilities,
+        availability: coverage.capabilityAvailability,
+      };
+      const payload = responseEnvelope("capabilities", dataAsOf, {}, data);
+      return conditionalJsonResponse(request, payload, {
+        cacheControl: "public, max-age=3600",
+        validator: JSON.stringify({ schema: SCHEMA_VERSION, dataAsOf, data }),
+      });
     }
 
     if (view === "jobs") {
@@ -222,7 +234,7 @@ export async function GET(request: Request) {
       const query = parseJobSearch(url.searchParams, { defaultLimit: 25 });
       const [result, coverage] = await Promise.all([searchJobs(query), getCoverageMetrics()]);
       const dataAsOf = coverage.lastCanonicalRefresh || latestTimestamp([], result.jobs, []);
-      return Response.json({
+      const payload = {
         ...responseEnvelope("jobs", dataAsOf, {
           q: query.q,
           status: query.status,
@@ -248,7 +260,11 @@ export async function GET(request: Request) {
           changes_url: `/api/v1/changes?after=${encodeURIComponent(changeFeedStart)}`,
           instruction: "Process every job event, refresh /api/v1/jobs/:id, then re-evaluate this filter.",
         },
-      }, { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } });
+      };
+      return conditionalJsonResponse(request, payload, {
+        cacheControl: "public, max-age=180, s-maxage=600",
+        validator: JSON.stringify({ query, result, coverage, dataAsOf }),
+      });
     }
 
     const [companies, jobs, changes, coverage] = await Promise.all([
@@ -349,13 +365,14 @@ export async function GET(request: Request) {
     }
 
     const paged = pageData(rows, view, offset, limit);
-    return Response.json(
-      {
-        ...responseEnvelope(view, dataAsOf, appliedFilters, paged.data, paged.page),
-        coverage,
-      },
-      { headers: { "Cache-Control": "public, max-age=180, s-maxage=600" } }
-    );
+    const payload = {
+      ...responseEnvelope(view, dataAsOf, appliedFilters, paged.data, paged.page),
+      coverage,
+    };
+    return conditionalJsonResponse(request, payload, {
+      cacheControl: "public, max-age=180, s-maxage=600",
+      validator: JSON.stringify({ view, dataAsOf, appliedFilters, page: paged, coverage }),
+    });
   } catch (error) {
     if (error instanceof IntelligenceQueryError || error instanceof JobSearchError) {
       return Response.json(

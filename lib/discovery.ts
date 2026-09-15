@@ -19,6 +19,7 @@ import {
 } from "./refresh-contract";
 import { linksFromHtml, permittedFetch } from "./public-web";
 import { normalizeDomain, sourceKey } from "./source-registry";
+import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import { normalizeSector } from "./types";
 
 export type Candidate = {
@@ -332,30 +333,35 @@ async function processCandidate(
   const detection = await resolveCanonicalSource(candidate, fetcher);
   if (!detection) {
     await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-      last_error='canonical_ats_not_detected', review_notes=? WHERE id=?`)
-        .bind("Official website checked; no supported public ATS or actionable first-party career page was detected.", candidate.id).run();
+      discovery_version=?, last_error='canonical_ats_not_detected', review_notes=? WHERE id=?`)
+        .bind(DISCOVERY_PIPELINE_VERSION,
+          "Official website checked; no supported public ATS or actionable first-party career page was detected.", candidate.id).run();
     return { activated: false, boardDetected: false };
   }
   try {
     const canonical = await fetchCanonicalBoard(detection.provider, detection.boardId, fetcher);
     if (!canonical.jobs.length) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-        last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
-        .bind("Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
+        discovery_version=?, last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
+        .bind(DISCOVERY_PIPELINE_VERSION,
+          "Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
       return { activated: false, boardDetected: true };
     }
     if (!allowActivation) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='canonical_source_found',
-        last_error=NULL, review_notes='Canonical source verified; queued for a later activation slot.'
-        WHERE id=?`).bind(candidate.id).run();
+        discovery_version=?, last_error=NULL,
+        review_notes='Canonical source verified; queued for a later activation slot.'
+        WHERE id=?`).bind(DISCOVERY_PIPELINE_VERSION, candidate.id).run();
       return { activated: false, boardDetected: true };
     }
     await activateDiscoveredCandidate(candidate, detection, now);
     return { activated: true, boardDetected: true };
   } catch (error) {
     await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-      last_error=?, review_notes='ATS detected but canonical verification failed.' WHERE id=?`)
-      .bind((error instanceof Error ? error.message : String(error)).slice(0, 500), candidate.id).run();
+      discovery_version=?, last_error=?,
+      review_notes='ATS detected but canonical verification failed.' WHERE id=?`)
+      .bind(DISCOVERY_PIPELINE_VERSION,
+        (error instanceof Error ? error.message : String(error)).slice(0, 500), candidate.id).run();
     return { activated: false, boardDetected: true };
   }
 }
@@ -503,6 +509,7 @@ export async function runDiscovery(options: {
     FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
     WHERE (
       q.status IN ('discovered','canonical_source_found')
+      OR (q.status='needs_review' AND COALESCE(q.discovery_version, '') <> ?)
       OR (q.status='resolving' AND (
         q.last_attempted_at IS NULL OR q.last_attempted_at < ?
       ))
@@ -515,6 +522,7 @@ export async function runDiscovery(options: {
     GROUP BY q.id
     ORDER BY q.first_discovered_at, q.id LIMIT ?`)
     .bind(
+      DISCOVERY_PIPELINE_VERSION,
       new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
       options.processLimit || DEFAULT_PROCESS_LIMIT
     ).all<Candidate>();
