@@ -85,12 +85,19 @@ test("quality script enforces the intended gate order", async () => {
   assert.match(pkg.scripts["eval:live"], /scripts\/run-evals\.mjs/);
 });
 
-test("CI enforces frozen quality and browser gates on pushes and pull requests", async () => {
+test("CI enforces security, quality, and browser gates on main pushes and pull requests", async () => {
   const pkg = JSON.parse(await read("package.json"));
   const workflow = await read(".github/workflows/ci.yml");
 
-  assert.equal(pkg.dependencies.next, "16.3.3");
-  assert.equal(pkg.devDependencies["eslint-config-next"], "16.3.3");
+  assert.match(pkg.dependencies.next, /^\d+\.\d+\.\d+$/);
+  const [nextMajor, nextMinor, nextPatch] = pkg.dependencies.next
+    .split(".").map(Number);
+  assert.ok(
+    nextMajor > 16 ||
+      (nextMajor === 16 && (nextMinor > 3 || (nextMinor === 3 && nextPatch >= 3))),
+    "Next.js must not regress below the 16.3.3 security baseline"
+  );
+  assert.equal(pkg.devDependencies["eslint-config-next"], pkg.dependencies.next);
   assert.equal(pkg.packageManager, "pnpm@11.17.0");
   assert.ok(pkg.devDependencies["@playwright/test"]);
   assert.ok(pkg.devDependencies["@axe-core/playwright"]);
@@ -99,6 +106,8 @@ test("CI enforces frozen quality and browser gates on pushes and pull requests",
   }
   assert.match(workflow, /\n\s+push:/);
   assert.match(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+-\s+main/);
+  assert.match(workflow, /pull_request:\s*\n\s+branches:\s*\n\s+-\s+main/);
   assert.match(workflow, /permissions:\s*\n\s+contents: read/);
   assert.match(workflow, /concurrency:/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);
@@ -169,7 +178,7 @@ test("manual candidate review workflow stages privately and requires exact appro
 
   assert.match(workflow, /stage_review/);
   assert.match(workflow, /approve_review/);
-  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /actions\/upload-artifact@v(?:[4-9]|\d{2,})(?:\.\d+){0,2}(?:\s|$)/);
   assert.match(workflow, /OH_SHI_REVIEW_COUNT/);
   assert.match(route, /stage:\$\{batchId\}:\$\{requestedCount\}/);
   assert.match(route, /approve[\s\S]*batchId/);

@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -59,7 +59,7 @@ jobs:
           version: 11.17.0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.22.0
           cache: pnpm
@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload private review artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stage_review' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: discovery-review-${{ github.run_id }}
           path: artifacts/discovery-review-*
