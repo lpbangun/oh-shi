@@ -41,6 +41,7 @@ function current(externalId: string, companyId: string): NormalizedJob {
     compensation: "See posting",
     canonicalUrl: `https://jobs.ashbyhq.com/${companyId}/${externalId}`,
     publishedAt: null,
+    description: "Current role.",
     summary: "Current role.",
   };
 }

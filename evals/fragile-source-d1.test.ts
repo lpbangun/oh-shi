@@ -24,6 +24,7 @@ const job: NormalizedJob = {
   compensation: "See posting",
   canonicalUrl: "https://example.com/careers/REQ-42",
   publishedAt: "2026-07-01T00:00:00.000Z",
+  description: "Structured first-party fixture.",
   summary: "Structured first-party fixture.",
 };
 
@@ -48,7 +49,7 @@ test("fragile first-party roles close only after two clean misses 24–48 hours 
       raw_url TEXT NOT NULL, discovery_channel TEXT NOT NULL, evidence_url TEXT NOT NULL,
       parser_version TEXT NOT NULL, snapshot_run_id TEXT NOT NULL,
       linkedin_presence_state TEXT NOT NULL, linkedin_evidence_url TEXT,
-      linkedin_checked_at TEXT, summary TEXT NOT NULL,
+      linkedin_checked_at TEXT, description TEXT, summary TEXT NOT NULL,
       UNIQUE(provider, source_id, external_id)
     )`),
     database.prepare(`CREATE TABLE changes (
@@ -61,7 +62,7 @@ test("fragile first-party roles close only after two clean misses 24–48 hours 
       provider TEXT NOT NULL, source_id TEXT NOT NULL, external_id TEXT NOT NULL,
       canonical_url TEXT NOT NULL, normalized_canonical_url TEXT NOT NULL,
       title TEXT NOT NULL, location TEXT NOT NULL, employment_type TEXT NOT NULL,
-      summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
+      description TEXT, summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
       first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
       last_verified_at TEXT NOT NULL, closed_at TEXT, raw_url TEXT NOT NULL,
       evidence_url TEXT NOT NULL, parser_version TEXT NOT NULL,

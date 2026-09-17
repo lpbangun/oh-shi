@@ -20,6 +20,7 @@ const canonicalJob: NormalizedJob = {
   compensation: "See posting",
   canonicalUrl: "https://apply.workable.com/j/ROLE42/",
   publishedAt: "2026-07-20T00:00:00.000Z",
+  description: "Build reliable infrastructure for a growing payments platform.",
   summary: "Build reliable infrastructure for a growing payments platform.",
 };
 

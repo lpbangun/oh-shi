@@ -30,6 +30,19 @@ test("job search defaults open and builds bounded deterministic SQL", () => {
   );
 });
 
+test("role-family aliases normalize and unknown values fail closed", () => {
+  const canonical = parseJobSearch(new URLSearchParams("role_family=People%20operations"));
+  const people = parseJobSearch(new URLSearchParams("role_family=people"));
+  const underscored = parseJobSearch(new URLSearchParams("role_family=people_operations"));
+  assert.equal(canonical.roleFamily, "People operations");
+  assert.equal(people.roleFamily, canonical.roleFamily);
+  assert.equal(underscored.roleFamily, canonical.roleFamily);
+  assert.throws(
+    () => parseJobSearch(new URLSearchParams("role_family=bogus")),
+    /role_family must be one of/
+  );
+});
+
 test("compatibility include_closed maps to an explicit all-status query", () => {
   const query = parseJobSearch(new URLSearchParams("include_closed=true"));
   assert.equal(query.status, "all");
@@ -79,6 +92,7 @@ test("normalization deduplicates exact source identities and rejects conflicts",
     compensation: "See posting",
     canonicalUrl: "https://example.test/job/1",
     publishedAt: null,
+    description: "Build things.",
     summary: "Build things.",
   };
   assert.deepEqual(dedupeNormalizedJobs([base, { ...base }]), [base]);

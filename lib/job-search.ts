@@ -1,3 +1,5 @@
+import { normalizeRoleFamily, ROLE_FAMILIES } from "./job-normalization";
+
 export const JOB_SORTS = [
   "signal", "title", "title_desc", "company", "company_desc", "sector",
   "dept", "loc", "comp_low", "comp_high", "recent", "oldest",
@@ -98,12 +100,19 @@ export function parseJobSearch(
   if (newSince && (!/^\d{4}-\d{2}-\d{2}T/.test(newSince) || !Number.isFinite(Date.parse(newSince)))) {
     throw new JobSearchError("new_since must be an ISO-8601 timestamp.");
   }
+  const roleFamilyRaw = one(params, "role_family");
+  const roleFamily = roleFamilyRaw ? normalizeRoleFamily(roleFamilyRaw) : null;
+  if (roleFamilyRaw && !roleFamily) {
+    throw new JobSearchError(
+      `role_family must be one of: ${ROLE_FAMILIES.join(", ")}.`
+    );
+  }
   return {
     q: one(params, "q"),
     status: status as JobSearchInput["status"],
     company: one(params, "company"),
     sector: one(params, "sector"),
-    roleFamily: one(params, "role_family"),
+    roleFamily,
     location: one(params, "location"),
     remoteStatus: one(params, "remote_status"),
     provider: one(params, "provider"),

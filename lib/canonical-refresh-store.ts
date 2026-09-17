@@ -177,13 +177,15 @@ export async function persistCanonicalSource(
     roleFamily: string;
     remoteStatus: string;
     compensation: string;
+    description: string | null;
     lastVerifiedAt: string;
   };
   const canonical = await database.prepare(`SELECT id, company_id as companyId,
     provider, source_id as sourceId, external_id as externalId,
     canonical_url as canonicalUrl, title, location, employment_type as employmentType,
     role_family as roleFamily, remote_status as remoteStatus, compensation,
-    summary, published_at as publishedAt, status, last_verified_at as lastVerifiedAt
+    description, summary, published_at as publishedAt, status,
+    last_verified_at as lastVerifiedAt
     FROM jobs WHERE company_id=?`)
     .bind(source.companyId)
     .all<CanonicalMaterial>();
@@ -228,15 +230,15 @@ export async function persistCanonicalSource(
         first_seen_at, last_seen_at, source_updated_at, published_at, last_verified_at,
         closed_at, raw_url, discovery_channel, evidence_url, parser_version,
         snapshot_run_id, linkedin_presence_state, linkedin_evidence_url,
-        linkedin_checked_at, summary
+        linkedin_checked_at, description, summary
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified_open', ?, ?, ?, ?, ?,
-        NULL, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, ?)`).bind(
+        NULL, ?, ?, ?, ?, ?, 'unknown', NULL, NULL, ?, ?)`).bind(
           id, source.companyId, job.externalId, source.provider, source.id, job.title,
           job.roleFamily, job.location, job.remoteStatus, job.employmentType,
           job.compensation, job.canonicalUrl, source.provider, now, now,
           job.publishedAt, job.publishedAt, now, job.canonicalUrl,
           discoveryChannelFor(source.provider), job.canonicalUrl,
-          parserVersionFor(source.provider), runId, job.summary
+          parserVersionFor(source.provider), runId, job.description, job.summary
         ));
       const added: CanonicalMaterial = {
         id,
@@ -248,6 +250,7 @@ export async function persistCanonicalSource(
         title: job.title,
         location: job.location,
         employmentType: job.employmentType,
+        description: job.description,
         summary: job.summary,
         publishedAt: job.publishedAt,
         status: "verified_open",
@@ -261,13 +264,13 @@ export async function persistCanonicalSource(
     } else if (ownsCanonical) {
       const materialBefore = [primary.title, primary.roleFamily, primary.location,
         primary.remoteStatus, primary.employmentType, primary.compensation,
-        primary.canonicalUrl, primary.summary];
+        primary.canonicalUrl, primary.description, primary.summary];
       const materialAfter = [job.title, job.roleFamily, job.location,
         job.remoteStatus, job.employmentType, job.compensation,
-        job.canonicalUrl, job.summary];
+        job.canonicalUrl, job.description, job.summary];
       if (materialBefore.some((value, index) => value !== materialAfter[index])) {
         const changed = ["title", "roleFamily", "location", "remoteStatus",
-          "employmentType", "compensation", "canonicalUrl", "summary"]
+          "employmentType", "compensation", "canonicalUrl", "description", "summary"]
           .filter((_, index) => materialBefore[index] !== materialAfter[index]);
         statements.push(database.prepare(`INSERT OR IGNORE INTO changes (
           id, entity_type, entity_id, change_type, title, description, occurred_at, source_url
@@ -284,12 +287,12 @@ export async function persistCanonicalSource(
           WHEN source_updated_at IS NULL OR ? > source_updated_at THEN ? ELSE source_updated_at END,
         published_at=COALESCE(published_at, ?), last_verified_at=?, closed_at=NULL,
         raw_url=?, discovery_channel=?, evidence_url=?, parser_version=?,
-        snapshot_run_id=?, summary=? WHERE id=?`).bind(
+        snapshot_run_id=?, description=?, summary=? WHERE id=?`).bind(
           job.title, job.roleFamily, job.location, job.remoteStatus,
           job.employmentType, job.compensation, job.canonicalUrl, now,
           job.publishedAt, job.publishedAt, job.publishedAt, job.publishedAt, now, job.canonicalUrl,
           discoveryChannelFor(source.provider), job.canonicalUrl,
-          parserVersionFor(source.provider), runId, job.summary, id
+          parserVersionFor(source.provider), runId, job.description, job.summary, id
         ));
     } else {
       statements.push(database.prepare(`UPDATE jobs SET status='verified_open',
@@ -299,18 +302,19 @@ export async function persistCanonicalSource(
     const method = match?.method || "new";
     statements.push(database.prepare(`INSERT INTO job_observations (
       id, job_id, company_id, provider, source_id, external_id, canonical_url,
-      normalized_canonical_url, title, location, employment_type, summary,
+      normalized_canonical_url, title, location, employment_type, description, summary,
       published_at, status, first_seen_at, last_seen_at, last_verified_at,
       closed_at, raw_url, evidence_url, parser_version, snapshot_run_id,
       match_method, match_score_bps
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified_open', ?, ?, ?,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified_open', ?, ?, ?,
       NULL, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(provider, source_id, external_id) DO UPDATE SET
       job_id=excluded.job_id, company_id=excluded.company_id,
       canonical_url=excluded.canonical_url,
       normalized_canonical_url=excluded.normalized_canonical_url,
       title=excluded.title, location=excluded.location,
-      employment_type=excluded.employment_type, summary=excluded.summary,
+      employment_type=excluded.employment_type, description=excluded.description,
+      summary=excluded.summary,
       published_at=COALESCE(job_observations.published_at, excluded.published_at),
       status='verified_open', last_seen_at=excluded.last_seen_at,
       last_verified_at=excluded.last_verified_at, closed_at=NULL,
@@ -320,7 +324,7 @@ export async function persistCanonicalSource(
         current?.id || observationId(source, job.externalId),
         id, source.companyId, source.provider, source.id, job.externalId,
         job.canonicalUrl, normalizeCanonicalJobUrl(job.canonicalUrl), job.title,
-        job.location, job.employmentType, job.summary, job.publishedAt,
+        job.location, job.employmentType, job.description, job.summary, job.publishedAt,
         now, now, now, job.canonicalUrl, job.canonicalUrl,
         parserVersionFor(source.provider), runId, method,
         Math.round((match?.score || 1) * 10_000)

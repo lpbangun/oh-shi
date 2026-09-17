@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   classifyRole,
   isUsEligible,
+  normalizeCanonicalJobDescription,
   summarizeCanonicalJob,
 } from "../lib/job-normalization";
 import { normalizeSector, SECTOR_TAXONOMY } from "../lib/types";
@@ -102,6 +103,12 @@ test("canonical summaries are normalized and bounded", () => {
   });
   assert.ok(summary.startsWith("Build systems."));
   assert.equal(summary.length, 220);
+  const description = normalizeCanonicalJobDescription({
+    title: "Operator",
+    descriptionPlain: `  Build   systems.\n\n${"A".repeat(400)}  `,
+  });
+  assert.ok(description.length > summary.length);
+  assert.ok(description.endsWith("A".repeat(400)));
   assert.equal(
     summarizeCanonicalJob({ title: "Operator" }),
     "Canonical posting for Operator."

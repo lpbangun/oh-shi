@@ -27,6 +27,7 @@ import {
 import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } from "@/lib/data";
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { JobSearchError, parseJobSearch } from "@/lib/job-search";
+import { ROLE_FAMILIES, ROLE_FAMILY_ALIASES } from "@/lib/job-normalization";
 import { isBoardTracked } from "@/lib/tracked-boards";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
 
@@ -62,6 +63,12 @@ const capabilities = {
       ],
       filter_availability: {
         investor: "See availability.investorFiltering; unavailable means the filter returns no matches.",
+      },
+      filter_values: {
+        role_family: {
+          canonical: ROLE_FAMILIES,
+          aliases: ROLE_FAMILY_ALIASES,
+        },
       },
     },
     companies: {

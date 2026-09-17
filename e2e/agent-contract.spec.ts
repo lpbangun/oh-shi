@@ -103,6 +103,12 @@ test.describe("unified agent contract", () => {
       "movements",
       "sectors",
     ]);
+    expect(payload.data.views.jobs.filter_values.role_family.canonical).toContain(
+      "People operations"
+    );
+    expect(payload.data.views.jobs.filter_values.role_family.aliases.people).toBe(
+      "People operations"
+    );
 
     const instructions = await request.get("/llms.txt");
     expect(await instructions.text()).toContain(
@@ -190,6 +196,28 @@ test.describe("unified agent contract", () => {
       )
     ).toBe(true);
 
+    const [canonicalResponse, peopleResponse, underscoredResponse] = await Promise.all([
+      request.get("/api/v1/intelligence?view=jobs&role_family=People%20operations&limit=100"),
+      request.get("/api/v1/intelligence?view=jobs&role_family=people&limit=100"),
+      request.get("/api/v1/intelligence?view=jobs&role_family=people_operations&limit=100"),
+    ]);
+    for (const response of [canonicalResponse, peopleResponse, underscoredResponse]) {
+      expect(response.status()).toBe(200);
+    }
+    const canonicalPeople = await canonicalResponse.json();
+    const peopleAlias = await peopleResponse.json();
+    const underscoredAlias = await underscoredResponse.json();
+    expect(peopleAlias.applied_filters.role_family).toBe("People operations");
+    expect(underscoredAlias.applied_filters.role_family).toBe("People operations");
+    expect(peopleAlias.page.total).toBe(canonicalPeople.page.total);
+    expect(underscoredAlias.data).toEqual(canonicalPeople.data);
+
+    const invalidRole = await request.get(
+      "/api/v1/intelligence?view=jobs&role_family=bogus"
+    );
+    expect(invalidRole.status()).toBe(400);
+    expect((await invalidRole.json()).message).toContain("role_family must be one of");
+
     // Confidence intentionally decays with verification age, so derive a
     // stable filter threshold from the current public data instead of baking
     // in a value that inevitably ages out.
@@ -229,6 +257,26 @@ test.describe("unified agent contract", () => {
     );
     expect(invalid.status()).toBe(400);
     expect((await invalid.json()).error).toBe("invalid_request");
+  });
+
+  test("job records make description availability and preview truncation explicit", async ({ request }) => {
+    const response = await request.get(
+      "/api/v1/intelligence?view=jobs&q=workplace&limit=1"
+    );
+    expect(response.status()).toBe(200);
+    const payload = await response.json();
+    expect(payload.data).toHaveLength(1);
+    const job = payload.data[0];
+    expect(job.descriptionUrl).toBe(job.canonicalUrl);
+    expect(typeof job.descriptionAvailable).toBe("boolean");
+    expect(typeof job.summaryTruncated).toBe("boolean");
+    if (job.descriptionAvailable) {
+      expect(job.description).toBeTruthy();
+      expect(job.summaryTruncated).toBe(job.summary.length < job.description.length);
+    } else {
+      expect(job.description).toBeNull();
+      expect(job.summaryTruncated).toBe(true);
+    }
   });
 
   test("market movements expose aggregates and standalone funding evidence", async ({

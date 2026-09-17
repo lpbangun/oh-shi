@@ -56,9 +56,10 @@ test("structured JobPosting requires an actionable, current, US first-party role
     remoteStatus: "Remote",
     employmentType: "FULL_TIME",
     compensation: "See posting",
-    canonicalUrl: "https://example.com/careers/req-42",
-    publishedAt: "2026-07-29T00:00:00.000Z",
-    summary: "Build reliable systems for a distributed product team.",
+      canonicalUrl: "https://example.com/careers/req-42",
+      publishedAt: "2026-07-29T00:00:00.000Z",
+      description: "Build reliable systems for a distributed product team.",
+      summary: "Build reliable systems for a distributed product team.",
   });
   assert.equal(
     parseStructuredCareerPage(

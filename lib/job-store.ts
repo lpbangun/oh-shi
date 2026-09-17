@@ -12,9 +12,9 @@ export function prepareSeedJobStatement(
     first_seen_at, last_seen_at, source_updated_at, published_at, last_verified_at,
     closed_at, raw_url, discovery_channel, evidence_url, parser_version,
     snapshot_run_id, linkedin_presence_state, linkedin_evidence_url,
-    linkedin_checked_at, summary
+    linkedin_checked_at, description, summary
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?)`).bind(
+    ?, ?, ?, ?, ?, ?, ?)`).bind(
     job.id,
     job.companyId,
     job.externalId,
@@ -43,6 +43,7 @@ export function prepareSeedJobStatement(
     job.linkedInPresenceState,
     job.linkedInEvidenceUrl,
     job.linkedInCheckedAt,
+    job.description,
     job.summary
   );
 }

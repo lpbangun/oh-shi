@@ -7,6 +7,41 @@ export type CanonicalJobInput = {
   address?: { postalAddress?: { addressCountry?: string } };
 };
 
+export const ROLE_FAMILIES = [
+  "People operations",
+  "GTM",
+  "Operations",
+  "Data and research",
+  "Engineering",
+  "Product",
+  "Other",
+] as const;
+
+export type RoleFamily = (typeof ROLE_FAMILIES)[number];
+
+export const ROLE_FAMILY_ALIASES: Readonly<Record<string, RoleFamily>> = {
+  people: "People operations",
+  people_operations: "People operations",
+  gtm: "GTM",
+  operations: "Operations",
+  data: "Data and research",
+  data_research: "Data and research",
+  data_and_research: "Data and research",
+  engineering: "Engineering",
+  product: "Product",
+  other: "Other",
+};
+
+export function normalizeRoleFamily(value: string): RoleFamily | null {
+  const trimmed = value.trim();
+  const canonical = ROLE_FAMILIES.find(
+    (family) => family.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (canonical) return canonical;
+  const slug = trimmed.toLowerCase().replace(/[\s-]+/g, "_");
+  return ROLE_FAMILY_ALIASES[slug] || null;
+}
+
 export function isUsEligible(job: CanonicalJobInput) {
   const country = (job.address?.postalAddress?.addressCountry || "").trim();
   const location = (job.location || "").trim();
@@ -35,6 +70,10 @@ export function classifyRole(title: string, department = "") {
 }
 
 export function summarizeCanonicalJob(job: CanonicalJobInput) {
-  const plain = (job.descriptionPlain || "").replace(/\s+/g, " ").trim();
-  return plain ? plain.slice(0, 220) : `Canonical posting for ${job.title}.`;
+  const description = normalizeCanonicalJobDescription(job);
+  return description ? description.slice(0, 220) : `Canonical posting for ${job.title}.`;
+}
+
+export function normalizeCanonicalJobDescription(job: CanonicalJobInput) {
+  return (job.descriptionPlain || "").replace(/\s+/g, " ").trim();
 }

@@ -570,6 +570,10 @@ export type Job = {
   linkedInPresenceState: "confirmed" | "not_observed" | "unknown";
   linkedInEvidenceUrl: string | null;
   linkedInCheckedAt: string | null;
+  description: string | null;
+  descriptionAvailable: boolean;
+  descriptionUrl: string;
+  summaryTruncated: boolean;
   summary: string;
   company?: Company;
 };
