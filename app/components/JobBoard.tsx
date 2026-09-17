@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { facetValues, type MarketMovement, type SectorStat } from "@/lib/derive";
 import type {
-  ChangeEvent,
   Company,
   DashboardJob,
+  HomepageChangeEvent,
 } from "@/lib/types";
 import type { HomepageCoverageMetrics } from "@/lib/data";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
@@ -17,7 +17,7 @@ import { Ticker } from "./Ticker";
 type Props = {
   companies: Company[];
   jobs: DashboardJob[];
-  changes: ChangeEvent[];
+  changes: HomepageChangeEvent[];
   sectors: SectorStat[];
   movements: MarketMovement[];
   deltas: Record<string, number>;
@@ -331,11 +331,12 @@ export function JobBoard({
   const changeStart = safeChangePage * CHANGE_PAGE_SIZE;
   const changeRows = changes.slice(changeStart, changeStart + CHANGE_PAGE_SIZE);
   const changeEnd = Math.min(changeStart + CHANGE_PAGE_SIZE, changes.length);
-  const companyForChange = (change: ChangeEvent) => {
-    const companyId = change.entityType === "company"
+  const companyNameForChange = (change: HomepageChangeEvent) => {
+    if (change.companyName) return change.companyName;
+    const companyId = change.companyId || (change.entityType === "company"
       ? change.entityId
-      : jobs.find((job) => job.id === change.entityId)?.companyId;
-    return companyId ? companyById.get(companyId) : undefined;
+      : jobs.find((job) => job.id === change.entityId)?.companyId);
+    return companyId ? companyById.get(companyId)?.name : undefined;
   };
 
   function sortTable(key: TableKey) {
@@ -963,8 +964,7 @@ export function JobBoard({
             </div>
             {changeRows.map((change) => {
               const date = change.occurredAt.slice(0, 10);
-              const company = companyForChange(change);
-              const companyName = company?.name || "Company unavailable";
+              const companyName = companyNameForChange(change) || "Company unavailable";
               return (
                 <a
                   className={`change ${change.changeType}`}

@@ -50,6 +50,7 @@ test("Sites configuration is bound to the public project and D1", async () => {
 test("homepage cold starts avoid write storms and defer the full job index", async () => {
   const data = await read("lib/data.ts");
   const homepage = await read("app/page.tsx");
+  const jobBoard = await read("app/components/JobBoard.tsx");
   const worker = await read("worker/index.ts");
 
   assert.match(data, /EXISTS\(SELECT 1 FROM companies LIMIT 1\) as hasCompanies/);
@@ -64,6 +65,10 @@ test("homepage cold starts avoid write storms and defer the full job index", asy
   assert.match(data, /listDashboardJobs\(100\)/);
   assert.match(data, /listMovementJobs\(since\)/);
   assert.match(data, /listHomepageChanges\(since\)/);
+  assert.match(data, /LEFT JOIN jobs[\s\S]*changes\.entity_type='job'/);
+  assert.match(data, /LEFT JOIN companies[\s\S]*jobs\.company_id/);
+  assert.match(data, /companies\.name as companyName/);
+  assert.match(jobBoard, /change\.companyName/);
   assert.match(data, /getHomepageCoverageMetrics\(now\)/);
   assert.match(homepage, /jobs\.slice\(0, HOMEPAGE_JOB_LIMIT\)/);
   assert.match(homepage, /changes\.slice\(0, HOMEPAGE_CHANGE_LIMIT\)/);

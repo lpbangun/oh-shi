@@ -28,6 +28,7 @@ import { COMPANY_SOURCE_SEEDS, INVESTOR_SOURCE_SEEDS, sourceKey } from "./source
 import {
   normalizeSector,
   type ChangeEvent,
+  type HomepageChangeEvent,
   type Company,
   type CoverageMetrics,
   type DashboardJob,
@@ -1330,13 +1331,25 @@ export async function listChanges(since?: string): Promise<ChangeEvent[]> {
   return result.results;
 }
 
-async function listHomepageChanges(since: string): Promise<ChangeEvent[]> {
+async function listHomepageChanges(since: string): Promise<HomepageChangeEvent[]> {
   await ensureDatabase();
   const result = await env.DB.prepare(
-    `SELECT ${changeColumns} FROM changes
-     WHERE occurred_at >= ? OR change_type='funding_announced'
-     ORDER BY occurred_at DESC, id DESC`
-  ).bind(since).all<ChangeEvent>();
+    `SELECT changes.id, changes.entity_type as entityType,
+       changes.entity_id as entityId, changes.change_type as changeType,
+       changes.title, changes.description, changes.occurred_at as occurredAt,
+       changes.source_url as sourceUrl, companies.id as companyId,
+       companies.name as companyName
+     FROM changes
+     LEFT JOIN jobs
+       ON changes.entity_type='job' AND jobs.id=changes.entity_id
+     LEFT JOIN companies
+       ON companies.id=CASE
+         WHEN changes.entity_type='company' THEN changes.entity_id
+         ELSE jobs.company_id
+       END
+     WHERE changes.occurred_at >= ? OR changes.change_type='funding_announced'
+     ORDER BY changes.occurred_at DESC, changes.id DESC`
+  ).bind(since).all<HomepageChangeEvent>();
   return result.results;
 }
 
