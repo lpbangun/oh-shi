@@ -44,6 +44,12 @@ Job queries default to status=verified_open, execute in D1, and return page.tota
 for the complete matching dataset. Supported job sorts are signal, title,
 title_desc, company, company_desc, sector, dept, loc, comp_low, comp_high,
 recent, and oldest; every order has a stable job-id tie-breaker.
+The q parameter also accepts deterministic natural-language job requests. It can
+resolve role aliases, remote/hybrid/on-site arrangements, employment types, company
+phrases, locations, and relative date phrases such as "this week". Resolved values
+are returned in applied_filters. Explicit filters override values inferred from q.
+Canonical employment_type values are Full time, Part time, Contract, Temporary, and
+Internship; common aliases such as full-time, contractor, temp, and intern are accepted.
 Canonical role_family values are People operations, GTM, Operations,
 Data and research, Engineering, Product, and Other. The aliases people and
 people_operations map to People operations; call the capabilities endpoint for

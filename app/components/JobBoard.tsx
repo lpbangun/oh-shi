@@ -9,6 +9,7 @@ import type {
   HomepageChangeEvent,
 } from "@/lib/types";
 import type { HomepageCoverageMetrics } from "@/lib/data";
+import { parseNaturalLanguageJobSearch } from "@/lib/natural-language-job-search";
 import { ColumnMenu, type MenuGroup } from "./ColumnMenu";
 import { CompanyLogo } from "./CompanyLogo";
 import { CompanyModal, JobModal } from "./RecordModal";
@@ -260,6 +261,10 @@ export function JobBoard({
   const pageEnd = Math.min(pageStart + jobs.length, jobTotal);
   const uniqueCompanies = new Set(pageRows.map((job) => job.companyId)).size;
   const filtersActive = Boolean(query || status !== "verified_open" || sector || dept || loc || companyFilter || investor || provider || newOnly) || sort !== "signal";
+  const queryInterpretation = useMemo(
+    () => query.trim() ? parseNaturalLanguageJobSearch(query).interpretation : "",
+    [query]
+  );
 
   const clearFilters = useCallback(() => {
     setQuery(""); setStatus("verified_open"); setSector(""); setDept(""); setLoc("");
@@ -451,6 +456,9 @@ export function JobBoard({
             />
             {query ? <button className="search-clear" type="button" onClick={() => { setQuery(""); setPage(0); }}>Clear</button> : null}
           </div>
+          {queryInterpretation ? (
+            <p className="search-interpretation" aria-live="polite">{queryInterpretation}</p>
+          ) : null}
 
           <div className="breadth-filters" aria-label="Job breadth filters">
             <label>Company

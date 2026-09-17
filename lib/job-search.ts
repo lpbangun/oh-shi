@@ -1,4 +1,10 @@
 import { normalizeRoleFamily, ROLE_FAMILIES } from "./job-normalization";
+import {
+  EMPLOYMENT_TYPES,
+  normalizeEmploymentType,
+  parseNaturalLanguageJobSearch,
+  type EmploymentType,
+} from "./natural-language-job-search";
 
 export const JOB_SORTS = [
   "signal", "title", "title_desc", "company", "company_desc", "sector",
@@ -15,6 +21,7 @@ export type JobSearchInput = {
   roleFamily: string | null;
   location: string | null;
   remoteStatus: string | null;
+  employmentType: EmploymentType | null;
   provider: string | null;
   investor: string | null;
   newSince: string | null;
@@ -55,7 +62,7 @@ function boundedInteger(
 
 export const JOB_SEARCH_PARAMETERS = new Set([
   "q", "status", "company", "sector", "role_family", "location",
-  "remote_status", "provider", "investor", "new_since", "sort",
+  "remote_status", "employment_type", "provider", "investor", "new_since", "sort",
   "limit", "offset", "page", "cursor", "include_closed", "view",
 ]);
 
@@ -100,24 +107,37 @@ export function parseJobSearch(
   if (newSince && (!/^\d{4}-\d{2}-\d{2}T/.test(newSince) || !Number.isFinite(Date.parse(newSince)))) {
     throw new JobSearchError("new_since must be an ISO-8601 timestamp.");
   }
-  const roleFamilyRaw = one(params, "role_family");
+  const rawQuery = one(params, "q");
+  const natural = rawQuery ? parseNaturalLanguageJobSearch(rawQuery) : null;
+  const roleFamilyRaw = one(params, "role_family") || natural?.filters.role_family;
   const roleFamily = roleFamilyRaw ? normalizeRoleFamily(roleFamilyRaw) : null;
   if (roleFamilyRaw && !roleFamily) {
     throw new JobSearchError(
       `role_family must be one of: ${ROLE_FAMILIES.join(", ")}.`
     );
   }
+  const employmentTypeRaw = one(params, "employment_type") || natural?.filters.employment_type;
+  const employmentType = employmentTypeRaw ? normalizeEmploymentType(employmentTypeRaw) : null;
+  if (employmentTypeRaw && !employmentType) {
+    throw new JobSearchError(
+      `employment_type must be one of: ${EMPLOYMENT_TYPES.join(", ")}.`
+    );
+  }
+  const naturalQ = natural?.filters.q || null;
   return {
-    q: one(params, "q"),
+    q: naturalQ,
     status: status as JobSearchInput["status"],
-    company: one(params, "company"),
+    company: one(params, "company") || natural?.filters.company || null,
     sector: one(params, "sector"),
     roleFamily,
-    location: one(params, "location"),
-    remoteStatus: one(params, "remote_status"),
+    location: one(params, "location") || natural?.filters.location || null,
+    remoteStatus: one(params, "remote_status") || natural?.filters.remote_status || null,
+    employmentType,
     provider: one(params, "provider"),
     investor: one(params, "investor"),
-    newSince: newSince ? new Date(Date.parse(newSince)).toISOString() : null,
+    newSince: newSince
+      ? new Date(Date.parse(newSince)).toISOString()
+      : natural?.filters.new_since || null,
     sort: sortRaw as JobSort,
     limit,
     offset: cursorOffset || explicitOffset || (page - 1) * limit,
@@ -168,8 +188,18 @@ export function buildJobSearchSql(input: JobSearchInput, columns: string) {
   }
   equalInsensitive("companies.sector", input.sector);
   equalInsensitive("jobs.role_family", input.roleFamily);
-  equalInsensitive("jobs.location", input.location);
+  if (input.location) {
+    where.push("LOWER(jobs.location) LIKE LOWER(?)");
+    bindings.push(`%${input.location}%`);
+  }
   equalInsensitive("jobs.remote_status", input.remoteStatus);
+  if (input.employmentType) {
+    where.push(
+      "LOWER(REPLACE(REPLACE(REPLACE(jobs.employment_type, '-', ''), ' ', ''), '_', '')) = " +
+      "LOWER(REPLACE(REPLACE(REPLACE(?, '-', ''), ' ', ''), '_', ''))"
+    );
+    bindings.push(input.employmentType);
+  }
   if (input.provider) {
     where.push("LOWER(COALESCE(jobs.provider, jobs.source)) = LOWER(?)");
     bindings.push(input.provider);

@@ -9,6 +9,7 @@ import "./agent-contract.test";
 import "./conditional-cache.test";
 import "./public-job-contract.test";
 import "./intelligence-query.test";
+import "./natural-language-job-search.test";
 import "./hygiene.test";
 import "./ingestion-pipeline.test";
 import "./refresh-contract.test";
