@@ -44,6 +44,10 @@ Job queries default to status=verified_open, execute in D1, and return page.tota
 for the complete matching dataset. Supported job sorts are signal, title,
 title_desc, company, company_desc, sector, dept, loc, comp_low, comp_high,
 recent, and oldest; every order has a stable job-id tie-breaker.
+Canonical role_family values are People operations, GTM, Operations,
+Data and research, Engineering, Product, and Other. The aliases people and
+people_operations map to People operations; call the capabilities endpoint for
+the complete alias map. Unknown role families return HTTP 400.
 The compatibility /api/v1/jobs endpoint is bounded to 100 records per response
 (100 by default). Use its cursor or, preferably, the incremental flow below; do
 not plan for a whole-dataset response.
@@ -132,6 +136,10 @@ parserVersion, snapshotRunId, firstSeenAt, lastSeenAt, sourceUpdatedAt, and
 lastVerifiedAt. linkedInPresenceState is confirmed, not_observed, or unknown;
 not_observed is not a claim that a role is absent from LinkedIn and must be
 interpreted only with its evidence URL and check timestamp.
+Job records retain summary as a short preview. description contains the normalized
+canonical posting body when stored; descriptionAvailable reports whether it is
+present, descriptionUrl is the canonical fallback, and summaryTruncated prevents
+consumers from treating the preview as complete scoring evidence.
 Hiring signal is a directional momentum score, not a probability.
 Evidence confidence measures source completeness and verification freshness.
 Off-board hiring signals are a separate, expiring evidence class. They are not

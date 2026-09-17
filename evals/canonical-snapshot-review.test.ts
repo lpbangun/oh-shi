@@ -31,6 +31,7 @@ function normalized(externalId: string): NormalizedJob {
     compensation: "See posting",
     canonicalUrl: `https://jobs.ashbyhq.com/review-board/${externalId}`,
     publishedAt: "2026-07-01T00:00:00.000Z",
+    description: "Canonical review fixture.",
     summary: "Canonical review fixture.",
   };
 }
@@ -59,7 +60,7 @@ async function fixture(t: test.TestContext) {
       raw_url TEXT NOT NULL, discovery_channel TEXT NOT NULL, evidence_url TEXT NOT NULL,
       parser_version TEXT NOT NULL, snapshot_run_id TEXT NOT NULL,
       linkedin_presence_state TEXT NOT NULL, linkedin_evidence_url TEXT,
-      linkedin_checked_at TEXT, summary TEXT NOT NULL,
+      linkedin_checked_at TEXT, description TEXT, summary TEXT NOT NULL,
       UNIQUE(provider, source_id, external_id)
     )`),
     database.prepare(`CREATE TABLE changes (
@@ -72,7 +73,7 @@ async function fixture(t: test.TestContext) {
       provider TEXT NOT NULL, source_id TEXT NOT NULL, external_id TEXT NOT NULL,
       canonical_url TEXT NOT NULL, normalized_canonical_url TEXT NOT NULL,
       title TEXT NOT NULL, location TEXT NOT NULL, employment_type TEXT NOT NULL,
-      summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
+      description TEXT, summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
       first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
       last_verified_at TEXT NOT NULL, closed_at TEXT, raw_url TEXT NOT NULL,
       evidence_url TEXT NOT NULL, parser_version TEXT NOT NULL,

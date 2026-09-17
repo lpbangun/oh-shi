@@ -63,6 +63,7 @@ export const jobs = sqliteTable("jobs", {
   linkedInPresenceState: text("linkedin_presence_state").notNull().default("unknown"),
   linkedInEvidenceUrl: text("linkedin_evidence_url"),
   linkedInCheckedAt: text("linkedin_checked_at"),
+  description: text("description"),
   summary: text("summary").notNull(),
 }, (table) => [
   index("jobs_company_idx").on(table.companyId, table.status),
@@ -91,6 +92,7 @@ export const jobObservations = sqliteTable("job_observations", {
   title: text("title").notNull(),
   location: text("location").notNull(),
   employmentType: text("employment_type").notNull(),
+  description: text("description"),
   summary: text("summary").notNull(),
   publishedAt: text("published_at"),
   status: text("status").notNull(),

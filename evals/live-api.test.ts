@@ -120,6 +120,40 @@ test("live job records are recently verified and preserve canonical context", as
   }
 });
 
+test("live role-family aliases and job descriptions satisfy the agent contract", async () => {
+  const paths = [
+    "/api/v1/intelligence?view=jobs&status=verified_open&role_family=People%20operations&limit=1",
+    "/api/v1/intelligence?view=jobs&status=verified_open&role_family=people&limit=1",
+    "/api/v1/intelligence?view=jobs&status=verified_open&role_family=people_operations&limit=1",
+  ];
+  const [canonical, people, underscored] = await Promise.all(paths.map((path) =>
+    json<{ page: Page; applied_filters: { role_family: string }; data: Array<{
+      description: string | null;
+      descriptionAvailable: boolean;
+      descriptionUrl: string;
+      summary: string;
+      summaryTruncated: boolean;
+    }> }>(path)
+  ));
+  assert.ok(canonical.page.total > 0);
+  assert.equal(people.page.total, canonical.page.total);
+  assert.equal(underscored.page.total, canonical.page.total);
+  assert.equal(people.applied_filters.role_family, "People operations");
+  assert.equal(underscored.applied_filters.role_family, "People operations");
+
+  const invalid = await fetch(
+    `${base}/api/v1/intelligence?view=jobs&role_family=bogus`,
+    { signal: AbortSignal.timeout(15_000) }
+  );
+  assert.equal(invalid.status, 400);
+
+  const job = canonical.data[0];
+  assert.equal(job.descriptionAvailable, true);
+  assert.ok(job.description && job.description.length > job.summary.length);
+  assert.match(job.descriptionUrl, /^https:\/\//);
+  assert.equal(job.summaryTruncated, true);
+});
+
 test("company pagination, filters, and score receipts agree with published totals", async () => {
   type CompanyRecord = {
     id: string;

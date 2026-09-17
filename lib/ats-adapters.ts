@@ -1,4 +1,9 @@
-import { classifyRole, isUsEligible, summarizeCanonicalJob } from "./job-normalization";
+import {
+  classifyRole,
+  isUsEligible,
+  normalizeCanonicalJobDescription,
+  summarizeCanonicalJob,
+} from "./job-normalization";
 import { parsePersonioPositions } from "./personio-xml";
 import { boundedText } from "./public-web";
 import type { AtsProvider } from "./source-registry";
@@ -17,6 +22,7 @@ export type NormalizedJob = {
   compensation: string;
   canonicalUrl: string;
   publishedAt: string | null;
+  description: string;
   summary: string;
 };
 
@@ -186,6 +192,7 @@ function normalized(input: {
     compensation: text(input.compensation) || "See posting",
     canonicalUrl,
     publishedAt: iso(input.publishedAt),
+    description: normalizeCanonicalJobDescription(jobInput),
     summary: summarizeCanonicalJob(jobInput),
   };
 }

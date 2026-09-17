@@ -289,6 +289,10 @@ const makeJob = (
   linkedInPresenceState: "unknown",
   linkedInEvidenceUrl: null,
   linkedInCheckedAt: null,
+  description: summary,
+  descriptionAvailable: true,
+  descriptionUrl: canonicalUrl,
+  summaryTruncated: false,
   summary,
 });
 

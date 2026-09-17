@@ -1,6 +1,7 @@
 import {
   classifyRole,
   isUsEligible,
+  normalizeCanonicalJobDescription,
   summarizeCanonicalJob,
 } from "./job-normalization";
 import {
@@ -206,6 +207,7 @@ function normalizePosting(
     compensation: salaryFromPosting(posting) || "See posting",
     canonicalUrl: canonicalUrl.href,
     publishedAt: iso(posting.datePosted),
+    description: normalizeCanonicalJobDescription(jobInput),
     summary: summarizeCanonicalJob(jobInput),
   };
 }
@@ -237,6 +239,7 @@ function semanticPosting(html: string, pageUrl: URL): NormalizedJob | null {
       "See posting",
     canonicalUrl: pageUrl.href,
     publishedAt: null,
+    description: normalizeCanonicalJobDescription(jobInput),
     summary: summarizeCanonicalJob(jobInput),
   };
 }

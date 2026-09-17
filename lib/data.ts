@@ -61,7 +61,7 @@ const jobColumns = `
   jobs.snapshot_run_id as snapshotRunId,
   jobs.linkedin_presence_state as linkedInPresenceState,
   jobs.linkedin_evidence_url as linkedInEvidenceUrl,
-  jobs.linkedin_checked_at as linkedInCheckedAt, jobs.summary
+  jobs.linkedin_checked_at as linkedInCheckedAt, jobs.description, jobs.summary
 `;
 
 const changeColumns = `
@@ -174,6 +174,7 @@ async function initializeDatabase() {
       ),
       linkedin_evidence_url TEXT,
       linkedin_checked_at TEXT,
+      description TEXT,
       summary TEXT NOT NULL,
       CHECK(linkedin_presence_state='unknown' OR (
         linkedin_evidence_url IS NOT NULL AND linkedin_checked_at IS NOT NULL
@@ -191,6 +192,7 @@ async function initializeDatabase() {
       title TEXT NOT NULL,
       location TEXT NOT NULL,
       employment_type TEXT NOT NULL,
+      description TEXT,
       summary TEXT NOT NULL,
       published_at TEXT,
       status TEXT NOT NULL,
@@ -504,6 +506,7 @@ async function initializeDatabase() {
     ],
     ["linkedin_evidence_url", "ALTER TABLE jobs ADD COLUMN linkedin_evidence_url TEXT"],
     ["linkedin_checked_at", "ALTER TABLE jobs ADD COLUMN linkedin_checked_at TEXT"],
+    ["description", "ALTER TABLE jobs ADD COLUMN description TEXT"],
     [
       "linkedin_presence_state",
       `ALTER TABLE jobs ADD COLUMN linkedin_presence_state TEXT NOT NULL DEFAULT 'unknown'
@@ -514,6 +517,13 @@ async function initializeDatabase() {
   ] as const;
   for (const [column, statement] of jobProvenanceColumns) {
     if (!jobColumnNames.has(column)) await env.DB.prepare(statement).run();
+  }
+  const observationInfo = await env.DB.prepare("PRAGMA table_info(job_observations)")
+    .all<{ name: string }>();
+  if (!observationInfo.results.some((column) => column.name === "description")) {
+    await env.DB.prepare(
+      "ALTER TABLE job_observations ADD COLUMN description TEXT"
+    ).run();
   }
   await env.DB.prepare(`UPDATE jobs SET
     last_seen_at=CASE WHEN last_seen_at='' THEN last_verified_at ELSE last_seen_at END,
@@ -750,12 +760,12 @@ async function initializeDatabase() {
   // initialization pass, including newly inserted seed rows.
   await env.DB.prepare(`INSERT OR IGNORE INTO job_observations (
     id, job_id, company_id, provider, source_id, external_id, canonical_url,
-    normalized_canonical_url, title, location, employment_type, summary,
+    normalized_canonical_url, title, location, employment_type, description, summary,
     published_at, status, first_seen_at, last_seen_at, last_verified_at,
     closed_at, raw_url, evidence_url, parser_version, snapshot_run_id,
     match_method, match_score_bps
   ) SELECT 'observation_' || id, id, company_id, provider, source_id, external_id,
-    canonical_url, canonical_url, title, location, employment_type, summary,
+    canonical_url, canonical_url, title, location, employment_type, description, summary,
     published_at, status, first_seen_at, last_seen_at, last_verified_at,
     closed_at, raw_url, evidence_url, parser_version, snapshot_run_id,
     'backfill', 10000 FROM jobs`).run();
@@ -812,8 +822,8 @@ async function prepareDatabase() {
     const readiness = await env.DB.prepare(`SELECT
       EXISTS(SELECT 1 FROM companies LIMIT 1) as hasCompanies,
       EXISTS(SELECT sector FROM companies LIMIT 0) as companiesReady,
-      EXISTS(SELECT linkedin_presence_state FROM jobs LIMIT 0) as jobsReady,
-      EXISTS(SELECT normalized_canonical_url FROM job_observations LIMIT 0) as observationsReady,
+      EXISTS(SELECT linkedin_presence_state, description FROM jobs LIMIT 0) as jobsReady,
+      EXISTS(SELECT normalized_canonical_url, description FROM job_observations LIMIT 0) as observationsReady,
       EXISTS(SELECT promoted_job_id FROM hiring_signals LIMIT 0) as signalsReady,
       EXISTS(SELECT run_id FROM hiring_signal_promotions LIMIT 0) as promotionsReady,
       EXISTS(SELECT occurred_at FROM changes LIMIT 0) as changesReady,
@@ -1145,7 +1155,7 @@ async function listStoredJobs(includeClosed = false): Promise<Job[]> {
   const result = await env.DB.prepare(
     `SELECT ${jobColumns} FROM jobs ${where} ORDER BY first_seen_at DESC`
   ).all<Job>();
-  return result.results;
+  return result.results.map(withDescriptionContract);
 }
 
 export async function listDashboardJobs(limit?: number, includeClosed = false): Promise<DashboardJob[]> {
@@ -1245,10 +1255,23 @@ async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMe
 
 function attachCompaniesToJobs(jobs: Job[], companies: Company[]) {
   const companiesById = new Map(companies.map((company) => [company.id, company]));
-  return jobs.map((job) => ({
-    ...job,
-    company: companiesById.get(job.companyId),
+  return jobs.map((storedJob) => ({
+    ...withDescriptionContract(storedJob),
+    company: companiesById.get(storedJob.companyId),
   }));
+}
+
+function withDescriptionContract(job: Job): Job {
+  const description = typeof job.description === "string" && job.description.trim()
+    ? job.description.trim()
+    : null;
+  return {
+    ...job,
+    description,
+    descriptionAvailable: description !== null,
+    descriptionUrl: job.canonicalUrl,
+    summaryTruncated: description === null || job.summary.length < description.length,
+  };
 }
 
 export async function listJobs(includeClosed = false): Promise<Job[]> {
@@ -1375,7 +1398,7 @@ export async function getJobsForCompany(companyId: string): Promise<Job[]> {
   const result = await env.DB.prepare(
     `SELECT ${jobColumns} FROM jobs WHERE company_id = ? ORDER BY first_seen_at DESC`
   ).bind(companyId).all<Job>();
-  return result.results;
+  return result.results.map(withDescriptionContract);
 }
 
 export async function getChangesForCompany(companyId: string): Promise<ChangeEvent[]> {
@@ -1392,8 +1415,9 @@ export async function getJobById(id: string): Promise<Job | null> {
   const job = await env.DB.prepare(`SELECT ${jobColumns} FROM jobs WHERE id = ?`)
     .bind(id).first<Job>();
   if (!job) return null;
-  job.company = (await getCompanyById(job.companyId)) || undefined;
-  return job;
+  const contracted = withDescriptionContract(job);
+  contracted.company = (await getCompanyById(job.companyId)) || undefined;
+  return contracted;
 }
 
 export function apiEnvelope<T>(data: T, cursor = new Date().toISOString()) {

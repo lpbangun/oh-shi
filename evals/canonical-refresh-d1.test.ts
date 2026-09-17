@@ -29,6 +29,7 @@ function job(externalId: string): NormalizedJob {
     compensation: "See posting",
     canonicalUrl: `https://jobs.ashbyhq.com/integration-board/${externalId}`,
     publishedAt: "2026-07-01T00:00:00.000Z",
+    description: "Canonical integration fixture.",
     summary: "Canonical integration fixture.",
   };
 }
@@ -73,6 +74,7 @@ test("D1 quarantine prevents mutation, recovers, and later permits a narrow clos
       linkedin_presence_state TEXT NOT NULL,
       linkedin_evidence_url TEXT,
       linkedin_checked_at TEXT,
+      description TEXT,
       summary TEXT NOT NULL,
       CHECK(linkedin_presence_state='unknown' OR (
         linkedin_evidence_url IS NOT NULL AND linkedin_checked_at IS NOT NULL
@@ -94,7 +96,7 @@ test("D1 quarantine prevents mutation, recovers, and later permits a narrow clos
       provider TEXT NOT NULL, source_id TEXT NOT NULL, external_id TEXT NOT NULL,
       canonical_url TEXT NOT NULL, normalized_canonical_url TEXT NOT NULL,
       title TEXT NOT NULL, location TEXT NOT NULL, employment_type TEXT NOT NULL,
-      summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
+      description TEXT, summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
       first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
       last_verified_at TEXT NOT NULL, closed_at TEXT, raw_url TEXT NOT NULL,
       evidence_url TEXT NOT NULL, parser_version TEXT NOT NULL,
@@ -263,6 +265,16 @@ test("D1 quarantine prevents mutation, recovers, and later permits a narrow clos
   assert.equal(recovered.status, "success");
   assert.equal(recovered.opened, 0);
   assert.equal(recovered.closed, 0);
+  assert.deepEqual(
+    await database.prepare(`SELECT jobs.description,
+      job_observations.description AS observationDescription
+      FROM jobs JOIN job_observations ON job_observations.job_id=jobs.id
+      WHERE jobs.id='job-existing-0'`).first(),
+    {
+      description: "Canonical integration fixture.",
+      observationDescription: "Canonical integration fixture.",
+    }
+  );
   assert.deepEqual(
     await database.prepare(`SELECT change_type AS changeType, entity_id AS entityId
       FROM changes WHERE change_type='job_updated' AND entity_id='job-existing-0'`).first(),
@@ -573,6 +585,13 @@ test("job provenance migration preserves and truthfully backfills an existing D1
   ) {
     await database.prepare(statement).run();
   }
+  const descriptionMigration = await readFile(
+    new URL("../drizzle/0014_job_description_fidelity.sql", import.meta.url),
+    "utf8"
+  );
+  for (const statement of descriptionMigration.split(";").map((value) => value.trim()).filter(Boolean)) {
+    await database.prepare(statement).run();
+  }
   assert.deepEqual(
     await database.prepare(`SELECT job_id AS jobId, provider, source_id AS sourceId,
       external_id AS externalId, canonical_url AS canonicalUrl, status,
@@ -619,6 +638,10 @@ test("job provenance migration preserves and truthfully backfills an existing D1
     linkedInPresenceState: "unknown",
     linkedInEvidenceUrl: null,
     linkedInCheckedAt: null,
+    description: "Production-linked seed statement integration fixture.",
+    descriptionAvailable: true,
+    descriptionUrl: "https://jobs.ashbyhq.com/seed/new-seed-external",
+    summaryTruncated: false,
     summary: "Production-linked seed statement integration fixture.",
   };
   await prepareSeedJobStatement(database, seeded, "ashby", "ashby:seed").run();

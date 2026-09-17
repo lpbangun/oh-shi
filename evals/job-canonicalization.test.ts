@@ -17,6 +17,7 @@ const incoming: NormalizedJob = {
   compensation: "See posting",
   canonicalUrl: "https://apply.example.com/jobs/42?utm_source=board#apply",
   publishedAt: "2026-07-20T00:00:00.000Z",
+  description: "Build distributed payment systems with TypeScript and reliable cloud services.",
   summary: "Build distributed payment systems with TypeScript and reliable cloud services.",
 };
 
