@@ -750,6 +750,11 @@ export type ChangeEvent = {
   sourceUrl: string;
 };
 
+export type HomepageChangeEvent = ChangeEvent & {
+  companyId: string | null;
+  companyName: string | null;
+};
+
 export type MovementJobEvidence = {
   id: string;
   title: string;

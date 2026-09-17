@@ -200,6 +200,7 @@ test.describe("desktop hiring intelligence", () => {
 
     expect(firstRange.start).toBe(1);
     await expect(items).toHaveCount(Math.min(25, firstRange.total));
+    await expect(changes.getByText("Company unavailable", { exact: true })).toHaveCount(0);
     if (firstRange.total > 25) {
       await pager.getByRole("button", { name: /Next/i }).click();
       expect(numericRange(await status.innerText()).start).toBe(26);
