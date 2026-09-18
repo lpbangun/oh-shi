@@ -93,7 +93,10 @@ export async function boundedText(
   maxBytes = MAX_PUBLIC_DOCUMENT_BYTES
 ) {
   const declared = Number(response.headers.get("content-length") || 0);
-  if (declared > maxBytes) throw new Error("public_document_too_large");
+  if (declared > maxBytes) {
+    await discardResponseBody(response);
+    throw new Error("public_document_too_large");
+  }
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -110,6 +113,15 @@ export async function boundedText(
     output += decoder.decode(value, { stream: true });
   }
   return output + decoder.decode();
+}
+
+/** Release the Worker's fetch slot whenever a response body will not be read. */
+export async function discardResponseBody(response: Response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The body may already be consumed or canceled; either state releases it.
+  }
 }
 
 export class PublicWebSession {
@@ -133,13 +145,20 @@ export class PublicWebSession {
       });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location) throw new Error("robots_redirect_missing_location");
+        if (!location) {
+          await discardResponseBody(response);
+          throw new Error("robots_redirect_missing_location");
+        }
+        await discardResponseBody(response);
         const next = new URL(location, current);
-        if (next.protocol !== "https:") throw new Error("robots_redirect_not_https");
+        if (next.protocol !== "https:") {
+          throw new Error("robots_redirect_not_https");
+        }
         current = next;
         continue;
       }
       const value = response.ok ? await boundedText(response, 250_000) : "";
+      if (!response.ok) await discardResponseBody(response);
       this.robots.set(root, value);
       return value;
     }
@@ -168,12 +187,19 @@ export class PublicWebSession {
       });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location) throw new Error("discovery_redirect_missing_location");
+        if (!location) {
+          await discardResponseBody(response);
+          throw new Error("discovery_redirect_missing_location");
+        }
+        await discardResponseBody(response);
         const next = new URL(location, current);
-        if (next.protocol !== "https:") throw new Error("discovery_redirect_not_https");
+        if (next.protocol !== "https:") {
+          throw new Error("discovery_redirect_not_https");
+        }
         current = next;
         continue;
       }
+      if (!response.ok) await discardResponseBody(response);
       return response;
     }
     throw new Error("discovery_redirect_limit_exceeded");

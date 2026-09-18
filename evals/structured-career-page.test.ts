@@ -176,10 +176,9 @@ Sitemap: https://example.com/careers-sitemap.xml`;
     /incomplete payload: required page 404/
   );
 
-  await assert.rejects(
-    boundedText(new Response("x".repeat(11), {
-      headers: { "content-length": "11" },
-    }), 10),
-    /too_large/
-  );
+  const oversized = new Response("x".repeat(11), {
+    headers: { "content-length": "11" },
+  });
+  await assert.rejects(boundedText(oversized, 10), /too_large/);
+  assert.equal(oversized.bodyUsed, true);
 });

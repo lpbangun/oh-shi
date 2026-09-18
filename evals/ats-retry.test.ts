@@ -67,13 +67,16 @@ function smartDetail(id: string) {
 test("canonical adapters honor Retry-After for bounded 429 retries", async () => {
   let calls = 0;
   const waits: number[] = [];
+  const throttledResponses: Response[] = [];
   const fetcher: typeof fetch = async () => {
     calls += 1;
     if (calls === 1) {
-      return new Response("rate limited", {
+      const response = new Response("rate limited", {
         status: 429,
         headers: { "retry-after": "2" },
       });
+      throttledResponses.push(response);
+      return response;
     }
     return Response.json({ offers: [] });
   };
@@ -86,6 +89,7 @@ test("canonical adapters honor Retry-After for bounded 429 retries", async () =>
   assert.equal(result.complete, true);
   assert.equal(calls, 2);
   assert.deepEqual(waits, [2_000]);
+  assert.equal(throttledResponses[0].bodyUsed, true);
 });
 
 test("canonical adapters do not retry non-retryable or incomplete successful responses", async () => {
@@ -188,16 +192,20 @@ test("Workable accepts only bounded complete JSON from its public account endpoi
   assert.deepEqual(result.jobs.map((item) => item.externalId), ["ROLE123"]);
 
   let htmlCalls = 0;
+  const htmlResponses: Response[] = [];
   await assert.rejects(
     retryCanonicalFetch(workableSource, async () => {
       htmlCalls += 1;
-      return new Response("<html>Sign in</html>", {
+      const response = new Response("<html>Sign in</html>", {
         headers: { "content-type": "text/html" },
       });
+      htmlResponses.push(response);
+      return response;
     }, 3, async () => undefined),
     /workable board acme returned an incomplete payload: non-JSON response/
   );
   assert.equal(htmlCalls, 1);
+  assert.equal(htmlResponses[0].bodyUsed, true);
 
   let oversizedCalls = 0;
   await assert.rejects(

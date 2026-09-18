@@ -5,7 +5,7 @@ import {
   summarizeCanonicalJob,
 } from "./job-normalization";
 import { parsePersonioPositions } from "./personio-xml";
-import { boundedText } from "./public-web";
+import { boundedText, discardResponseBody } from "./public-web";
 import type { AtsProvider } from "./source-registry";
 import { fetchStructuredCareerSource } from "./structured-career-page";
 
@@ -885,8 +885,9 @@ async function fetchSmartRecruitersBoard(
       }
       if (!response.ok) {
         const retryable = response.status === 429 || response.status >= 500;
+        const retryAfter = retryAfterMilliseconds(response);
+        await discardResponseBody(response);
         if (retryable && attempt < 3) {
-          const retryAfter = retryAfterMilliseconds(response);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.min(10_000, retryAfter ?? 250 * 2 ** (attempt - 1)))
           );
@@ -895,6 +896,7 @@ async function fetchSmartRecruitersBoard(
         smartRecruitersIncomplete(boardId, `${label} returned ${response.status}`);
       }
       if (!/\bjson\b/i.test(response.headers.get("content-type") || "")) {
+        await discardResponseBody(response);
         smartRecruitersIncomplete(boardId, `${label} returned a non-JSON response`);
       }
       let body: string;
@@ -1006,6 +1008,7 @@ export async function fetchCanonicalBoard(
   });
   if (!response.ok) {
     const retryAfterMs = retryAfterMilliseconds(response);
+    await discardResponseBody(response);
     throw new CanonicalHttpError(
       response.status,
       retryAfterMs,
@@ -1015,6 +1018,7 @@ export async function fetchCanonicalBoard(
   let payload: unknown;
   if (provider === "personio") {
     if (!/\bxml\b/i.test(response.headers.get("content-type") || "")) {
+      await discardResponseBody(response);
       throw new Error(`personio board ${boardId} returned an incomplete payload: non-XML response`);
     }
     try {
@@ -1028,6 +1032,7 @@ export async function fetchCanonicalBoard(
     }
   } else if (provider === "workable") {
     if (!/\bjson\b/i.test(response.headers.get("content-type") || "")) {
+      await discardResponseBody(response);
       throw new Error(`workable board ${boardId} returned an incomplete payload: non-JSON response`);
     }
     try {
