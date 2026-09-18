@@ -14,6 +14,7 @@ import {
 } from "@/lib/refresh-contract";
 import {
   executeRefreshOnce,
+  phaseRefreshRunKey,
   validRunKey,
   type StoredRefreshResponse,
 } from "@/lib/refresh-idempotency";
@@ -22,9 +23,9 @@ export const dynamic = "force-dynamic";
 
 function emptyDiscovery(completedAt: string) {
   return {
-    run_id: "discovery_separate_request",
+    run_id: "discovery_not_run",
     completed_at: completedAt,
-    overall_status: "separate_request" as const,
+    overall_status: "not_run" as const,
     source_counts: {
       configured: 0, fetched: 0, manual: 0, blocked: 0,
       failed: 0, completed: 0, reconciled: true,
@@ -42,7 +43,7 @@ function emptyDiscovery(completedAt: string) {
 
 function emptyCanonical(refreshedAt: string) {
   return {
-    run_id: "canonical_separate_request",
+    run_id: "canonical_not_run",
     refreshed_at: refreshedAt,
     boards: 0,
     successful_sources: 0,
@@ -53,9 +54,9 @@ function emptyCanonical(refreshedAt: string) {
     opened: 0,
     closed: 0,
     scored: 0,
-    success_ratio: 1,
+    success_ratio: 0,
     required_success_ratio: 0.5,
-    overall_status: "separate_request" as const,
+    overall_status: "not_run" as const,
     sources: [],
   };
 }
@@ -63,26 +64,33 @@ function emptyCanonical(refreshedAt: string) {
 async function discoveryWithFallback() {
   return attemptWithFallback(
     () => runDiscovery(),
-    (error) => ({
-      run_id: "discovery_failed",
-      completed_at: new Date().toISOString(),
-      overall_status: "failed" as const,
-      source_counts: {
-        configured: 0, fetched: 0, manual: 0, blocked: 0,
-        failed: 0, completed: 0, reconciled: true,
-      },
-      receipts: [],
-      candidates_discovered: 0,
-      candidates_processed: 0,
-      canonical_boards_detected: 0,
-      companies_activated: 0,
-      failed_sources: [{
-        id: "discovery-run",
-        error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-      }],
-      failed_candidates: [],
-      blocked_sources: [],
-    })
+    (error) => {
+      const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+      return {
+        run_id: "discovery_failed",
+        completed_at: new Date().toISOString(),
+        overall_status: "failed" as const,
+        source_counts: {
+          configured: 1, fetched: 0, manual: 0, blocked: 0,
+          failed: 1, completed: 0, reconciled: true,
+        },
+        receipts: [{
+          source_id: "discovery-run",
+          access_mode: "internal",
+          status: "failed" as const,
+          fetched: false,
+          discovered_count: 0,
+          error: message,
+        }],
+        candidates_discovered: 0,
+        candidates_processed: 0,
+        canonical_boards_detected: 0,
+        companies_activated: 0,
+        failed_sources: [{ id: "discovery-run", error: message }],
+        failed_candidates: [],
+        blocked_sources: [],
+      };
+    }
   );
 }
 
@@ -109,7 +117,7 @@ export function GET(request: Request) {
 export async function POST(request: Request) {
   const denied = authenticate(request);
   if (denied) return denied;
-  const phase = new URL(request.url).searchParams.get("phase") || "canonical";
+  const phase = new URL(request.url).searchParams.get("phase");
   if (phase !== "discovery" && phase !== "canonical") {
     return Response.json(
       { error: "Refresh phase must be discovery or canonical." },
@@ -134,7 +142,8 @@ export async function POST(request: Request) {
   };
 
   try {
-    const execution = await executeRefreshOnce(runKey, store, async () => {
+    const storageKey = await phaseRefreshRunKey(runKey, phase);
+    const execution = await executeRefreshOnce(storageKey, store, async () => {
       if (phase === "discovery") {
         const discovery = await discoveryWithFallback();
         const coverage = await getCoverageMetrics();

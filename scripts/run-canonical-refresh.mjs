@@ -53,12 +53,18 @@ const requestOptions = {
 // window independently. Running them as separate idempotent requests prevents
 // their combined wall time from being canceled at the platform deadline.
 const discoveryUrl = new URL("/api/internal/refresh?phase=discovery", baseUrl);
-const discoveryRun = await runVersionedRefresh(
-  discoveryUrl,
-  headers,
-  `${runKey}:discovery`,
-  requestOptions
-);
+let discoveryRun = null;
+let discoveryError = null;
+try {
+  discoveryRun = await runVersionedRefresh(
+    discoveryUrl,
+    headers,
+    runKey,
+    requestOptions
+  );
+} catch (error) {
+  discoveryError = error;
+}
 
 const refreshUrl = new URL("/api/internal/refresh?phase=canonical", baseUrl);
 const canonicalRun = await runVersionedRefresh(
@@ -67,18 +73,29 @@ const canonicalRun = await runVersionedRefresh(
   runKey,
   requestOptions
 );
-if (discoveryRun.preflight.deployed_sha !== canonicalRun.preflight.deployed_sha) {
+if (
+  discoveryRun &&
+  discoveryRun.preflight.deployed_sha !== canonicalRun.preflight.deployed_sha
+) {
   throw new Error("Deployment changed between discovery and canonical refresh phases.");
 }
 const preflight = canonicalRun.preflight;
 const result = {
   ...canonicalRun.result,
-  discovery: discoveryRun.result.discovery,
+  discovery: discoveryRun?.result.discovery || canonicalRun.result.discovery,
   source_receipts: {
     ...canonicalRun.result.source_receipts,
-    discovery: discoveryRun.result.source_receipts.discovery,
+    discovery: discoveryRun?.result.source_receipts.discovery || [],
   },
 };
+
+if (discoveryError) {
+  console.warn(
+    `Discovery phase failed before producing a receipt: ${
+      discoveryError instanceof Error ? discoveryError.message : String(discoveryError)
+    }. Canonical verification continued independently.`
+  );
+}
 
 async function verifyFreshness(refreshedAt) {
   let lastReason = "No response received.";

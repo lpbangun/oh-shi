@@ -145,7 +145,7 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(refreshRunner, /runVersionedRefresh/);
   assert.match(refreshRunner, /phase=discovery/);
   assert.match(refreshRunner, /phase=canonical/);
-  assert.match(refreshRunner, /\$\{runKey\}:discovery/);
+  assert.match(refreshRunner, /Canonical verification continued independently/);
   assert.match(refreshRunner, /companiesAddedLast1Day/);
   assert.match(refreshRunner, /jobsAddedLast24Hours/);
   assert.match(refreshRunner, /Canonical source failure/);

@@ -153,6 +153,7 @@ test("canonical refresh is protected", async () => {
   assert.match(source, /idempotency-key/i);
   assert.match(source, /phase !== "discovery" && phase !== "canonical"/);
   assert.match(source, /phase === "discovery"/);
+  assert.match(source, /phaseRefreshRunKey/);
   assert.match(source, /executeRefreshOnce/);
 });
 
