@@ -94,9 +94,12 @@ const jsonResponse = (
 
 function fakeFetch(handlers: Array<(input: unknown, init?: RequestInit) => Response | Promise<Response>>) {
   let index = 0;
-  const calls: Array<{ method: string }> = [];
+  const calls: Array<{ method: string; idempotencyKey: string | null }> = [];
   const impl = (async (input: unknown, init?: RequestInit) => {
-    calls.push({ method: init?.method || "GET" });
+    calls.push({
+      method: init?.method || "GET",
+      idempotencyKey: new Headers(init?.headers).get("idempotency-key"),
+    });
     const handler = handlers[Math.min(index, handlers.length - 1)];
     index += 1;
     return handler(input, init);
@@ -315,6 +318,59 @@ test("non-retryable HTTP failures issue exactly one POST", async () => {
     { fetchImpl: impl, attempts: 3, sleep: async () => {} }
   ), /HTTP 400/);
   assert.equal(postAttempts, 1);
+});
+
+test("an in-progress duplicate polls the same idempotency key until replay", async () => {
+  const runKey = "scheduled-run-conflict-replay";
+  const delays: number[] = [];
+  const { impl, calls } = fakeFetch([
+    () => jsonResponse(409, {
+      error: "This refresh run is already in progress.",
+      run_key: runKey,
+    }, { "retry-after": "2" }),
+    () => jsonResponse(409, {
+      error: "This refresh run is already in progress.",
+      run_key: runKey,
+    }, { "retry-after": "60" }),
+    () => jsonResponse(200, validRefreshResponse(runKey)),
+  ]);
+  const result = await postRefresh(
+    "https://example.com/api/internal/refresh",
+    { authorization: "Bearer secret" },
+    runKey,
+    {
+      fetchImpl: impl,
+      conflictPollAttempts: 2,
+      conflictPollDelayMs: 15_000,
+      conflictPollMaxDelayMs: 30_000,
+      sleep: async (ms: number) => { delays.push(ms); },
+    }
+  );
+  assert.equal(result.postCount, 3);
+  assert.deepEqual(delays, [2_000, 30_000]);
+  assert.deepEqual(calls.map((call) => call.idempotencyKey), [runKey, runKey, runKey]);
+});
+
+test("persistent in-progress conflicts stop without changing the run key", async () => {
+  const runKey = "scheduled-run-conflict-bounded";
+  const { impl, calls } = fakeFetch([
+    () => jsonResponse(409, {
+      error: "This refresh run is already in progress.",
+      run_key: runKey,
+    }),
+  ]);
+  await assert.rejects(postRefresh(
+    "https://example.com/api/internal/refresh",
+    { authorization: "Bearer secret" },
+    runKey,
+    {
+      fetchImpl: impl,
+      conflictPollAttempts: 2,
+      sleep: async () => {},
+    }
+  ), /remained in progress after 2 conflict polls/);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((call) => call.idempotencyKey === runKey));
 });
 
 test("a duplicate run key cannot execute the mutation twice", async () => {

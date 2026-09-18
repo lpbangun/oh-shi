@@ -6,6 +6,17 @@ Notable changes to OH SHI are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Deterministic natural-language job search across the public API and job board.
+- A persistent GitHub repository link in the site header.
+
+### Fixed
+
+- Preserve verified job descriptions when later ATS snapshots omit posting bodies.
+- Treat duplicate in-progress refresh responses as a bounded replay wait so completed
+  scheduled refreshes no longer report false failures.
+
 ## [0.1.0] - 2026-08-07
 
 ### Added

@@ -37,6 +37,16 @@ function numericRange(status: string) {
   };
 }
 
+test("the repository link is visible and keyboard accessible", async ({ page }) => {
+  await openHome(page);
+  const repositoryLink = page.getByRole("link", { name: "OH SHI on GitHub" });
+  await expect(repositoryLink).toBeVisible();
+  await expect(repositoryLink).toHaveAttribute("href", "https://github.com/lpbangun/oh-shi");
+  await expect(repositoryLink).toHaveAttribute("target", "_blank");
+  await repositoryLink.focus();
+  await expect(repositoryLink).toBeFocused();
+});
+
 test.describe("desktop hiring intelligence", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), "Desktop-specific interaction");
