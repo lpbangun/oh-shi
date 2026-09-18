@@ -71,6 +71,9 @@ test("compatibility pagination and booleans fail closed", () => {
 
 test("provider completeness rejects URLs normalization would discard", () => {
   assert.equal(isCompleteProviderPayload("ashby", {
+    jobs: [{ id: "1", title: "Engineer", jobUrl: "https://jobs.ashbyhq.com/board/1" }],
+  }), true, "Ashby identity-only payloads are complete even without descriptionPlain");
+  assert.equal(isCompleteProviderPayload("ashby", {
     jobs: [{ id: "1", title: "Engineer", jobUrl: "http://example.test/job/1" }],
   }), false);
   assert.equal(isCompleteProviderPayload("greenhouse", {
