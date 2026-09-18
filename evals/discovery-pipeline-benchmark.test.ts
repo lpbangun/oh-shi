@@ -380,9 +380,16 @@ test("probeAtsBySlug uses the existing Workable, Recruitee, and Personio adapter
   }
 });
 
-test("probeAtsBySlug returns null when every endpoint 404s", async () => {
-  const fetcher = (async () => notFound()) as typeof fetch;
+test("probeAtsBySlug releases every 404 body while probing missing boards", async () => {
+  const responses: Response[] = [];
+  const fetcher = (async () => {
+    const response = notFound();
+    responses.push(response);
+    return response;
+  }) as typeof fetch;
   assert.equal(await probeAtsBySlug("missing.com", "Missing", { fetcher }), null);
+  assert.ok(responses.length > 6);
+  assert.ok(responses.every((response) => response.bodyUsed));
 });
 
 // ---------------------------------------------------------------------------

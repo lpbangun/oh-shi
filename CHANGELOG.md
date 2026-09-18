@@ -18,6 +18,8 @@ Notable changes to OH SHI are recorded here. The format follows
   scheduled refreshes no longer report false failures.
 - Bound each discovery batch so the combined discovery and canonical refresh persists
   its completion receipt within the hosted request window.
+- Release unread HTTP response bodies during discovery and canonical retries so the
+  Worker cannot exhaust its concurrent fetch slots during scheduled refreshes.
 
 ## [0.1.0] - 2026-08-07
 

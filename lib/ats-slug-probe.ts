@@ -4,7 +4,7 @@ import {
   paceCanonicalProviderRequest,
 } from "./ats-adapters";
 import type { AtsProvider } from "./source-registry";
-import { boundedText, PublicWebSession } from "./public-web";
+import { boundedText, discardResponseBody, PublicWebSession } from "./public-web";
 
 export const ATS_SLUG_PROBE_VERSION = "1.1";
 
@@ -64,7 +64,10 @@ async function fetchJson(url: string, fetcher: typeof fetch) {
   });
   if (!response.ok) return null;
   const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("json")) return null;
+  if (!contentType.includes("json")) {
+    await discardResponseBody(response);
+    return null;
+  }
   try {
     return JSON.parse(await boundedText(response, 5_000_000));
   } catch {
@@ -84,7 +87,10 @@ async function fetchProbePayload(
   });
   if (!response.ok) return null;
   const contentType = response.headers.get("content-type") || "";
-  if (!/(?:xml|text\/plain)/i.test(contentType)) return null;
+  if (!/(?:xml|text\/plain)/i.test(contentType)) {
+    await discardResponseBody(response);
+    return null;
+  }
   return boundedText(response, 2_000_000);
 }
 

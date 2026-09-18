@@ -5,6 +5,7 @@ import {
 import { registrableDomain } from "./domain-registry";
 import {
   boundedText,
+  discardResponseBody,
   linksFromHtml,
   PublicWebSession,
 } from "./public-web";
@@ -127,6 +128,7 @@ export async function probeCanonicalSource(
         candidates.set(key, current);
       }
       if (!sameRegistrableDomain(finalUrl, website.href) && !direct.length) {
+        await discardResponseBody(response);
         pages.push({
           requestedUrl: candidate.url,
           finalUrl,

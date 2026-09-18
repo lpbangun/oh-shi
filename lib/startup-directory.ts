@@ -2,6 +2,7 @@ import {
   registrableDomain,
   type StartupDomainEvidenceInput,
 } from "./domain-registry";
+import { discardResponseBody } from "./public-web";
 
 export const YC_DIRECTORY_URL = "https://yc-oss.github.io/api/companies/all.json";
 export const YC_TERMS_URL = "https://github.com/yc-oss/api";
@@ -99,6 +100,7 @@ export async function fetchYcDirectory(
     signal: AbortSignal.timeout(60_000),
   });
   if (!response.ok) {
+    await discardResponseBody(response);
     throw new Error(`YC directory fetch failed with HTTP ${response.status}`);
   }
   const payload = await response.json();
