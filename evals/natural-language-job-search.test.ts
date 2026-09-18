@@ -70,3 +70,16 @@ test("job search accepts structured employment type and natural-language q", () 
   assert.match(sql.dataSql, /employment_type/);
   assert.deepEqual(sql.bindings, ["verified_open", "Full time"]);
 });
+
+test("job search applies inferred status without overriding explicit status controls", () => {
+  assert.equal(parseJobSearch(params("q=closed%20engineering%20jobs")).status, "verified_closed");
+  assert.equal(parseJobSearch(params("q=all%20engineering%20jobs")).status, "all");
+  assert.equal(
+    parseJobSearch(params("q=closed%20engineering%20jobs&status=verified_open")).status,
+    "verified_open"
+  );
+  assert.equal(
+    parseJobSearch(params("q=closed%20engineering%20jobs&include_closed=false")).status,
+    "verified_open"
+  );
+});

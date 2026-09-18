@@ -79,7 +79,13 @@ export function parseJobSearch(
     throw new JobSearchError("include_closed must be true or false.");
   }
   const includeClosed = includeClosedRaw === "true";
-  const status = includeClosed && statusRaw === null ? "all" : statusRaw || "verified_open";
+  const rawQuery = one(params, "q");
+  const natural = rawQuery ? parseNaturalLanguageJobSearch(rawQuery) : null;
+  const status = statusRaw !== null
+    ? statusRaw
+    : includeClosedRaw !== null
+      ? includeClosed ? "all" : "verified_open"
+      : natural?.filters.status || "verified_open";
   if (!["verified_open", "verified_closed", "all"].includes(status)) {
     throw new JobSearchError("status must be verified_open, verified_closed, or all.");
   }
@@ -107,8 +113,6 @@ export function parseJobSearch(
   if (newSince && (!/^\d{4}-\d{2}-\d{2}T/.test(newSince) || !Number.isFinite(Date.parse(newSince)))) {
     throw new JobSearchError("new_since must be an ISO-8601 timestamp.");
   }
-  const rawQuery = one(params, "q");
-  const natural = rawQuery ? parseNaturalLanguageJobSearch(rawQuery) : null;
   const roleFamilyRaw = one(params, "role_family") || natural?.filters.role_family;
   const roleFamily = roleFamilyRaw ? normalizeRoleFamily(roleFamilyRaw) : null;
   if (roleFamilyRaw && !roleFamily) {

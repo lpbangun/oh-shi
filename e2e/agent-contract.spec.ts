@@ -296,6 +296,16 @@ test.describe("unified agent contract", () => {
     const capabilityPayload = await capabilities.json();
     expect(capabilityPayload.data.views.jobs.filters).toContain("employment_type");
     expect(capabilityPayload.data.views.jobs.natural_language).toContain("deterministic");
+
+    const closedResponse = await request.get(
+      "/api/v1/intelligence?view=jobs&q=closed%20engineering%20jobs&limit=100"
+    );
+    expect(closedResponse.status()).toBe(200);
+    const closedPayload = await closedResponse.json();
+    expect(closedPayload.applied_filters.status).toBe("verified_closed");
+    expect(
+      closedPayload.data.every((job: { status: string }) => job.status === "verified_closed")
+    ).toBe(true);
   });
 
   test("job records make description availability and preview truncation explicit", async ({ request }) => {
