@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     const execution = await executeRefreshOnce(runKey, store, async () => {
       const companies = await listCompanies();
       const discovery = await discoverFundingUpdates(companies);
-      const persisted = await persistFundingDiscoveries(discovery.discoveries);
+      const persisted = await persistFundingDiscoveries(discovery.discoveries, discovery.leads);
       const failedSources = discovery.receipts.filter((receipt) => receipt.status === "failed").length;
       const body = {
         contract_version: "1.0",
@@ -81,6 +81,7 @@ export async function POST(request: Request) {
           failed: failedSources,
         },
         candidates_found: discovery.discoveries.length,
+        company_leads_added: persisted.leadsRegistered,
         announcements_added: persisted.announcementsAdded,
         companies_updated: persisted.companiesUpdated,
         scores_recomputed: persisted.scoresUpdated,

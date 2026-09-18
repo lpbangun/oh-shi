@@ -1,8 +1,10 @@
 import { boundedText, PublicWebSession } from "./public-web";
+import { registrableDomain, type StartupDomainEvidenceInput } from "./domain-registry";
 import type { Company } from "./types";
 
-export const FUNDING_DISCOVERY_VERSION = "2026-08-02";
+export const FUNDING_DISCOVERY_VERSION = "2026-09-18";
 export const FUNDING_LOOKBACK_DAYS = 14;
+export const UNMATCHED_FUNDING_LEAD_LIMIT = 8;
 
 export type FundingDiscovery = {
   id: string;
@@ -25,7 +27,16 @@ export type FundingSourceReceipt = {
   status: "completed" | "failed";
   documentsChecked: number;
   candidatesFound: number;
+  leadsFound?: number;
   error?: string;
+};
+
+export type FundingCompanyLead = {
+  companyName: string;
+  websiteUrl: string;
+  evidenceUrl: string;
+  publisher: string;
+  observedAt: string;
 };
 
 type FundingSource = {
@@ -59,6 +70,13 @@ const REPUTABLE_SOURCES: FundingSource[] = [
   },
 ];
 
+const NEWS_TERMS_URL: Record<string, string> = {
+  TechCrunch: "https://techcrunch.com/terms-of-service/",
+  "Crunchbase News": "https://about.crunchbase.com/terms-of-service/",
+};
+
+const BLOCKED_COMPANY_HOST =
+  /(?:^|\.)(?:techcrunch|crunchbase|yahoo|msn|google|apple|microsoft|amazon|facebook|instagram|linkedin|twitter|youtube|wikipedia|cloudfront|googleapis|wixstatic|substack)\.com$|^(?:www\.)?(?:x\.com|t\.co|bit\.ly)$/i;
 const FUNDING_ACTION = /\b(?:raises?|raised|secures?|secured|closes?|closed|lands?|landed|announces?|announced)\b/i;
 const FUNDING_OBJECT = /(?:\bfunding\b|\bfinancing\b|\binvestment\b|\bround\b|\bpre[- ]?seed\b|\bseed\b|\bseries\s+[a-h]\b|[$€£]\s?\d)/i;
 const SPECULATIVE = /\b(?:in talks|seeks?|seeking|plans? to raise|reportedly raising|targeting)\b/i;
@@ -226,6 +244,123 @@ export function fundingDiscoveryFromPage(input: {
   };
 }
 
+export function companyNameFromFundingTitle(title: string) {
+  const cleaned = title.replace(/\s+/g, " ").trim();
+  const match = cleaned.match(
+    /^(.{2,80}?)\s+(?:raises?|raised|secures?|secured|closes?|closed|lands?|landed|announces?|announced)\b/i
+  );
+  const name = match?.[1]?.replace(/^[\s:;|–—-]+|[\s:;|–—-]+$/g, "").trim() || "";
+  if (!name || /^(breaking|exclusive|how|why|what|the)\b/i.test(name)) return null;
+  if (name.split(/\s+/).length > 8) return null;
+  return name;
+}
+
+function considerCompanyWebsite(href: string, pageUrl: string, found: Map<string, string>) {
+  try {
+    const url = new URL(href, pageUrl);
+    if (url.protocol !== "https:") return;
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    const pageHost = new URL(pageUrl).hostname.replace(/^www\./, "").toLowerCase();
+    if (host === pageHost || BLOCKED_COMPANY_HOST.test(host)) return;
+    const domain = registrableDomain(host);
+    if (!domain) return;
+    if (!found.has(domain)) found.set(domain, `https://${domain}/`);
+  } catch {
+    // Invalid hrefs are not company websites.
+  }
+}
+
+export function companyWebsiteFromFundingHtml(html: string, pageUrl: string) {
+  const found = new Map<string, string>();
+  for (const script of html.matchAll(
+    /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  )) {
+    try {
+      const parsed = JSON.parse(script[1]);
+      const nodes = Array.isArray(parsed)
+        ? parsed
+        : [parsed, ...((parsed && parsed["@graph"]) || [])];
+      for (const node of nodes) {
+        const type = String(node?.["@type"] || "");
+        if (!/organization|corporation/i.test(type) || !node?.url) continue;
+        considerCompanyWebsite(String(node.url), pageUrl, found);
+      }
+    } catch {
+      // Malformed JSON-LD is ignored.
+    }
+  }
+  for (const match of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi)) {
+    considerCompanyWebsite(match[1], pageUrl, found);
+  }
+  if (found.size !== 1) return null;
+  return [...found.values()][0];
+}
+
+function nameAgreesWithWebsite(name: string, websiteUrl: string) {
+  try {
+    const label = registrableDomain(new URL(websiteUrl).hostname).split(".")[0] || "";
+    const compactName = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const compactLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return compactName.length >= 3 && compactLabel.length >= 3 &&
+      (compactLabel.includes(compactName) || compactName.includes(compactLabel));
+  } catch {
+    return false;
+  }
+}
+
+export function fundingCompanyLeadFromPage(input: {
+  sourceUrl: string;
+  publisher: string;
+  metadata: PageMetadata;
+  html: string;
+  now: string;
+}): FundingCompanyLead | null {
+  const terms = NEWS_TERMS_URL[input.publisher];
+  if (!terms) return null;
+  const combined = `${input.metadata.title}. ${input.metadata.description}`;
+  if (!input.metadata.publishedAt) return null;
+  if (!FUNDING_ACTION.test(combined) || !FUNDING_OBJECT.test(combined) || SPECULATIVE.test(combined)) {
+    return null;
+  }
+  const occurred = Date.parse(input.metadata.publishedAt);
+  const now = Date.parse(input.now);
+  if (!Number.isFinite(occurred) || !Number.isFinite(now)) return null;
+  if (occurred > now + 86_400_000 || occurred < now - FUNDING_LOOKBACK_DAYS * 86_400_000) return null;
+  let source: URL;
+  try {
+    source = new URL(input.sourceUrl);
+  } catch {
+    return null;
+  }
+  if (source.protocol !== "https:") return null;
+  const companyName = companyNameFromFundingTitle(input.metadata.title);
+  const websiteUrl = companyWebsiteFromFundingHtml(input.html, source.href);
+  if (!companyName || !websiteUrl || !nameAgreesWithWebsite(companyName, websiteUrl)) return null;
+  return {
+    companyName,
+    websiteUrl,
+    evidenceUrl: source.href,
+    publisher: input.publisher,
+    observedAt: new Date(occurred).toISOString(),
+  };
+}
+
+export function fundingLeadEvidenceInput(lead: FundingCompanyLead): StartupDomainEvidenceInput {
+  return {
+    companyName: lead.companyName,
+    websiteUrl: lead.websiteUrl,
+    sourceId: `news:${lead.evidenceUrl}`,
+    sourceKind: "funding-news",
+    sourceClassification: "recent_funding_announcement",
+    evidenceUrl: lead.evidenceUrl,
+    permissionStatus: "permitted",
+    sourceTermsUrl: NEWS_TERMS_URL[lead.publisher],
+    observedAt: lead.observedAt,
+    activityState: "unknown",
+    reviewStatus: "pending",
+  };
+}
+
 async function mapWithConcurrency<T, U>(
   values: T[],
   limit: number,
@@ -290,18 +425,25 @@ export async function discoverFundingUpdates(
         if (direct) sourceCandidates.push(direct);
       }
 
-      const relevantLinks = links
-        .filter((link) => boundCompany ? companyMentioned(boundCompany, link.label) || officialHost(boundCompany, link.url) : companies.some((company) => companyMentioned(company, link.label)))
+      const matchesKnown = (link: { url: string; label: string }) => boundCompany
+        ? companyMentioned(boundCompany, link.label) || officialHost(boundCompany, link.url)
+        : companies.some((company) => companyMentioned(company, link.label));
+      const knownLinks = links.filter(matchesKnown)
         .slice(0, source.kind === "reputable" ? 20 : 4);
+      const unmatchedLinks = source.kind === "reputable" && !boundCompany
+        ? links.filter((link) => !matchesKnown(link)).slice(0, UNMATCHED_FUNDING_LEAD_LIMIT)
+        : [];
+      const relevantLinks = [...knownLinks, ...unmatchedLinks];
+      const sourceLeads: FundingCompanyLead[] = [];
       const linked = await mapWithConcurrency(relevantLinks, 3, async (link) => {
         try {
           const html = await fetchPage(session, link.url);
           documentsChecked += 1;
           const metadata = pageMetadata(html);
-          const candidates = boundCompany
+          const matchedCompanies = boundCompany
             ? [boundCompany]
             : companies.filter((company) => companyMentioned(company, `${link.label} ${metadata.title} ${metadata.description}`));
-          return candidates.flatMap((company) => {
+          const discoveries = matchedCompanies.flatMap((company) => {
             const discovery = fundingDiscoveryFromPage({
               company,
               sourceUrl: link.url,
@@ -312,14 +454,27 @@ export async function discoverFundingUpdates(
             });
             return discovery ? [discovery] : [];
           });
+          if (!discoveries.length && !boundCompany) {
+            const lead = fundingCompanyLeadFromPage({
+              sourceUrl: link.url,
+              publisher: source.publisher,
+              metadata,
+              html,
+              now,
+            });
+            if (lead) sourceLeads.push(lead);
+          }
+          return discoveries;
         } catch {
           return [];
         }
       });
       sourceCandidates.push(...linked.flat());
       const candidates = [...new Map(sourceCandidates.map((candidate) => [candidate.id, candidate])).values()];
+      const leads = [...new Map(sourceLeads.map((lead) => [lead.websiteUrl, lead])).values()];
       return {
         candidates,
+        leads,
         receipt: {
           sourceId: source.id,
           sourceUrl: source.url,
@@ -327,11 +482,13 @@ export async function discoverFundingUpdates(
           status: "completed" as const,
           documentsChecked,
           candidatesFound: candidates.length,
+          leadsFound: leads.length,
         },
       };
     } catch (error) {
       return {
         candidates: [] as FundingDiscovery[],
+        leads: [] as FundingCompanyLead[],
         receipt: {
           sourceId: source.id,
           sourceUrl: source.url,
@@ -339,6 +496,7 @@ export async function discoverFundingUpdates(
           status: "failed" as const,
           documentsChecked,
           candidatesFound: 0,
+          leadsFound: 0,
           error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
         },
       };
@@ -347,10 +505,12 @@ export async function discoverFundingUpdates(
 
   const discoveries = [...new Map(outputs.flatMap((output) => output.candidates).map((candidate) => [candidate.id, candidate])).values()]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || a.id.localeCompare(b.id));
+  const leads = [...new Map(outputs.flatMap((output) => output.leads).map((lead) => [lead.websiteUrl, lead])).values()];
   return {
     version: FUNDING_DISCOVERY_VERSION,
     completedAt: new Date().toISOString(),
     discoveries,
+    leads,
     receipts: outputs.map((output) => output.receipt),
   };
 }

@@ -135,6 +135,10 @@ test("discovery backlog exposes actionable stages and rechecks stale detector re
   assert.match(data, /outcomeCounts/);
   assert.match(policy, /status='needs_review'[\s\S]*discovery_version/);
   assert.match(policy, /permission_status='permitted'/);
+  assert.match(policy, /first_discovered_at DESC/);
+  assert.match(policy, /first_seen_at DESC/);
+  assert.match(discovery, /discoveryQueueOrderSql/);
+  assert.match(discovery, /discoveryPromotionOrderSql/);
   assert.match(discovery, /discoveryRetryAt/);
   assert.match(discovery, /DEFAULT_PROCESS_LIMIT = 10/);
   assert.match(schema, /discoveryVersion: text\("discovery_version"\)/);
@@ -173,6 +177,7 @@ test("daily funding discovery is protected, idempotent, and scheduled", async ()
   assert.match(route, /idempotency-key/i);
   assert.match(route, /executeRefreshOnce/);
   assert.match(route, /persistFundingDiscoveries/);
+  assert.match(route, /company_leads_added/);
   assert.match(workflow, /cron:\s*["']20 11 \* \* \*["']/);
   assert.match(workflow, /run-funding-discovery\.mjs/);
   assert.match(board, /movement\.type === "funding"/);

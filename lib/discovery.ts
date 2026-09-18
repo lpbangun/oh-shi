@@ -22,6 +22,8 @@ import { normalizeDomain, sourceKey } from "./source-registry";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import {
   discoveryActivationDueAt,
+  discoveryPromotionOrderSql,
+  discoveryQueueOrderSql,
   discoveryRetryAt,
   discoveryRunnableSql,
   isTransientDiscoveryError,
@@ -483,9 +485,8 @@ export async function promoteRegistryDomains(
   limit = DEFAULT_PROMOTION_LIMIT,
   now = new Date().toISOString()
 ) {
-  // Directory evidence names a startup outright, so it detects a board far more
-  // often than an encyclopedia entry that merely happens to list a company.
-  // Draining strictly by age would spend weeks on the low-yield sources first.
+  // Newest registry evidence first so today's YC/news domains are queued before
+  // a years-old encyclopedia backlog. Directory-ranked is only a tie-break.
   const pending = await env.DB.prepare(`SELECT
       domains.canonical_domain as canonicalDomain,
       domains.company_name as companyName,
@@ -501,7 +502,7 @@ export async function promoteRegistryDomains(
       AND domains.company_id IS NULL
       AND queue.id IS NULL
     GROUP BY domains.canonical_domain
-    ORDER BY directoryRanked DESC, domains.first_seen_at, domains.canonical_domain
+    ORDER BY ${discoveryPromotionOrderSql("domains")}
     LIMIT ?`)
     .bind(YC_SOURCE_KIND, Math.max(0, Math.trunc(limit)))
     .all<{ canonicalDomain: string; companyName: string; websiteUrl: string }>();
@@ -604,7 +605,7 @@ export async function runDiscovery(options: {
     FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
     WHERE ${runnableSql}
     GROUP BY q.id
-    ORDER BY q.first_discovered_at, q.id LIMIT ?`)
+    ORDER BY ${discoveryQueueOrderSql("q")} LIMIT ?`)
     .bind(
       DISCOVERY_PIPELINE_VERSION,
       new Date(Date.now() - 60 * 60 * 1_000).toISOString(),

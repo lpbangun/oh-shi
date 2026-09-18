@@ -11,7 +11,8 @@ import {
   type StartupDomainEvidenceInput,
 } from "./domain-registry";
 import { companyScoreReceipts } from "./hiring-score";
-import type { FundingDiscovery } from "./funding-discovery";
+import type { FundingCompanyLead, FundingDiscovery } from "./funding-discovery";
+import { fundingLeadEvidenceInput } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
@@ -1358,9 +1359,19 @@ async function listHomepageChanges(since: string): Promise<HomepageChangeEvent[]
  * affected company's calibrated score. Event ids are source-stable, so daily
  * discovery retries cannot duplicate a movement.
  */
-export async function persistFundingDiscoveries(discoveries: FundingDiscovery[]) {
+export async function persistFundingDiscoveries(
+  discoveries: FundingDiscovery[],
+  leads: FundingCompanyLead[] = []
+) {
   await ensureDatabase();
-  if (!discoveries.length) return { announcementsAdded: 0, companiesUpdated: 0, scoresUpdated: 0 };
+  let leadsRegistered = 0;
+  for (const lead of leads) {
+    const receipt = await registerStartupDomainEvidence(fundingLeadEvidenceInput(lead), "funding-news");
+    leadsRegistered += receipt.accepted;
+  }
+  if (!discoveries.length) {
+    return { announcementsAdded: 0, companiesUpdated: 0, scoresUpdated: 0, leadsRegistered };
+  }
   const persisted = await persistFundingDiscoveryRecords(env.DB, discoveries);
 
   const [companies, jobs, changes] = await Promise.all([
@@ -1389,6 +1400,7 @@ export async function persistFundingDiscoveries(discoveries: FundingDiscovery[])
     announcementsAdded: persisted.announcementsAdded,
     companiesUpdated: persisted.companiesUpdated,
     scoresUpdated: scoreStatements.length,
+    leadsRegistered,
   };
 }
 
