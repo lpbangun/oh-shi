@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import {
+  discoverFundingUpdates,
+  fundingCompanyLeadFromPage,
   fundingDiscoveryFromPage,
+  fundingLeadEvidenceInput,
   fundingLinksFromHtml,
   pageMetadata,
 } from "../lib/funding-discovery";
@@ -97,6 +100,67 @@ test("discovery rejects speculative, stale, and uncited funding claims", () => {
       publishedAt: null,
     },
   }), null);
+});
+
+test("unmatched raise articles become company leads when one website is named", () => {
+  const html = `
+    <html><head>
+      <meta property="og:title" content="NovaCorp raises $4M seed">
+      <meta property="og:description" content="NovaCorp announced seed funding.">
+      <meta property="article:published_time" content="2026-08-01T14:30:00Z">
+    </head>
+    <body><a href="https://novacorp.com/about">NovaCorp</a></body></html>`;
+  const lead = fundingCompanyLeadFromPage({
+    sourceUrl: "https://techcrunch.com/2026/08/01/novacorp-raises/",
+    publisher: "TechCrunch",
+    metadata: pageMetadata(html),
+    html,
+    now: NOW,
+  });
+  assert.ok(lead);
+  assert.equal(lead.companyName, "NovaCorp");
+  assert.equal(lead.websiteUrl, "https://novacorp.com/");
+  const evidence = fundingLeadEvidenceInput(lead);
+  assert.equal(evidence.sourceKind, "funding-news");
+  assert.equal(evidence.permissionStatus, "permitted");
+  assert.equal(evidence.reviewStatus, "pending");
+  assert.equal(fundingCompanyLeadFromPage({
+    sourceUrl: "https://techcrunch.com/2026/08/01/novacorp-raises/",
+    publisher: "TechCrunch",
+    metadata: pageMetadata(html),
+    html: `${html}<a href="https://otherco.com/">Other</a>`,
+    now: NOW,
+  }), null, "two company websites stay a lead, not a guess");
+});
+
+test("funding discovery fetches unmatched headlines and records them as leads", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/robots.txt")) return new Response("", { status: 404 });
+    if (url.includes("techcrunch.com/category/venture")) {
+      return new Response(
+        `<a href="https://techcrunch.com/2026/08/01/novacorp-raises/">NovaCorp raises $4M seed</a>`,
+        { headers: { "content-type": "text/html" } }
+      );
+    }
+    if (url.includes("novacorp-raises")) {
+      return new Response(`
+        <html><head>
+          <meta property="og:title" content="NovaCorp raises $4M seed">
+          <meta property="og:description" content="NovaCorp announced seed funding.">
+          <meta property="article:published_time" content="2026-08-01T14:30:00Z">
+        </head>
+        <body><a href="https://novacorp.com/">NovaCorp</a></body></html>`);
+    }
+    return new Response("missing", { status: 404 });
+  };
+  const result = await discoverFundingUpdates([], { fetcher: fetchImpl, now: NOW });
+  assert.equal(result.discoveries.length, 0);
+  assert.equal(result.leads.length, 1);
+  assert.equal(result.leads[0].companyName, "NovaCorp");
+  assert.equal(result.leads[0].websiteUrl, "https://novacorp.com/");
+  const techcrunch = result.receipts.find((receipt) => receipt.sourceId === "techcrunch-venture");
+  assert.equal(techcrunch?.leadsFound, 1);
 });
 
 test("funding landing pages yield only definitive HTTPS announcement links", () => {

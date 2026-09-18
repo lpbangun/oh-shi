@@ -12,7 +12,9 @@ The production build is allowed only after the local eval gate passes.
 - At least 12 tracked companies cover at least eight normalized sectors.
 - Company/day and sector/day movement aggregates preserve underlying evidence.
 - Daily funding discovery accepts only dated, completed raises from official or
-  explicitly reputable HTTPS sources; replays are idempotent and never roll facts backward.
+  explicitly reputable HTTPS sources; unmatched raise headlines with exactly one
+  company website become registry leads (not jobs); replays are idempotent and
+  never roll facts backward.
 - Funding movements appear on the homepage with a navigable citation and the
   company's recomputed calibrated hiring signal.
 - Seed open-job counts match the actual seed records.

@@ -210,7 +210,9 @@ Each public portfolio keeps a durable bounded cursor so successive runs advance
 through its company pages. Candidates moved to `needs_review`, `unsupported`,
 or `rejected` remain available for operator review but do not starve newly
 discovered records: promotion and queue processing take never-attempted, newest
-evidence first. Automatic `needs_review` outcomes are rechecked once when
+evidence first. Daily funding discovery may register unmatched raise headlines
+as `funding-news` domain leads when the article names exactly one company
+website; that does not publish a job. Automatic `needs_review` outcomes are rechecked once when
 the deployed detector, slug probe, canonical probe, or adapter version changes.
 Unsupported, rejected, and actively reviewed candidates remain fail-closed until
 explicit operator action.

@@ -173,6 +173,7 @@ test("daily funding discovery is protected, idempotent, and scheduled", async ()
   assert.match(route, /idempotency-key/i);
   assert.match(route, /executeRefreshOnce/);
   assert.match(route, /persistFundingDiscoveries/);
+  assert.match(route, /company_leads_added/);
   assert.match(workflow, /cron:\s*["']20 11 \* \* \*["']/);
   assert.match(workflow, /run-funding-discovery\.mjs/);
   assert.match(board, /movement\.type === "funding"/);
