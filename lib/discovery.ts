@@ -462,7 +462,11 @@ async function processCandidate(
  * two-hourly schedule drains more per day than the previous 25/10 pair did in
  * six-hourly runs, and fails cheaply when it fails.
  */
-export const DEFAULT_PROCESS_LIMIT = 30;
+// Keep the discovery phase comfortably inside the shared refresh request's
+// platform deadline as the canonical source set grows. The two-hour schedule
+// still processes up to 120 candidates per day while leaving enough time for
+// every active board to be re-verified and the idempotency receipt persisted.
+export const DEFAULT_PROCESS_LIMIT = 10;
 export const DEFAULT_ACTIVATION_LIMIT = 25;
 
 /** How many registry domains are moved into the queue per run. */

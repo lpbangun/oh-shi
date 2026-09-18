@@ -136,6 +136,7 @@ test("discovery backlog exposes actionable stages and rechecks stale detector re
   assert.match(policy, /status='needs_review'[\s\S]*discovery_version/);
   assert.match(policy, /permission_status='permitted'/);
   assert.match(discovery, /discoveryRetryAt/);
+  assert.match(discovery, /DEFAULT_PROCESS_LIMIT = 10/);
   assert.match(schema, /discoveryVersion: text\("discovery_version"\)/);
   assert.match(schema, /nextAttemptAt: text\("next_attempt_at"\)/);
   assert.match(migration, /ALTER TABLE discovery_queue ADD COLUMN discovery_version TEXT/);

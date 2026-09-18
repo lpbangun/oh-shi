@@ -16,6 +16,8 @@ Notable changes to OH SHI are recorded here. The format follows
 - Preserve verified job descriptions when later ATS snapshots omit posting bodies.
 - Treat duplicate in-progress refresh responses as a bounded replay wait so completed
   scheduled refreshes no longer report false failures.
+- Bound each discovery batch so the combined discovery and canonical refresh persists
+  its completion receipt within the hosted request window.
 
 ## [0.1.0] - 2026-08-07
 
