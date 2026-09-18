@@ -77,3 +77,25 @@ export function summarizeCanonicalJob(job: CanonicalJobInput) {
 export function normalizeCanonicalJobDescription(job: CanonicalJobInput) {
   return (job.descriptionPlain || "").replace(/\s+/g, " ").trim();
 }
+
+/**
+ * Keep the last stored posting body when a later complete snapshot omits it.
+ * Ashby, Greenhouse, and Lever completeness checks do not require description
+ * fields, so an empty body must not wipe previously verified text.
+ */
+export function retainCanonicalPostingBody<T extends {
+  description: string | null;
+  summary: string;
+}>(
+  incoming: T,
+  existing?: { description?: string | null; summary?: string } | null
+): T {
+  if ((incoming.description || "").trim()) return incoming;
+  const storedDescription = existing?.description ?? "";
+  if (!storedDescription.trim()) return incoming;
+  return {
+    ...incoming,
+    description: storedDescription,
+    summary: existing?.summary || incoming.summary,
+  };
+}

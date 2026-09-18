@@ -4,6 +4,7 @@ import {
   classifyRole,
   isUsEligible,
   normalizeCanonicalJobDescription,
+  retainCanonicalPostingBody,
   summarizeCanonicalJob,
 } from "../lib/job-normalization";
 import { normalizeSector, SECTOR_TAXONOMY } from "../lib/types";
@@ -112,5 +113,37 @@ test("canonical summaries are normalized and bounded", () => {
   assert.equal(
     summarizeCanonicalJob({ title: "Operator" }),
     "Canonical posting for Operator."
+  );
+});
+
+test("empty later snapshots keep the last stored posting body", () => {
+  const stored = {
+    description: "Build the hiring intelligence board.",
+    summary: "Build the hiring intelligence board.",
+  };
+  const omitted = retainCanonicalPostingBody(
+    { description: "", summary: "Canonical posting for Engineer." },
+    stored
+  );
+  assert.equal(omitted.description, stored.description);
+  assert.equal(omitted.summary, stored.summary);
+
+  const whitespace = retainCanonicalPostingBody(
+    { description: "   ", summary: "Canonical posting for Engineer." },
+    stored
+  );
+  assert.equal(whitespace.description, stored.description);
+
+  const revised = retainCanonicalPostingBody(
+    { description: "New canonical posting body.", summary: "New canonical posting body." },
+    stored
+  );
+  assert.equal(revised.description, "New canonical posting body.");
+  assert.equal(
+    retainCanonicalPostingBody(
+      { description: "", summary: "Canonical posting for Engineer." },
+      { description: null, summary: "Canonical posting for Engineer." }
+    ).description,
+    ""
   );
 });

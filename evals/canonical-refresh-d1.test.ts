@@ -652,3 +652,124 @@ test("job provenance migration preserves and truthfully backfills an existing D1
     1
   );
 });
+
+test("a later identity-only snapshot does not wipe a stored posting body", async (t) => {
+  const miniflare = new Miniflare({
+    modules: true,
+    script: "export default { fetch() { return new Response('ok') } }",
+    compatibilityDate: "2026-05-22",
+    d1Databases: { DB: "description-fidelity-retain" },
+  });
+  t.after(() => miniflare.dispose());
+  const database = await miniflare.getD1Database("DB") as unknown as D1Database;
+  await database.batch([
+    database.prepare(`CREATE TABLE jobs (
+      id TEXT PRIMARY KEY, company_id TEXT NOT NULL, external_id TEXT NOT NULL,
+      provider TEXT NOT NULL, source_id TEXT NOT NULL, title TEXT NOT NULL,
+      role_family TEXT NOT NULL, location TEXT NOT NULL, remote_status TEXT NOT NULL,
+      employment_type TEXT NOT NULL, compensation TEXT NOT NULL,
+      canonical_url TEXT NOT NULL UNIQUE, source TEXT NOT NULL, status TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, source_updated_at TEXT,
+      published_at TEXT, last_verified_at TEXT NOT NULL, closed_at TEXT,
+      raw_url TEXT NOT NULL, discovery_channel TEXT NOT NULL, evidence_url TEXT NOT NULL,
+      parser_version TEXT NOT NULL, snapshot_run_id TEXT NOT NULL,
+      linkedin_presence_state TEXT NOT NULL DEFAULT 'unknown',
+      linkedin_evidence_url TEXT, linkedin_checked_at TEXT,
+      description TEXT, summary TEXT NOT NULL
+    )`),
+    database.prepare(`CREATE TABLE changes (
+      id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+      change_type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL,
+      occurred_at TEXT NOT NULL, source_url TEXT NOT NULL
+    )`),
+    database.prepare(`CREATE TABLE job_observations (
+      id TEXT PRIMARY KEY, job_id TEXT NOT NULL, company_id TEXT NOT NULL,
+      provider TEXT NOT NULL, source_id TEXT NOT NULL, external_id TEXT NOT NULL,
+      canonical_url TEXT NOT NULL, normalized_canonical_url TEXT NOT NULL,
+      title TEXT NOT NULL, location TEXT NOT NULL, employment_type TEXT NOT NULL,
+      description TEXT, summary TEXT NOT NULL, published_at TEXT, status TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+      last_verified_at TEXT NOT NULL, closed_at TEXT, raw_url TEXT NOT NULL,
+      evidence_url TEXT NOT NULL, parser_version TEXT NOT NULL,
+      snapshot_run_id TEXT NOT NULL, match_method TEXT NOT NULL,
+      match_score_bps INTEGER NOT NULL,
+      UNIQUE(provider, source_id, external_id)
+    )`),
+    database.prepare(`CREATE TABLE company_sources (
+      id TEXT PRIMARY KEY, company_id TEXT NOT NULL, provider TEXT NOT NULL,
+      board_id TEXT NOT NULL, careers_url TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+      discovery_status TEXT NOT NULL DEFAULT 'active', first_discovered_at TEXT NOT NULL,
+      last_attempted_at TEXT, last_successful_at TEXT, last_error TEXT,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0, review_notes TEXT NOT NULL DEFAULT '',
+      quarantine_snapshot_id TEXT, quarantine_application_id TEXT
+    )`),
+    database.prepare(`CREATE TABLE canonical_source_snapshots (
+      id TEXT PRIMARY KEY, run_id TEXT NOT NULL, source_id TEXT NOT NULL,
+      provider TEXT NOT NULL, captured_at TEXT NOT NULL, parser_version TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('accepted','quarantined')),
+      existing_open_count INTEGER NOT NULL, observed_open_count INTEGER NOT NULL,
+      missing_count INTEGER NOT NULL, missing_ratio_bps INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL, quarantine_reason TEXT, board_id TEXT,
+      UNIQUE(run_id, source_id)
+    )`),
+  ]);
+  await database.prepare(`INSERT INTO company_sources (
+    id, company_id, provider, board_id, careers_url, discovery_status, first_discovered_at
+  ) VALUES (?, ?, ?, ?, ?, 'active', ?)`).bind(
+    source.id, source.companyId, source.provider, source.boardId,
+    "https://jobs.ashbyhq.com/integration-board", "2026-07-01T00:00:00.000Z"
+  ).run();
+
+  const first = job("role-1");
+  await persistCanonicalSource(
+    database,
+    source,
+    [first],
+    "2026-09-17T00:00:00.000Z",
+    "canonical-description-present"
+  );
+  const emptyLater = {
+    ...first,
+    description: "",
+    summary: "Canonical posting for Engineer role-1.",
+  };
+  await persistCanonicalSource(
+    database,
+    source,
+    [emptyLater],
+    "2026-09-17T02:00:00.000Z",
+    "canonical-description-omitted"
+  );
+
+  assert.deepEqual(
+    await database.prepare(`SELECT description, summary FROM jobs WHERE external_id='role-1'`)
+      .first(),
+    { description: first.description, summary: first.summary }
+  );
+  assert.deepEqual(
+    await database.prepare(
+      `SELECT description, summary FROM job_observations WHERE external_id='role-1'`
+    ).first(),
+    { description: first.description, summary: first.summary }
+  );
+  assert.equal(
+    Number((await database.prepare(
+      `SELECT COUNT(*) AS count FROM changes WHERE change_type='job_updated'`
+    ).first<{ count: number }>())?.count),
+    0
+  );
+
+  const revised = { ...first, description: "Updated canonical posting body.", summary: "Updated canonical posting body." };
+  await persistCanonicalSource(
+    database,
+    source,
+    [revised],
+    "2026-09-17T04:00:00.000Z",
+    "canonical-description-revised"
+  );
+  assert.equal(
+    (await database.prepare(`SELECT description FROM jobs WHERE external_id='role-1'`)
+      .first<{ description: string }>())?.description,
+    revised.description
+  );
+});
