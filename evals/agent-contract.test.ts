@@ -287,7 +287,8 @@ test("all public job surfaces use the shared bounded server query", async () => 
   assert.match(compatibility, /searchJobs\(query\)/);
   assert.match(search, /ROW_NUMBER\(\) OVER/);
   assert.match(search, /jobs\.id ASC/);
-  assert.match(search, /statusRaw \|\| "verified_open"/);
+  assert.match(search, /natural\?\.filters\.status \|\| "verified_open"/);
+  assert.match(search, /includeClosedRaw !== null/);
   assert.doesNotMatch(board, /const rows = jobs\.filter\(/);
   assert.match(board, /\/api\/v1\/dashboard\/jobs\?/);
 });

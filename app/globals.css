@@ -172,6 +172,11 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
   color: var(--muted); background: none; border: 1px solid var(--line2); border-radius: 2px; padding: 5px 9px; cursor: pointer;
 }
 .search-clear:hover { border-color: var(--ink); color: var(--ink); }
+.search-interpretation {
+  margin: 7px 2px 0;
+  color: var(--muted);
+  font: 10.5px var(--font-plex-mono), monospace;
+}
 
 .result-count {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;

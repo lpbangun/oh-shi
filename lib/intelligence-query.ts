@@ -12,6 +12,7 @@ const VIEW_PARAMETERS: Record<IntelligenceView, Set<string>> = {
     "role_family",
     "location",
     "remote_status",
+    "employment_type",
     "provider",
     "investor",
     "new_since",

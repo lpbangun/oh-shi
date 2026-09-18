@@ -259,6 +259,55 @@ test.describe("unified agent contract", () => {
     expect((await invalid.json()).error).toBe("invalid_request");
   });
 
+  test("natural-language job requests resolve into documented filters", async ({
+    request,
+  }) => {
+    const response = await request.get(
+      "/api/v1/intelligence?view=jobs&q=full-time%20engineering%20jobs%20in%20San%20Francisco&limit=100"
+    );
+    expect(response.status()).toBe(200);
+    const payload = await response.json();
+    expect(payload.applied_filters.role_family).toBe("Engineering");
+    expect(payload.applied_filters.employment_type).toBe("Full time");
+    expect(payload.applied_filters.location).toBe("San Francisco");
+    expect(payload.page.total).toBeGreaterThan(0);
+    expect(
+      payload.data.every(
+        (job: {
+          roleFamily: string;
+          employmentType: string;
+          location: string;
+        }) =>
+          job.roleFamily === "Engineering" &&
+          job.employmentType.replace(/[\s_-]/g, "").toLowerCase() === "fulltime" &&
+          job.location.toLowerCase().includes("san francisco")
+      )
+    ).toBe(true);
+
+    const structured = await request.get(
+      "/api/v1/intelligence?view=jobs&employment_type=full-time&limit=100"
+    );
+    expect(structured.status()).toBe(200);
+    const structuredPayload = await structured.json();
+    expect(structuredPayload.applied_filters.employment_type).toBe("Full time");
+    expect(structuredPayload.page.total).toBeGreaterThan(0);
+
+    const capabilities = await request.get("/api/v1/intelligence");
+    const capabilityPayload = await capabilities.json();
+    expect(capabilityPayload.data.views.jobs.filters).toContain("employment_type");
+    expect(capabilityPayload.data.views.jobs.natural_language).toContain("deterministic");
+
+    const closedResponse = await request.get(
+      "/api/v1/intelligence?view=jobs&q=closed%20engineering%20jobs&limit=100"
+    );
+    expect(closedResponse.status()).toBe(200);
+    const closedPayload = await closedResponse.json();
+    expect(closedPayload.applied_filters.status).toBe("verified_closed");
+    expect(
+      closedPayload.data.every((job: { status: string }) => job.status === "verified_closed")
+    ).toBe(true);
+  });
+
   test("job records make description availability and preview truncation explicit", async ({ request }) => {
     const response = await request.get(
       "/api/v1/intelligence?view=jobs&q=workplace&limit=1"

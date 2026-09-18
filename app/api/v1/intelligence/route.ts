@@ -28,6 +28,7 @@ import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } 
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { JobSearchError, parseJobSearch } from "@/lib/job-search";
 import { ROLE_FAMILIES, ROLE_FAMILY_ALIASES } from "@/lib/job-normalization";
+import { EMPLOYMENT_TYPES } from "@/lib/natural-language-job-search";
 import { isBoardTracked } from "@/lib/tracked-boards";
 import type { ChangeEvent, Company, Job } from "@/lib/types";
 
@@ -54,6 +55,7 @@ const capabilities = {
         "role_family",
         "location",
         "remote_status",
+        "employment_type",
         "provider",
         "investor",
         "new_since",
@@ -69,7 +71,21 @@ const capabilities = {
           canonical: ROLE_FAMILIES,
           aliases: ROLE_FAMILY_ALIASES,
         },
+        employment_type: {
+          canonical: EMPLOYMENT_TYPES,
+          aliases: {
+            fulltime: "Full time",
+            "full-time": "Full time",
+            parttime: "Part time",
+            "part-time": "Part time",
+            contractor: "Contract",
+            temp: "Temporary",
+            intern: "Internship",
+          },
+        },
       },
+      natural_language:
+        "The q parameter accepts deterministic phrases such as 'remote engineering jobs', 'full-time roles in San Francisco', and 'contract jobs at Acme'. Resolved filters are returned in applied_filters.",
     },
     companies: {
       default_limit: 10,
@@ -250,6 +266,7 @@ export async function GET(request: Request) {
           role_family: query.roleFamily,
           location: query.location,
           remote_status: query.remoteStatus,
+          employment_type: query.employmentType,
           provider: query.provider,
           investor: query.investor,
           new_since: query.newSince,

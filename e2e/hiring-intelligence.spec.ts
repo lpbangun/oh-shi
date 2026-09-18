@@ -167,6 +167,17 @@ test.describe("desktop hiring intelligence", () => {
     await expect(search).toHaveValue("engineer");
   });
 
+  test("natural-language job search shows its interpretation", async ({ page }) => {
+    const search = page.getByLabel("Search jobs");
+    await search.fill("full-time engineering jobs in San Francisco");
+    await expect(page).toHaveURL(/q=full-time\+engineering\+jobs\+in\+San\+Francisco/);
+    await expect(page.getByText("Searching Engineering · Full time · near San Francisco")).toBeVisible();
+    await expect(page.getByRole("button", {
+      name: "Full Stack Engineer at Hotplate, verified open",
+    })).toBeVisible();
+    await expect(page.locator("#jobs .pager-status")).toContainText("of 1");
+  });
+
   test("companies paginate ten at a time without duplicates", async ({ page }) => {
     const signal = page.locator("#signal");
     const pager = signal.locator(".pager").filter({ hasText: /companies/i });
