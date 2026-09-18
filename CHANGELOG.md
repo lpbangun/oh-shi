@@ -22,6 +22,8 @@ Notable changes to OH SHI are recorded here. The format follows
   Worker cannot exhaust its concurrent fetch slots during scheduled refreshes.
 - Run discovery and canonical verification as separate idempotent requests so each
   phase stays within the hosted request deadline as source coverage grows.
+- Use the Worker's full six-connection budget for canonical source verification so
+  the 440-source pass completes within its independent request window.
 
 ## [0.1.0] - 2026-08-07
 

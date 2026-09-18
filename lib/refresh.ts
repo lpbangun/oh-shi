@@ -17,6 +17,11 @@ export { retryCanonicalFetch } from "./canonical-fetch-retry";
 export type ActiveCompanySource = CanonicalCompanySource;
 export type SourceRefreshResult = PersistedSourceRefreshResult;
 
+// Cloudflare Workers permit six simultaneous outbound connections. Using the
+// full bounded budget keeps the growing canonical source set inside the
+// per-request wall-time limit while each response body is consumed promptly.
+export const DEFAULT_REFRESH_CONCURRENCY = 6;
+
 export async function mapBounded<T, R>(
   values: T[],
   concurrency: number,
@@ -106,7 +111,7 @@ export async function refreshCanonicalBoards(options: {
   const sources = sourcesResult.results;
   const groupedResults = await mapBounded(
     groupSourcesByCompany(sources),
-    options.concurrency || 4,
+    options.concurrency || DEFAULT_REFRESH_CONCURRENCY,
     async (companySources) => {
       const companyResults: SourceRefreshResult[] = [];
       // Alternate sources for one employer must observe each other's committed
