@@ -41,23 +41,44 @@ async function fetchWithTimeout(url, init = {}, timeoutMs = 60_000) {
   });
 }
 
-const refreshUrl = new URL("/api/internal/refresh", baseUrl);
-const { preflight, result } = await runVersionedRefresh(
+const requestOptions = {
+  attempts: 3,
+  fetchImpl: (url, init) => fetchWithTimeout(url, init, 600_000),
+  conflictPollAttempts: 60,
+  conflictPollDelayMs: 15_000,
+  conflictPollMaxDelayMs: 30_000,
+};
+
+// Discovery probes and canonical verification each fit the hosted request
+// window independently. Running them as separate idempotent requests prevents
+// their combined wall time from being canceled at the platform deadline.
+const discoveryUrl = new URL("/api/internal/refresh?phase=discovery", baseUrl);
+const discoveryRun = await runVersionedRefresh(
+  discoveryUrl,
+  headers,
+  `${runKey}:discovery`,
+  requestOptions
+);
+
+const refreshUrl = new URL("/api/internal/refresh?phase=canonical", baseUrl);
+const canonicalRun = await runVersionedRefresh(
   refreshUrl,
   headers,
   runKey,
-  {
-    attempts: 3,
-    // Discovery now probes board APIs per candidate, so a run legitimately
-    // takes several minutes; 240s cut off runs that were still succeeding.
-    fetchImpl: (url, init) => fetchWithTimeout(url, init, 600_000),
-    // If an intermediary drops the long response, the same idempotency key
-    // reports 409 until the original mutation has durably completed.
-    conflictPollAttempts: 60,
-    conflictPollDelayMs: 15_000,
-    conflictPollMaxDelayMs: 30_000,
-  }
+  requestOptions
 );
+if (discoveryRun.preflight.deployed_sha !== canonicalRun.preflight.deployed_sha) {
+  throw new Error("Deployment changed between discovery and canonical refresh phases.");
+}
+const preflight = canonicalRun.preflight;
+const result = {
+  ...canonicalRun.result,
+  discovery: discoveryRun.result.discovery,
+  source_receipts: {
+    ...canonicalRun.result.source_receipts,
+    discovery: discoveryRun.result.source_receipts.discovery,
+  },
+};
 
 async function verifyFreshness(refreshedAt) {
   let lastReason = "No response received.";

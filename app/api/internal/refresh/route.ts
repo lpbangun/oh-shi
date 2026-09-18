@@ -20,6 +20,72 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function emptyDiscovery(completedAt: string) {
+  return {
+    run_id: "discovery_separate_request",
+    completed_at: completedAt,
+    overall_status: "separate_request" as const,
+    source_counts: {
+      configured: 0, fetched: 0, manual: 0, blocked: 0,
+      failed: 0, completed: 0, reconciled: true,
+    },
+    receipts: [],
+    candidates_discovered: 0,
+    candidates_processed: 0,
+    canonical_boards_detected: 0,
+    companies_activated: 0,
+    failed_sources: [],
+    failed_candidates: [],
+    blocked_sources: [],
+  };
+}
+
+function emptyCanonical(refreshedAt: string) {
+  return {
+    run_id: "canonical_separate_request",
+    refreshed_at: refreshedAt,
+    boards: 0,
+    successful_sources: 0,
+    failed_sources: 0,
+    quarantined_sources: 0,
+    partial_success: false,
+    verified: 0,
+    opened: 0,
+    closed: 0,
+    scored: 0,
+    success_ratio: 1,
+    required_success_ratio: 0.5,
+    overall_status: "separate_request" as const,
+    sources: [],
+  };
+}
+
+async function discoveryWithFallback() {
+  return attemptWithFallback(
+    () => runDiscovery(),
+    (error) => ({
+      run_id: "discovery_failed",
+      completed_at: new Date().toISOString(),
+      overall_status: "failed" as const,
+      source_counts: {
+        configured: 0, fetched: 0, manual: 0, blocked: 0,
+        failed: 0, completed: 0, reconciled: true,
+      },
+      receipts: [],
+      candidates_discovered: 0,
+      candidates_processed: 0,
+      canonical_boards_detected: 0,
+      companies_activated: 0,
+      failed_sources: [{
+        id: "discovery-run",
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+      }],
+      failed_candidates: [],
+      blocked_sources: [],
+    })
+  );
+}
+
 function authenticate(request: Request) {
   const runtime = env as typeof env & { INGEST_TOKEN?: string };
   if (!runtime.INGEST_TOKEN) {
@@ -43,6 +109,13 @@ export function GET(request: Request) {
 export async function POST(request: Request) {
   const denied = authenticate(request);
   if (denied) return denied;
+  const phase = new URL(request.url).searchParams.get("phase") || "canonical";
+  if (phase !== "discovery" && phase !== "canonical") {
+    return Response.json(
+      { error: "Refresh phase must be discovery or canonical." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
   const runKey = request.headers.get("idempotency-key")?.trim() || "";
   if (!validRunKey(runKey)) {
     return Response.json(
@@ -62,39 +135,31 @@ export async function POST(request: Request) {
 
   try {
     const execution = await executeRefreshOnce(runKey, store, async () => {
-      const discovery = await attemptWithFallback(
-        () => runDiscovery(),
-        (error) => ({
-          run_id: "discovery_failed",
-          completed_at: new Date().toISOString(),
-          overall_status: "failed" as const,
-          source_counts: {
-            configured: 0, fetched: 0, manual: 0, blocked: 0,
-            failed: 0, completed: 0, reconciled: false,
-          },
-          receipts: [],
-          candidates_discovered: 0,
-          candidates_processed: 0,
-          canonical_boards_detected: 0,
-          companies_activated: 0,
-          failed_sources: [{
-            id: "discovery-run",
-            error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-          }],
-          failed_candidates: [],
-          blocked_sources: [],
-        })
-      );
+      if (phase === "discovery") {
+        const discovery = await discoveryWithFallback();
+        const coverage = await getCoverageMetrics();
+        return {
+          completed: true,
+          // Discovery failure is reported in the receipt but must not prevent
+          // the independent canonical phase from verifying known boards.
+          httpStatus: 200,
+          body: refreshEnvelope({
+            runKey,
+            canonical: emptyCanonical(discovery.completed_at),
+            discovery,
+            coverage,
+          }),
+        };
+      }
+
       try {
         const canonical = await refreshCanonicalBoards();
         const coverage = await getCoverageMetrics();
+        const discovery = emptyDiscovery(canonical.refreshed_at);
         const body = refreshEnvelope({ runKey, canonical, discovery, coverage });
         return {
           completed: true,
-          httpStatus:
-            canonical.overall_status === "failed" || discovery.overall_status === "failed"
-              ? 502
-              : 200,
+          httpStatus: canonical.overall_status === "failed" ? 502 : 200,
           body,
         };
       } catch (error) {
