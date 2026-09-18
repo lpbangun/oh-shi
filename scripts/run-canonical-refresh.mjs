@@ -51,6 +51,11 @@ const { preflight, result } = await runVersionedRefresh(
     // Discovery now probes board APIs per candidate, so a run legitimately
     // takes several minutes; 240s cut off runs that were still succeeding.
     fetchImpl: (url, init) => fetchWithTimeout(url, init, 600_000),
+    // If an intermediary drops the long response, the same idempotency key
+    // reports 409 until the original mutation has durably completed.
+    conflictPollAttempts: 60,
+    conflictPollDelayMs: 15_000,
+    conflictPollMaxDelayMs: 30_000,
   }
 );
 

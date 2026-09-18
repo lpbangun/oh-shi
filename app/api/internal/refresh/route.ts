@@ -113,7 +113,10 @@ export async function POST(request: Request) {
     if (execution.kind === "duplicate_in_progress") {
       return Response.json(
         { error: "This refresh run is already in progress.", run_key: runKey },
-        { status: 409, headers: { "Cache-Control": "no-store" } }
+        {
+          status: 409,
+          headers: { "Cache-Control": "no-store", "Retry-After": "15" },
+        }
       );
     }
     return Response.json(execution.response.body, {
