@@ -148,7 +148,10 @@ test("discovery backlog exposes actionable stages and rechecks stale detector re
 });
 
 test("canonical refresh is protected", async () => {
-  const source = await read("app/api/internal/refresh/route.ts");
+  const [source, refresh] = await Promise.all([
+    read("app/api/internal/refresh/route.ts"),
+    read("lib/refresh.ts"),
+  ]);
   assert.match(source, /export function GET/);
   assert.match(source, /export async function POST/);
   assert.match(source, /authorization/i);
@@ -159,6 +162,7 @@ test("canonical refresh is protected", async () => {
   assert.match(source, /phase === "discovery"/);
   assert.match(source, /phaseRefreshRunKey/);
   assert.match(source, /executeRefreshOnce/);
+  assert.match(refresh, /DEFAULT_REFRESH_CONCURRENCY = 6/);
 });
 
 test("daily funding discovery is protected, idempotent, and scheduled", async () => {
