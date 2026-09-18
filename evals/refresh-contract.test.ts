@@ -15,11 +15,23 @@ import {
 } from "../lib/refresh-contract";
 import {
   executeRefreshOnce,
+  phaseRefreshRunKey,
   type StoredRefreshResponse,
 } from "../lib/refresh-idempotency";
 
 const REVISION_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const REVISION_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+test("refresh phases derive distinct bounded storage keys from the same public key", async () => {
+  const publicKey = `r${"x".repeat(127)}`;
+  const discovery = await phaseRefreshRunKey(publicKey, "discovery");
+  const canonical = await phaseRefreshRunKey(publicKey, "canonical");
+  assert.notEqual(discovery, canonical);
+  assert.equal(discovery.length, 74);
+  assert.equal(canonical.length, 74);
+  assert.match(discovery, /^discovery:[0-9a-f]{64}$/);
+  assert.match(canonical, /^canonical:[0-9a-f]{64}$/);
+});
 
 test("post-refresh verification accepts only coverage at or after the completed refresh", () => {
   const refreshedAt = "2026-09-15T18:00:00.000Z";

@@ -68,6 +68,8 @@ export function refreshPreflight(revision = deployedSha()) {
     mutation: {
       method: "POST",
       idempotency_header: "Idempotency-Key",
+      phase_query: "phase",
+      phases: ["discovery", "canonical"],
     },
     response_fields: [
       "contract_version",

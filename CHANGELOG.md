@@ -20,6 +20,8 @@ Notable changes to OH SHI are recorded here. The format follows
   its completion receipt within the hosted request window.
 - Release unread HTTP response bodies during discovery and canonical retries so the
   Worker cannot exhaust its concurrent fetch slots during scheduled refreshes.
+- Run discovery and canonical verification as separate idempotent requests so each
+  phase stays within the hosted request deadline as source coverage grows.
 
 ## [0.1.0] - 2026-08-07
 

@@ -19,6 +19,20 @@ export function validRunKey(value: string) {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value);
 }
 
+export async function phaseRefreshRunKey(
+  runKey: string,
+  phase: "discovery" | "canonical"
+) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${phase}:${runKey}`)
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `${phase}:${hex}`;
+}
+
 export async function executeRefreshOnce<T>(
   runKey: string,
   store: RefreshRunStore<T>,
