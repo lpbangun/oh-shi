@@ -222,15 +222,15 @@ export async function persistCanonicalSource(
     const id = match?.jobId || stableJobId(source, job.externalId);
     const primary = canonicalById.get(id);
     if (primary && primary.lastVerifiedAt > now) continue;
-    const posting = retainCanonicalPostingBody(
-      job,
-      (current?.description || "").trim() ? current : primary
-    );
-    const wasOpen = primary?.status === "verified_open";
     const ownsCanonical = primary &&
       primary.provider === source.provider &&
       primary.sourceId === source.id &&
       primary.externalId === job.externalId;
+    const posting = retainCanonicalPostingBody(
+      job,
+      (current?.description || "").trim() ? current : ownsCanonical ? primary : null
+    );
+    const wasOpen = primary?.status === "verified_open";
     if (!primary) {
       statements.push(database.prepare(`INSERT OR IGNORE INTO jobs (
         id, company_id, external_id, provider, source_id, title, role_family, location,

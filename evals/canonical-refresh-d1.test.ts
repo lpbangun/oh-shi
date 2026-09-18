@@ -759,6 +759,36 @@ test("a later identity-only snapshot does not wipe a stored posting body", async
     0
   );
 
+  const secondarySource: CanonicalCompanySource = {
+    id: "lever:integration-board",
+    companyId: source.companyId,
+    provider: "lever",
+    boardId: "integration-board",
+  };
+  await database.prepare(`INSERT INTO company_sources (
+    id, company_id, provider, board_id, careers_url, discovery_status, first_discovered_at
+  ) VALUES (?, ?, ?, ?, ?, 'active', ?)`).bind(
+    secondarySource.id, secondarySource.companyId, secondarySource.provider,
+    secondarySource.boardId, "https://jobs.lever.co/integration-board",
+    "2026-07-01T00:00:00.000Z"
+  ).run();
+  await persistCanonicalSource(
+    database,
+    secondarySource,
+    [{
+      ...emptyLater,
+      externalId: "lever-role-1",
+      canonicalUrl: first.canonicalUrl,
+    }],
+    "2026-09-17T03:00:00.000Z",
+    "cross-source-description-omitted"
+  );
+  assert.deepEqual(
+    await database.prepare(`SELECT description, summary FROM job_observations
+      WHERE provider='lever' AND external_id='lever-role-1'`).first(),
+    { description: "", summary: emptyLater.summary }
+  );
+
   const revised = { ...first, description: "Updated canonical posting body.", summary: "Updated canonical posting body." };
   await persistCanonicalSource(
     database,
