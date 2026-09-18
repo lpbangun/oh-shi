@@ -48,6 +48,22 @@ export function discoveryRunnableSql(queueAlias = "q") {
   )`;
 }
 
+/**
+ * Newest, never-attempted leads first. Oldest FIFO was burying today's YC/news
+ * domains behind thousands of prior `needs_review` misses, so the watchlist
+ * stopped growing even when the directory had new companies.
+ */
+export function discoveryQueueOrderSql(queueAlias = "q") {
+  if (!/^[a-z][a-z0-9_]*$/i.test(queueAlias)) throw new Error("invalid_sql_alias");
+  return `COALESCE(${queueAlias}.attempt_count, 0) ASC, ${queueAlias}.first_discovered_at DESC, ${queueAlias}.id DESC`;
+}
+
+/** Registry promotion: newest evidence first; directory-ranked only as a tie-break. */
+export function discoveryPromotionOrderSql(domainsAlias = "domains") {
+  if (!/^[a-z][a-z0-9_]*$/i.test(domainsAlias)) throw new Error("invalid_sql_alias");
+  return `${domainsAlias}.first_seen_at DESC, directoryRanked DESC, ${domainsAlias}.canonical_domain`;
+}
+
 export function isTransientDiscoveryError(error: unknown) {
   if (error instanceof TypeError) return true;
   if (!error || typeof error !== "object") return false;

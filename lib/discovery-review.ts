@@ -12,6 +12,7 @@ import {
   resolveCanonicalSource,
   type Candidate,
 } from "./discovery";
+import { discoveryQueueOrderSql } from "./discovery-policy";
 import { snapshotFingerprint } from "./ingestion-core";
 
 const ACTIVE_REVIEW_STATUSES = [
@@ -180,7 +181,7 @@ export async function createDiscoveryReviewBatch(options: {
         SELECT 1 FROM discovery_candidate_reviews review
         WHERE review.candidate_id=q.id AND review.status IN (${placeholders})
       )
-    ORDER BY q.first_discovered_at, q.id LIMIT ?`).bind(
+    ORDER BY ${discoveryQueueOrderSql("q")} LIMIT ?`).bind(
       ...ACTIVE_REVIEW_STATUSES,
       requestedCount
     ).all<{

@@ -5,6 +5,8 @@ import { Miniflare } from "miniflare";
 import {
   discoveryActivationDueAt,
   discoveryPermissionSql,
+  discoveryPromotionOrderSql,
+  discoveryQueueOrderSql,
   discoveryRetryAt,
   discoveryRunnableSql,
   isTransientDiscoveryError,
@@ -124,6 +126,55 @@ test("discovery retry metadata migrates and runnable work is permission- and tim
     outcomes.results.reduce((sum, row) => sum + Number(row.count), 0),
     funnel.autoEligible
   );
+});
+
+test("discovery queue processes never-attempted newest leads before older misses", async (t) => {
+  const miniflare = new Miniflare({
+    modules: true,
+    script: "export default { fetch() { return new Response('ok') } }",
+    compatibilityDate: "2026-05-22",
+    d1Databases: { DB: "discovery-queue-order" },
+  });
+  t.after(() => miniflare.dispose());
+  const database = await miniflare.getD1Database("DB") as unknown as D1Database;
+  await database.prepare(`CREATE TABLE discovery_queue (
+    id TEXT PRIMARY KEY, normalized_domain TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL, first_discovered_at TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT,
+    discovery_version TEXT, last_attempted_at TEXT
+  )`).run();
+  await database.prepare(`CREATE TABLE startup_domain_evidence (
+    canonical_domain TEXT NOT NULL, permission_status TEXT NOT NULL
+  )`).run();
+  await database.prepare(`CREATE TABLE discovery_candidate_reviews (
+    candidate_id TEXT NOT NULL, status TEXT NOT NULL
+  )`).run();
+
+  const rows = [
+    ["old-miss", "old.example", "discovered", "2026-01-01T00:00:00.000Z", 3],
+    ["new-lead", "new.example", "discovered", "2026-09-18T00:00:00.000Z", 0],
+    ["older-new", "mid.example", "discovered", "2026-09-17T00:00:00.000Z", 0],
+  ] as const;
+  for (const [id, domain, status, firstSeen, attempts] of rows) {
+    await database.prepare(`INSERT INTO discovery_queue (
+      id, normalized_domain, status, first_discovered_at, attempt_count
+    ) VALUES (?, ?, ?, ?, ?)`).bind(id, domain, status, firstSeen, attempts).run();
+    await database.prepare(`INSERT INTO startup_domain_evidence
+      (canonical_domain, permission_status) VALUES (?, 'permitted')`).bind(domain).run();
+  }
+
+  const ordered = await database.prepare(`SELECT q.id FROM discovery_queue q
+    WHERE ${discoveryRunnableSql("q")}
+    ORDER BY ${discoveryQueueOrderSql("q")}`).bind(
+      "current-version",
+      "2026-09-15T11:00:00.000Z",
+      "2026-09-18T12:00:00.000Z"
+    ).all<{ id: string }>();
+  assert.deepEqual(ordered.results.map((row) => row.id), [
+    "new-lead", "older-new", "old-miss",
+  ]);
+  assert.match(discoveryPromotionOrderSql("domains"), /first_seen_at DESC/);
+  assert.throws(() => discoveryQueueOrderSql("q;drop"));
 });
 
 test("discovery retry policy backs off exponentially and classifies transient failures", () => {

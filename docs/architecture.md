@@ -46,7 +46,7 @@ the same canonical job state, timestamps, evidence URLs, and score receipts.
 ```mermaid
 flowchart TD
   A["Scheduled refresh starts"] --> B["Sync the startup-domain registry"]
-  B --> C["Discover candidates from configured sources"]
+  B --> C["Discover newest never-attempted candidates"]
   C --> D["Resolve an employer's canonical careers source"]
   D --> E["Fetch a bounded, complete ATS or structured-career payload"]
   E --> F{"Complete and valid?"}
