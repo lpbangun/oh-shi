@@ -1,0 +1,833 @@
+{
+  "schemaVersion": "1.0",
+  "vertical": "edtech",
+  "generatedAt": "2026-09-20T01:25:51.505Z",
+  "reviewRule": "Include LastRound greenhouse/lever/ashby boards when (a) manually curated known education employer, (b) company name matches education/learning keywords after false-positive exclusions, or (c) Wikidata industry/education entity label matches with website join. Reject generic learning false positives (machine learning, campus recruiting, non-education academies). Dedup provider+board_id; website must be first-party HTTPS from Wikidata P856 or curated override.",
+  "attribution": {
+    "lastround": "LastRound AI ATS company directory (CC BY 4.0), https://github.com/fyrosofttech/lastroundai-hiring-data",
+    "lastroundLicense": "CC BY 4.0",
+    "lastroundUrl": "https://github.com/fyrosofttech/lastroundai-hiring-data",
+    "wikidata": "Wikidata structured data (CC0), https://www.wikidata.org/wiki/Wikidata:Copyright"
+  },
+  "rows": [
+    {
+      "name": "2U",
+      "website": "https://2u.com/",
+      "provider": "greenhouse",
+      "board_id": "2u",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/2u/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed_platform"
+    },
+    {
+      "name": "360Learning",
+      "website": "https://360learning.com/",
+      "provider": "lever",
+      "board_id": "360learning",
+      "evidence_url": "https://api.lever.co/v0/postings/360learning?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "lms"
+    },
+    {
+      "name": "Aaron School",
+      "website": "https://www.aaronschool.org/",
+      "provider": "ashby",
+      "board_id": "aaron-school",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/aaron-school",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "ACCEL Schools",
+      "website": "https://accelschools.com/",
+      "provider": "greenhouse",
+      "board_id": "accelschools",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/accelschools/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "ACI Learning",
+      "website": "https://www.acilearning.com/",
+      "provider": "greenhouse",
+      "board_id": "acilearning",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/acilearning/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "it_training"
+    },
+    {
+      "name": "Age of Learning",
+      "website": "https://www.ageoflearning.com/",
+      "provider": "lever",
+      "board_id": "aofl",
+      "evidence_url": "https://api.lever.co/v0/postings/aofl?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "Amplify",
+      "website": "https://amplify.com/",
+      "provider": "ashby",
+      "board_id": "amplify",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/amplify",
+      "vertical": "edtech",
+      "employer_kind": "curriculum"
+    },
+    {
+      "name": "Apollo Education Systems",
+      "website": "https://www.apolloed.com/",
+      "provider": "greenhouse",
+      "board_id": "apollo",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/apollo/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_ops"
+    },
+    {
+      "name": "Array Education",
+      "website": "https://www.arrayed.com/",
+      "provider": "greenhouse",
+      "board_id": "arrayeducation",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/arrayeducation/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed"
+    },
+    {
+      "name": "Babbel",
+      "website": "https://www.babbel.com/",
+      "provider": "ashby",
+      "board_id": "babbel",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/babbel",
+      "vertical": "edtech",
+      "employer_kind": "language_learning"
+    },
+    {
+      "name": "Brilliant",
+      "website": "https://brilliant.org/",
+      "provider": "lever",
+      "board_id": "brilliant",
+      "evidence_url": "https://api.lever.co/v0/postings/brilliant?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "stem_learning"
+    },
+    {
+      "name": "Brisk Teaching",
+      "website": "https://www.briskteaching.com/",
+      "provider": "ashby",
+      "board_id": "brisk-teaching",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/brisk-teaching",
+      "vertical": "edtech",
+      "employer_kind": "teacher_tools"
+    },
+    {
+      "name": "Challenge Preparatory Charter School",
+      "website": "https://www.challengecharterschools.org/",
+      "provider": "lever",
+      "board_id": "challengecharterschools",
+      "evidence_url": "https://api.lever.co/v0/postings/challengecharterschools?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "ClassDojo",
+      "website": "https://www.classdojo.com/",
+      "provider": "ashby",
+      "board_id": "classdojo",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/classdojo",
+      "vertical": "edtech",
+      "employer_kind": "k12_communication"
+    },
+    {
+      "name": "Clever",
+      "website": "https://www.clever.com/",
+      "provider": "ashby",
+      "board_id": "clever",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/clever",
+      "vertical": "edtech",
+      "employer_kind": "k12_platform"
+    },
+    {
+      "name": "Constellation Schools",
+      "website": "https://www.constellationschools.com/",
+      "provider": "greenhouse",
+      "board_id": "constellationschools",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/constellationschools/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Cotulla Education",
+      "website": "https://www.cotullaeducation.com/",
+      "provider": "greenhouse",
+      "board_id": "cotullaeducation",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/cotullaeducation/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed"
+    },
+    {
+      "name": "Coursera",
+      "website": "https://www.coursera.org/",
+      "provider": "greenhouse",
+      "board_id": "coursera",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/coursera/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed_platform"
+    },
+    {
+      "name": "DataCamp",
+      "website": "https://www.datacamp.com/",
+      "provider": "greenhouse",
+      "board_id": "datacamp",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/datacamp/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "skills_training"
+    },
+    {
+      "name": "Degreed",
+      "website": "https://degreed.com/",
+      "provider": "greenhouse",
+      "board_id": "degreed",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/degreed/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "workforce_learning"
+    },
+    {
+      "name": "Docebo",
+      "website": "https://www.docebo.com/",
+      "provider": "ashby",
+      "board_id": "docebo",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/docebo",
+      "vertical": "edtech",
+      "employer_kind": "lms"
+    },
+    {
+      "name": "Dr. Richard Izquierdo Health & Science Charter School",
+      "website": "https://www.drizquierdocharterschools.org/",
+      "provider": "greenhouse",
+      "board_id": "drizquierdocharterschools",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/drizquierdocharterschools/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Duolingo",
+      "website": "https://www.duolingo.com/",
+      "provider": "greenhouse",
+      "board_id": "duolingo",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/duolingo/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "language_learning"
+    },
+    {
+      "name": "Early Learning Academies",
+      "website": "https://www.earlylearningacademies.com/",
+      "provider": "greenhouse",
+      "board_id": "ela",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/ela/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "Edpuzzle",
+      "website": "https://edpuzzle.com/",
+      "provider": "lever",
+      "board_id": "edpuzzle",
+      "evidence_url": "https://api.lever.co/v0/postings/edpuzzle?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "k12_video"
+    },
+    {
+      "name": "Excel Learning Center",
+      "website": "https://www.excellearningcenter.com/",
+      "provider": "greenhouse",
+      "board_id": "excel",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/excel/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "Follett Software",
+      "website": "https://www.follettsoftware.com/",
+      "provider": "greenhouse",
+      "board_id": "follettsoftware",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/follettsoftware/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_ops"
+    },
+    {
+      "name": "Freedom Preparatory Academy Charter Schools",
+      "website": "https://www.freedomprep.net/",
+      "provider": "lever",
+      "board_id": "freedomprep",
+      "evidence_url": "https://api.lever.co/v0/postings/freedomprep?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "GiveCampus",
+      "website": "https://go.givecampus.com/",
+      "provider": "greenhouse",
+      "board_id": "givecampus",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/givecampus/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed_fundraising"
+    },
+    {
+      "name": "GoStudent",
+      "website": "https://gostudent.org/",
+      "provider": "greenhouse",
+      "board_id": "gostudent",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/gostudent/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "tutoring"
+    },
+    {
+      "name": "Green Tree School & Services",
+      "website": "https://www.greentreeschool.com/",
+      "provider": "ashby",
+      "board_id": "green-tree-school-and-services",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/green-tree-school-and-services",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "Guidepost Global Education Asia",
+      "website": "https://www.guideposteducation.com/",
+      "provider": "greenhouse",
+      "board_id": "gge-asia",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/gge-asia/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "montessori"
+    },
+    {
+      "name": "Guild",
+      "website": "https://www.guildeducation.com/",
+      "provider": "greenhouse",
+      "board_id": "guild",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/guild/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "workforce_learning"
+    },
+    {
+      "name": "Handshake",
+      "website": "https://joinhandshake.com/",
+      "provider": "ashby",
+      "board_id": "handshake",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/handshake",
+      "vertical": "edtech",
+      "employer_kind": "career_network"
+    },
+    {
+      "name": "Head-Royce School",
+      "website": "https://www.headroyce.org/",
+      "provider": "lever",
+      "board_id": "headroyce",
+      "evidence_url": "https://api.lever.co/v0/postings/headroyce?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "independent_school"
+    },
+    {
+      "name": "Heartworks Early Education",
+      "website": "https://www.heartworksvt.com/",
+      "provider": "lever",
+      "board_id": "heartworksvt",
+      "evidence_url": "https://api.lever.co/v0/postings/heartworksvt?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "Inspira Education",
+      "website": "https://www.inspiraeducationgroup.com/",
+      "provider": "greenhouse",
+      "board_id": "inspiraeducation",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/inspiraeducation/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "tutoring"
+    },
+    {
+      "name": "Instructure",
+      "website": "https://www.instructure.com/",
+      "provider": "ashby",
+      "board_id": "instructure",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/instructure",
+      "vertical": "edtech",
+      "employer_kind": "lms"
+    },
+    {
+      "name": "Intrepid College Prep Schools",
+      "website": "https://www.intrepidcollegeprep.org/",
+      "provider": "lever",
+      "board_id": "intrepidcollegeprep",
+      "evidence_url": "https://api.lever.co/v0/postings/intrepidcollegeprep?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Khan Academy",
+      "website": "https://www.khanacademy.org/",
+      "provider": "greenhouse",
+      "board_id": "khanacademy",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/khanacademy/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "nonprofit_learning"
+    },
+    {
+      "name": "KIPP SoCal Public Schools",
+      "website": "https://www.kippsocal.org/",
+      "provider": "lever",
+      "board_id": "kippsocal",
+      "evidence_url": "https://api.lever.co/v0/postings/kippsocal?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Learneo",
+      "website": "https://www.learneo.com/",
+      "provider": "greenhouse",
+      "board_id": "learneo",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/learneo/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "writing_tools"
+    },
+    {
+      "name": "Learning Safari",
+      "website": "https://www.learningsafari.com/",
+      "provider": "greenhouse",
+      "board_id": "learningsafari",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/learningsafari/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "LearnUpon",
+      "website": "https://www.learnupon.com/",
+      "provider": "greenhouse",
+      "board_id": "learnupon",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/learnupon/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "lms"
+    },
+    {
+      "name": "MagicSchool AI",
+      "website": "https://www.magicschool.ai/",
+      "provider": "ashby",
+      "board_id": "magicschool",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/magicschool",
+      "vertical": "edtech",
+      "employer_kind": "teacher_tools"
+    },
+    {
+      "name": "MasterClass",
+      "website": "https://www.masterclass.com/",
+      "provider": "greenhouse",
+      "board_id": "masterclass",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/masterclass/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "online_courses"
+    },
+    {
+      "name": "Mastery Charter Schools",
+      "website": "https://www.masterycharter.org/",
+      "provider": "lever",
+      "board_id": "masterycharter",
+      "evidence_url": "https://api.lever.co/v0/postings/masterycharter?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Michigan Online School",
+      "website": "https://www.michiganonlineschool.org/",
+      "provider": "greenhouse",
+      "board_id": "mos",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/mos/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "online_school"
+    },
+    {
+      "name": "Nevada State High School",
+      "website": "https://www.earlycollegenv.com/",
+      "provider": "lever",
+      "board_id": "NSHS",
+      "evidence_url": "https://api.lever.co/v0/postings/NSHS?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "early_college"
+    },
+    {
+      "name": "New Story Schools (OH)",
+      "website": "https://newstoryschools.com/",
+      "provider": "ashby",
+      "board_id": "new-story-schools-oh",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/new-story-schools-oh",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "New Story Schools (PA)",
+      "website": "https://newstoryschools.com/",
+      "provider": "ashby",
+      "board_id": "new-story-schools-pa",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/new-story-schools-pa",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "Newsela",
+      "website": "https://newsela.com/",
+      "provider": "greenhouse",
+      "board_id": "newsela",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/newsela/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_content"
+    },
+    {
+      "name": "Nightingale College",
+      "website": "https://nightingale.edu/",
+      "provider": "greenhouse",
+      "board_id": "nightingalecollege",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/nightingalecollege/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed"
+    },
+    {
+      "name": "NOLA Public Schools",
+      "website": "https://www.nolapublicschools.com/",
+      "provider": "lever",
+      "board_id": "nolapublicschools",
+      "evidence_url": "https://api.lever.co/v0/postings/nolapublicschools?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "public_school_district"
+    },
+    {
+      "name": "Outschool",
+      "website": "https://outschool.com/",
+      "provider": "greenhouse",
+      "board_id": "outschool",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/outschool/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "live_classes"
+    },
+    {
+      "name": "Parallel",
+      "website": "https://www.parallellearning.com/",
+      "provider": "greenhouse",
+      "board_id": "parallellearning",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/parallellearning/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_services"
+    },
+    {
+      "name": "PrairieLearn",
+      "website": "https://prairielearn.com/",
+      "provider": "ashby",
+      "board_id": "prairielearn",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/prairielearn",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed_assessment"
+    },
+    {
+      "name": "Presence",
+      "website": "https://www.presence.com/",
+      "provider": "greenhouse",
+      "board_id": "presencelearning",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/presencelearning/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_services"
+    },
+    {
+      "name": "Prodigy Education",
+      "website": "https://www.prodigygame.com/",
+      "provider": "ashby",
+      "board_id": "prodigy-education",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/prodigy-education",
+      "vertical": "edtech",
+      "employer_kind": "k12_learning_games"
+    },
+    {
+      "name": "Product School",
+      "website": "https://productschool.com/",
+      "provider": "greenhouse",
+      "board_id": "productschool",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/productschool/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "professional_training"
+    },
+    {
+      "name": "Quizlet",
+      "website": "https://quizlet.com/",
+      "provider": "lever",
+      "board_id": "quizlet-2",
+      "evidence_url": "https://api.lever.co/v0/postings/quizlet-2?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "study_tools"
+    },
+    {
+      "name": "Rebecca School",
+      "website": "https://www.rebeccaschool.org/",
+      "provider": "ashby",
+      "board_id": "rebecca-school",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/rebecca-school",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "Relay Graduate School of Education",
+      "website": "https://relay.edu/",
+      "provider": "greenhouse",
+      "board_id": "relaygraduateschoolofeducation",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/relaygraduateschoolofeducation/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "teacher_prep"
+    },
+    {
+      "name": "Renaissance Learning",
+      "website": "https://www.renaissance.com/",
+      "provider": "greenhouse",
+      "board_id": "renaissancelearning-nam",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/renaissancelearning-nam/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_assessment"
+    },
+    {
+      "name": "Renaissance Learning EMEA APAC",
+      "website": "https://www.renaissance.com/",
+      "provider": "greenhouse",
+      "board_id": "renaissancelearning-emea",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/renaissancelearning-emea/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_assessment"
+    },
+    {
+      "name": "Rivermont Schools",
+      "website": "https://rivermontschools.com/",
+      "provider": "ashby",
+      "board_id": "rivermont-schools",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/rivermont-schools",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "Rocketship Public Schools",
+      "website": "https://www.rocketshipschools.org/",
+      "provider": "lever",
+      "board_id": "rocketship",
+      "evidence_url": "https://api.lever.co/v0/postings/rocketship?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "SAR Academy & SAR High School",
+      "website": "https://www.saracademy.org/",
+      "provider": "lever",
+      "board_id": "sar",
+      "evidence_url": "https://api.lever.co/v0/postings/sar?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "independent_school"
+    },
+    {
+      "name": "Schoolhouse",
+      "website": "https://schoolhouse.world/",
+      "provider": "ashby",
+      "board_id": "schoolhouse-world",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/schoolhouse-world",
+      "vertical": "edtech",
+      "employer_kind": "tutoring"
+    },
+    {
+      "name": "SchoolStatus",
+      "website": "https://www.schoolstatus.com/",
+      "provider": "greenhouse",
+      "board_id": "schoolstatus",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/schoolstatus/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_communication"
+    },
+    {
+      "name": "Seesaw",
+      "website": "https://web.seesaw.me/",
+      "provider": "greenhouse",
+      "board_id": "seesaw",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/seesaw/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "k12_portfolio"
+    },
+    {
+      "name": "SEO (Sponsors for Educational Opportunity)",
+      "website": "https://www.seo-usa.org/",
+      "provider": "greenhouse",
+      "board_id": "sponsorsforeducationalopportunity",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/sponsorsforeducationalopportunity/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "nonprofit_education"
+    },
+    {
+      "name": "Skillsoft",
+      "website": "https://www.skillsoft.com/",
+      "provider": "greenhouse",
+      "board_id": "skillsoft",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/skillsoft/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "workforce_learning"
+    },
+    {
+      "name": "Sora Schools",
+      "website": "https://www.soraschools.com/",
+      "provider": "lever",
+      "board_id": "soraschools",
+      "evidence_url": "https://api.lever.co/v0/postings/soraschools?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "online_school"
+    },
+    {
+      "name": "Strada Education Foundation",
+      "website": "https://www.stradaeducation.org/",
+      "provider": "lever",
+      "board_id": "stradaeducation",
+      "evidence_url": "https://api.lever.co/v0/postings/stradaeducation?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "nonprofit_education"
+    },
+    {
+      "name": "Success Academy",
+      "website": "https://www.successacademies.org/",
+      "provider": "greenhouse",
+      "board_id": "successacademycharterschool",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/successacademycharterschool/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Teachable",
+      "website": "https://teachable.com/",
+      "provider": "greenhouse",
+      "board_id": "teachablecareers",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/teachablecareers/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "creator_learning"
+    },
+    {
+      "name": "Teachstone",
+      "website": "https://teachstone.com/",
+      "provider": "greenhouse",
+      "board_id": "teachstone",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/teachstone/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "teacher_coaching"
+    },
+    {
+      "name": "The AI Education Project",
+      "website": "https://www.aiedu.org/",
+      "provider": "greenhouse",
+      "board_id": "aiedu",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/aiedu/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "nonprofit_education"
+    },
+    {
+      "name": "The ANA Educational Foundation",
+      "website": "https://www.aefonline.org/",
+      "provider": "greenhouse",
+      "board_id": "aef",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/aef/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "nonprofit_education"
+    },
+    {
+      "name": "The Children's Corner Learning Center",
+      "website": "https://www.childrenscorner.com/",
+      "provider": "greenhouse",
+      "board_id": "childrenscorner",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/childrenscorner/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    },
+    {
+      "name": "The Learning Spectrum",
+      "website": "https://thelearningspectrum.com/",
+      "provider": "ashby",
+      "board_id": "the-learning-spectrum",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/the-learning-spectrum",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "The Menta Education Group",
+      "website": "https://www.menta.org/",
+      "provider": "lever",
+      "board_id": "menta",
+      "evidence_url": "https://api.lever.co/v0/postings/menta?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "The Pinnacle School",
+      "website": "https://www.thepinnacleschool.org/",
+      "provider": "ashby",
+      "board_id": "the-pinnacle-school",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/the-pinnacle-school",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "The Spire School",
+      "website": "https://www.spireschool.org/",
+      "provider": "ashby",
+      "board_id": "the-spire-school",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/the-spire-school",
+      "vertical": "edtech",
+      "employer_kind": "special_ed_school"
+    },
+    {
+      "name": "TutorMe",
+      "website": "https://tutorme.com/",
+      "provider": "greenhouse",
+      "board_id": "tutorme",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/tutorme/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "tutoring"
+    },
+    {
+      "name": "Udemy",
+      "website": "https://www.udemy.com/",
+      "provider": "greenhouse",
+      "board_id": "udemy",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/udemy/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "online_courses"
+    },
+    {
+      "name": "UMA Education",
+      "website": "https://www.uma.edu/",
+      "provider": "greenhouse",
+      "board_id": "umaeducationinc",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/umaeducationinc/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "higher_ed"
+    },
+    {
+      "name": "University of Cleveland Preparatory School",
+      "website": "https://www.clevelandpreparatoryschool.org/",
+      "provider": "greenhouse",
+      "board_id": "universityofclevelandpreparatoryschool",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/universityofclevelandpreparatoryschool/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "charter_school"
+    },
+    {
+      "name": "Williamsburg Learning",
+      "website": "https://www.williamsburglearning.org/",
+      "provider": "lever",
+      "board_id": "williamsburglearning",
+      "evidence_url": "https://api.lever.co/v0/postings/williamsburglearning?mode=json",
+      "vertical": "edtech",
+      "employer_kind": "online_school"
+    },
+    {
+      "name": "Wonderschool",
+      "website": "https://www.wonderschool.com/",
+      "provider": "greenhouse",
+      "board_id": "wonderschool",
+      "evidence_url": "https://boards-api.greenhouse.io/v1/boards/wonderschool/jobs?content=true",
+      "vertical": "edtech",
+      "employer_kind": "early_learning"
+    }
+  ]
+}
