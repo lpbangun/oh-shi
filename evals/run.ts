@@ -26,3 +26,4 @@ import "./startup-domain-yield.test";
 import "./discovery-pipeline-benchmark.test";
 import "./discovery-review-d1.test";
 import "./discovery-policy-d1.test";
+import "./gate0-scorecard.test";
