@@ -1,0 +1,28 @@
+[
+  {
+    "id": "lever-ae",
+    "text": "Account Executive",
+    "categories": {
+      "team": "Sales",
+      "location": "Remote - US",
+      "commitment": "Full-time"
+    },
+    "workplaceType": "remote",
+    "hostedUrl": "https://jobs.lever.co/edtech-demo/lever-ae",
+    "createdAt": 1756684800000,
+    "descriptionPlain": "Close district partnerships."
+  },
+  {
+    "id": "lever-curriculum",
+    "text": "Instructional Designer",
+    "categories": {
+      "team": "Curriculum",
+      "location": "Chicago, IL",
+      "commitment": "Full-time"
+    },
+    "workplaceType": "hybrid",
+    "hostedUrl": "https://jobs.lever.co/edtech-demo/lever-curriculum",
+    "createdAt": 1756684800000,
+    "descriptionPlain": "Author standards-aligned lessons."
+  }
+]

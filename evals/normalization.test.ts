@@ -20,6 +20,14 @@ test("role classification covers the core startup hiring lanes", () => {
   assert.equal(classifyRole("Office Barista"), "Other");
 });
 
+test("curriculum and instructional titles are not swallowed by generic design", () => {
+  assert.equal(classifyRole("Instructional Designer"), "Other");
+  assert.equal(classifyRole("Curriculum Specialist"), "Other");
+  assert.equal(classifyRole("Learning Designer"), "Other");
+  assert.equal(classifyRole("Customer Success Manager"), "GTM");
+  assert.equal(classifyRole("Design Intern"), "Product");
+});
+
 test("industry normalization distinguishes common startup categories", () => {
   const cases: Array<[string, string]> = [
     ["AI / ML", "Artificial Intelligence"],
