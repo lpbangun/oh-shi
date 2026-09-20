@@ -1,0 +1,28 @@
+{
+  "prior_snapshot": "edtech-ingest-2026-09-20T01-47-56-304Z.json",
+  "after_snapshot": "edtech-ingest-2026-09-20T01-48-13-304Z.json",
+  "boards": ["coursera", "duolingo"],
+  "perturbation": {
+    "removed_live_external_id": "6120396004",
+    "injected_synthetic_external_id": "9999999001",
+    "injected_synthetic_url": "https://boards.greenhouse.io/coursera/jobs/9999999001"
+  },
+  "receipts": [
+    {
+      "board_id": "coursera",
+      "status": "success",
+      "observed": 6,
+      "opened": 1,
+      "closed": 1,
+      "updated": 0
+    },
+    {
+      "board_id": "duolingo",
+      "status": "success",
+      "observed": 36,
+      "opened": 0,
+      "closed": 0,
+      "updated": 0
+    }
+  ]
+}

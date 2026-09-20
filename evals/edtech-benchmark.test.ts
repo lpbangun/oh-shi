@@ -27,6 +27,8 @@ test("edtech benchmark markdown exists with required coverage sections", async (
   assert.match(markdown, /companies/i);
   assert.match(markdown, /open jobs/i);
   assert.match(markdown, /boards attempted/i);
+  assert.match(markdown, /\*\*91\*\*/);
+  assert.match(markdown, /\(all\)/i);
   assert.match(markdown, /gaps/i);
   assert.match(markdown, /role mix/i);
 });
@@ -34,9 +36,15 @@ test("edtech benchmark markdown exists with required coverage sections", async (
 test("edtech benchmark receipts fixture parses and counts complete boards", async () => {
   const artifact = await loadFixture("receipts.json");
   assert.equal(artifact.schemaVersion, "1.0");
-  assert.ok(artifact.packRows >= 50);
-  assert.ok(artifact.boardsAttempted > 0);
+  assert.equal(artifact.packRows, 91);
+  assert.equal(artifact.selection, "all");
+  assert.equal(artifact.boardsAttempted, artifact.packRows);
+  assert.equal(artifact.receipts.length, artifact.boardsAttempted);
   assert.equal(artifact.boardsComplete, artifact.receipts.filter((row) => row.live_complete).length);
+  assert.equal(
+    artifact.boardsComplete + artifact.boardsQuarantined + artifact.boardsFailed,
+    artifact.boardsAttempted
+  );
   assert.equal(
     artifact.totalOpenJobs,
     artifact.receipts

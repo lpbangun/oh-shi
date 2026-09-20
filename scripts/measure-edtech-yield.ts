@@ -361,7 +361,7 @@ export function renderBenchmarkMarkdown(artifact: EdtechBenchmarkArtifact): stri
     .join("\n");
 
   const gapLines = [
-    `- Pack identities (${artifact.packRows}) exceed live-complete boards measured here (${complete.length}); many rows are LastRound-confirmed identities not re-verified in this bounded run.`,
+    `- Pack identities (${artifact.packRows}) exceed live-complete boards measured here (${complete.length}); ${artifact.selection === "all" ? "failed fetches are listed below and identities are retained in the pack." : "many rows are LastRound-confirmed identities not re-verified in this bounded run."}`,
     `- Incomplete boards in this run: ${incomplete.length} (${incomplete.map((row) => row.board_id).join(", ") || "none"}).`,
     `- Live counts come from \`fetchCanonicalBoard\`, which keeps US-eligible roles (explicit US location or remote-US/global remote). Non-US-only postings are dropped by the canonical adapter.`,
     `- Edtech.com directory employers on unsupported ATS vendors or without public JSON boards are not in this pack.`,
@@ -470,7 +470,12 @@ export async function measureEdtechYield(options: MeasureOptions) {
   );
   const previousPath = options.previousPath ?? options.receiptsPath;
   const previous = await loadPreviousArtifact(previousPath);
-  const snapshotDiff = previous ? computeSnapshotDiff(previous, receipts) : undefined;
+  const rawSnapshotDiff = previous ? computeSnapshotDiff(previous, receipts) : undefined;
+  const snapshotDiff =
+    rawSnapshotDiff &&
+    (rawSnapshotDiff.jobs_opened > 0 || rawSnapshotDiff.jobs_closed > 0)
+      ? rawSnapshotDiff
+      : undefined;
   const artifact = aggregateBenchmark(
     pack.rows.length,
     receipts,

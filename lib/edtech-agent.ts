@@ -12,6 +12,11 @@ export const EDTECH_AGENT_PARAMETERS = new Set(["boards", "titles", "role_family
 const BOARD_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/i;
 const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "outputs");
 
+export function resolveEdtechSnapshotDir() {
+  const configured = process.env.EDTECH_SNAPSHOT_DIR?.trim();
+  return configured ? path.resolve(configured) : DEFAULT_OUTPUT_DIR;
+}
+
 export class EdtechAgentError extends Error {
   constructor(message: string) {
     super(message);
@@ -141,8 +146,8 @@ export function queryEdtechAgent(
   };
 }
 
-export async function loadEdtechAgentStore(outputDir = DEFAULT_OUTPUT_DIR) {
-  return loadPreviousEdtechSnapshot(outputDir);
+export async function loadEdtechAgentStore(outputDir?: string) {
+  return loadPreviousEdtechSnapshot(outputDir ?? resolveEdtechSnapshotDir());
 }
 
 export function buildEdtechAgentJobsPayload(

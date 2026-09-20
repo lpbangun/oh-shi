@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const store = await loadEdtechAgentStore();
+    const store = await loadEdtechAgentStore(); // honors EDTECH_SNAPSHOT_DIR when set
     const payload = buildEdtechAgentJobsPayload(new URL(request.url).searchParams, store);
     return conditionalJsonResponse(request, payload, {
       cacheControl: "public, max-age=180, s-maxage=600",

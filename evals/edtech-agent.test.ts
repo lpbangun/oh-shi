@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
   buildEdtechAgentJobsPayload,
   EdtechAgentError,
+  loadEdtechAgentStore,
   parseEdtechAgentParams,
   queryEdtechAgent,
   toEdtechAgentPublicJob,
@@ -179,4 +181,41 @@ test("agent jobs route is a public GET surface without auth", async () => {
   assert.doesNotMatch(source, /authorization|INGEST_TOKEN/i);
   assert.match(source, /buildEdtechAgentJobsPayload/);
   assert.match(source, /conditionalJsonResponse/);
+  assert.match(source, /loadEdtechAgentStore/);
+});
+
+test("loadEdtechAgentStore reads scheduled ingest snapshot output", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "edtech-agent-store-"));
+  const compact = compactJob(courseraBoard, "9001", "Synthetic Curriculum Lead", "Other");
+  const artifact = {
+    schemaVersion: "1.0",
+    vertical: "edtech",
+    generatedAt: "2026-09-20T01:00:00.000Z",
+    runId: "edtech-pack-test",
+    dryRun: false,
+    fresh: true,
+    resumedFrom: 0,
+    boards: 1,
+    jobs: [compact],
+    receipts: [],
+    summary: { success: 1, quarantined: 0, failed: 0, openJobs: 1 },
+  };
+  await writeFile(
+    path.join(dir, "edtech-ingest-2026-09-20T01-00-00-000Z.json"),
+    `${JSON.stringify(artifact, null, 2)}\n`,
+    "utf8"
+  );
+
+  const store = await loadEdtechAgentStore(dir);
+  const payload = buildEdtechAgentJobsPayload(
+    new URLSearchParams("boards=coursera"),
+    store,
+    "2026-09-20T01:00:00.000Z"
+  );
+
+  assert.equal(payload.count, 1);
+  assert.equal(payload.jobs.length, 1);
+  assert.equal(payload.jobs[0]?.boardId, "coursera");
+  assert.equal(payload.jobs[0]?.title, "Synthetic Curriculum Lead");
+  assert.equal("description" in payload.jobs[0], false);
 });

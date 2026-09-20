@@ -3,6 +3,7 @@
  *
  * Options:
  *   --limit=N          ingest only the first N pack rows (dev)
+ *   --boards=IDS       comma-separated board_id filter (e.g. coursera,duolingo)
  *   --dry-run          fetch and merge without writing outputs/
  *   --fresh            ignore prior edtech-ingest-*.json snapshots in the output dir
  *   --concurrency=N    parallel board fetches (default 6)
@@ -24,6 +25,7 @@ import {
 
 type CliOptions = {
   limit?: number;
+  boards?: string[];
   dryRun: boolean;
   fresh: boolean;
   concurrency: number;
@@ -64,6 +66,14 @@ function parseArgs(argv: string[]): CliOptions {
       options.limit = Number(limitMatch[1]);
       continue;
     }
+    const boardsMatch = /^--boards=(.+)$/.exec(arg);
+    if (boardsMatch) {
+      options.boards = boardsMatch[1]
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+      continue;
+    }
     const concurrencyMatch = /^--concurrency=(\d+)$/.exec(arg);
     if (concurrencyMatch) {
       options.concurrency = Number(concurrencyMatch[1]);
@@ -101,7 +111,16 @@ async function fetchBoardRow(row: EdtechPackRow) {
 export async function ingestEdtechPack(options: CliOptions) {
   const pack = await loadEdtechPack();
   assertValidEdtechPack(pack);
-  const rows = options.limit ? pack.rows.slice(0, options.limit) : pack.rows;
+  let rows = pack.rows;
+  if (options.boards?.length) {
+    const boardIds = new Set(options.boards);
+    rows = pack.rows.filter((row) => boardIds.has(row.board_id.toLowerCase()));
+    if (!rows.length) {
+      throw new Error(`No pack rows match --boards=${options.boards.join(",")}`);
+    }
+  } else if (options.limit) {
+    rows = pack.rows.slice(0, options.limit);
+  }
   const now = new Date().toISOString();
   const runId = `edtech-pack-${now}`;
   const previous = options.fresh
@@ -173,7 +192,23 @@ export async function ingestEdtechPack(options: CliOptions) {
     console.log(`Wrote ${outputPath}`);
   }
 
-  console.log(JSON.stringify(artifact.summary, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ...artifact.summary,
+        receipts: receipts.map((receipt) => ({
+          board_id: receipt.board_id,
+          status: receipt.status,
+          observed: receipt.observed,
+          opened: receipt.opened,
+          closed: receipt.closed,
+          updated: receipt.updated,
+        })),
+      },
+      null,
+      2
+    )
+  );
   return artifact;
 }
 
