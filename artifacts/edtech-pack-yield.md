@@ -6,6 +6,8 @@ Generated: 2026-09-20T01:25:51.505Z
 
 Edtech.com benchmark (checked 2026-09-19): ~756 companies / ~2,003 open jobs. This pack is **not** a scrape of Edtech.com; it is a precision-reviewed subset built from legal ATS directory + Wikidata identity joins.
 
+Live measured yield (bounded 27-board run via `pnpm measure:edtech`) is recorded in `artifacts/edtech-benchmark.md` with per-board receipts at `evals/fixtures/edtech-benchmark/receipts.json`. Pack identity (91 rows) is tracked separately from live-complete boards.
+
 ## Builder counts
 
 | Stage | Count |

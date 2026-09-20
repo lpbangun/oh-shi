@@ -14,6 +14,7 @@ const publicRoutes = [
   "app/api/v1/coverage/route.ts",
   "app/api/v1/signals/route.ts",
   "app/api/v1/off-board-openings/route.ts",
+  "app/api/v1/agent/jobs/route.ts",
   "app/exports/companies.jsonl/route.ts",
   "app/exports/jobs.jsonl/route.ts",
   "app/exports/daily-changes.json/route.ts",
@@ -41,6 +42,7 @@ test("agent discovery files advertise every stable public surface", async () => 
     "/api/v1/coverage",
     "/api/v1/signals",
     "/api/v1/off-board-openings",
+    "/api/v1/agent/jobs",
     "/exports/companies.jsonl",
     "/exports/jobs.jsonl",
     "/exports/daily-changes.json",
@@ -61,6 +63,7 @@ test("agent discovery files advertise every stable public surface", async () => 
     policy.capabilities.off_board_openings,
     "/api/v1/off-board-openings"
   );
+  assert.equal(policy.capabilities.edtech_jobs, "/api/v1/agent/jobs");
 });
 
 test("agent instructions use the actual public field casing and query recipes", async () => {

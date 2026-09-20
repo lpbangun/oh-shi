@@ -29,3 +29,5 @@ import "./discovery-policy-d1.test";
 import "./gate0-scorecard.test";
 import "./edtech-pack.test";
 import "./edtech-ingest.test";
+import "./edtech-agent.test";
+import "./edtech-benchmark.test";

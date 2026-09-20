@@ -101,6 +101,7 @@ matching total in `page.total`.
 | [`jobs.jsonl`](https://ohshi.work/exports/jobs.jsonl) | Stream-friendly job export |
 | [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Daily changes export: openings, closures, funding, and company changes |
 | [`llms.txt`](https://ohshi.work/llms.txt) | Machine-readable interface guide and request recipes |
+| [`/api/v1/agent/jobs`](https://ohshi.work/api/v1/agent/jobs) | Compact edtech pack jobs filtered by board and title |
 
 The coverage response publishes a permission-aware employer-discovery funnel.
 Its registry and queue totals identify permission-excluded records separately;
@@ -232,7 +233,9 @@ the GitHub Actions secret `OH_SHI_INGEST_TOKEN`, and the deployment secret
 `INGEST_TOKEN`.
 
 Canonical discovery and refresh runs at minute 30 every two hours. Funding
-discovery runs daily at 11:20 UTC.
+discovery runs daily at 11:20 UTC. The reviewed edtech employer pack is ingested
+daily with `pnpm ingest:edtech` via the `Daily edtech pack` GitHub Actions
+workflow (`.github/workflows/daily-edtech-pack.yml`).
 
 Maintainers should follow [`docs/releasing.md`](docs/releasing.md) for the
 pre-release gate, migration checks, deployment verification, rollback rules,
