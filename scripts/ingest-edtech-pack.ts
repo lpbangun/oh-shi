@@ -2,6 +2,7 @@
  * Ingest reviewed edtech pack boards via canonical ATS adapters.
  *
  * Options:
+ *   --pack=NAME        edtech (default), other, or all reviewed packs
  *   --limit=N          ingest only the first N pack rows (dev)
  *   --boards=IDS       comma-separated board_id filter (e.g. coursera,duolingo)
  *   --dry-run          fetch and merge without writing outputs/
@@ -13,7 +14,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { CanonicalHttpError, fetchCanonicalBoard } from "../lib/ats-adapters";
-import { assertValidEdtechPack, loadEdtechPack, type EdtechPackRow } from "../lib/edtech-pack";
+import { assertValidEdtechPack, loadIngestPack, type EdtechPackRow, type IngestPackSelection, type PackArtifactVertical } from "../lib/edtech-pack";
 import {
   DEFAULT_EDTECH_INGEST_CONCURRENCY,
   ingestEdtechBoardSnapshot,
@@ -24,6 +25,7 @@ import {
 } from "../lib/edtech-ingest";
 
 type CliOptions = {
+  pack: IngestPackSelection;
   limit?: number;
   boards?: string[];
   dryRun: boolean;
@@ -47,6 +49,7 @@ type BoardReceipt = {
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
+    pack: "edtech",
     dryRun: false,
     fresh: false,
     concurrency: DEFAULT_EDTECH_INGEST_CONCURRENCY,
@@ -59,6 +62,11 @@ function parseArgs(argv: string[]): CliOptions {
     }
     if (arg === "--fresh") {
       options.fresh = true;
+      continue;
+    }
+    const packMatch = /^--pack=(edtech|other|all)$/.exec(arg);
+    if (packMatch) {
+      options.pack = packMatch[1] as IngestPackSelection;
       continue;
     }
     const limitMatch = /^--limit=(\d+)$/.exec(arg);
@@ -109,8 +117,10 @@ async function fetchBoardRow(row: EdtechPackRow) {
 }
 
 export async function ingestEdtechPack(options: CliOptions) {
-  const pack = await loadEdtechPack();
-  assertValidEdtechPack(pack);
+  const pack = await loadIngestPack(options.pack);
+  if (options.pack !== "all") {
+    assertValidEdtechPack(pack);
+  }
   let rows = pack.rows;
   if (options.boards?.length) {
     const boardIds = new Set(options.boards);
@@ -122,7 +132,7 @@ export async function ingestEdtechPack(options: CliOptions) {
     rows = pack.rows.slice(0, options.limit);
   }
   const now = new Date().toISOString();
-  const runId = `edtech-pack-${now}`;
+  const runId = `${options.pack}-pack-${now}`;
   const previous = options.fresh
     ? { jobs: [] }
     : await loadPreviousEdtechSnapshot(options.outputDir);
@@ -163,9 +173,11 @@ export async function ingestEdtechPack(options: CliOptions) {
     });
   }
 
+  const artifactVertical: PackArtifactVertical = options.pack;
+
   const artifact = {
     schemaVersion: "1.0",
-    vertical: "edtech",
+    vertical: artifactVertical,
     generatedAt: now,
     runId,
     dryRun: options.dryRun,

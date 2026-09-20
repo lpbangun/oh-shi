@@ -31,3 +31,4 @@ import "./edtech-pack.test";
 import "./edtech-ingest.test";
 import "./edtech-agent.test";
 import "./edtech-benchmark.test";
+import "./all-types-ingest.test";

@@ -101,7 +101,7 @@ matching total in `page.total`.
 | [`jobs.jsonl`](https://ohshi.work/exports/jobs.jsonl) | Stream-friendly job export |
 | [`daily-changes.json`](https://ohshi.work/exports/daily-changes.json) | Daily changes export: openings, closures, funding, and company changes |
 | [`llms.txt`](https://ohshi.work/llms.txt) | Machine-readable interface guide and request recipes |
-| [`/api/v1/agent/jobs`](https://ohshi.work/api/v1/agent/jobs) | Compact edtech pack jobs filtered by board and title |
+| [`/api/v1/agent/jobs`](https://ohshi.work/api/v1/agent/jobs) | Compact reviewed pack jobs filtered by board, title, and vertical |
 
 The coverage response publishes a permission-aware employer-discovery funnel.
 Its registry and queue totals identify permission-excluded records separately;
@@ -233,9 +233,23 @@ the GitHub Actions secret `OH_SHI_INGEST_TOKEN`, and the deployment secret
 `INGEST_TOKEN`.
 
 Canonical discovery and refresh runs at minute 30 every two hours. Funding
-discovery runs daily at 11:20 UTC. The reviewed edtech employer pack is ingested
-daily with `pnpm ingest:edtech` via the `Daily edtech pack` GitHub Actions
+discovery runs daily at 11:20 UTC. The reviewed employer packs (`packs/edtech.json`
+for education employers and `packs/other.json` for a small non-education set such
+as Ramp, Vanta, Cognition, and Harvey) are ingested daily with
+`pnpm ingest:edtech --pack=all` via the `Daily edtech pack` GitHub Actions
 workflow (`.github/workflows/daily-edtech-pack.yml`).
+
+### Compact agent jobs (`/api/v1/agent/jobs`)
+
+The agent surface serves compact rows from the scheduled pack ingest snapshots.
+Each row carries a `vertical` tag (`edtech` or `other`), stable ids, canonical
+employer ATS URLs, and no posting description by default.
+
+- Required filter: `boards=coursera,duolingo` (comma-separated or repeated)
+- Optional filters: `titles=curriculum,software%20engineer`, `role_family=Engineering`
+- Optional vertical: `vertical=edtech|other|all` (defaults to `edtech`)
+- Example all-vertical query:
+  `/api/v1/agent/jobs?boards=coursera,ramp&vertical=all&titles=engineer`
 
 Maintainers should follow [`docs/releasing.md`](docs/releasing.md) for the
 pre-release gate, migration checks, deployment verification, rollback rules,

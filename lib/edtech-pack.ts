@@ -4,19 +4,21 @@ import { canonicalEndpoint } from "./ats-adapters";
 import type { AtsProvider } from "./source-registry";
 
 /** Gate 1 reviewed employer pack row. Required fields are first-class for Gate 2 ingest. */
+export type PackVertical = "edtech" | "other";
+
 export type EdtechPackRow = {
   name: string;
   website: string;
   provider: Exclude<AtsProvider, "manual" | "structured">;
   board_id: string;
   evidence_url: string;
-  vertical: "edtech";
+  vertical: PackVertical;
   employer_kind?: string;
 };
 
 export type EdtechPack = {
   schemaVersion: "1.0";
-  vertical: "edtech";
+  vertical: PackVertical;
   generatedAt: string;
   reviewRule: string;
   attribution: {
@@ -28,7 +30,12 @@ export type EdtechPack = {
   rows: EdtechPackRow[];
 };
 
+export type IngestPackSelection = "edtech" | "other" | "all";
+
+export type PackArtifactVertical = PackVertical | "all";
+
 export const EDTECH_PACK_PATH = path.join(process.cwd(), "packs", "edtech.json");
+export const OTHER_PACK_PATH = path.join(process.cwd(), "packs", "other.json");
 
 export const KNOWN_ATS_API_HOSTS = [
   "boards-api.greenhouse.io",
@@ -85,14 +92,21 @@ export function containsDisallowedHost(value: string) {
   }
 }
 
+function parsePackVertical(value: unknown, fallback: PackVertical): PackVertical {
+  const vertical = String(value || fallback).trim().toLowerCase();
+  if (vertical === "edtech" || vertical === "other") return vertical;
+  return fallback;
+}
+
 export function parseEdtechPack(payload: unknown): EdtechPack {
   const root = payload && typeof payload === "object"
     ? payload as Record<string, unknown>
     : {};
   const rows = Array.isArray(root.rows) ? root.rows : [];
+  const packVertical = parsePackVertical(root.vertical, "edtech");
   return {
     schemaVersion: "1.0",
-    vertical: "edtech",
+    vertical: packVertical,
     generatedAt: String(root.generatedAt || ""),
     reviewRule: String(root.reviewRule || ""),
     attribution: {
@@ -103,7 +117,7 @@ export function parseEdtechPack(payload: unknown): EdtechPack {
         ? String(object(root.attribution).wikidata)
         : undefined,
     },
-    rows: rows.map((row) => normalizeRow(row)),
+    rows: rows.map((row) => normalizeRow(row, packVertical)),
   };
 }
 
@@ -111,7 +125,7 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
-function normalizeRow(raw: unknown): EdtechPackRow {
+function normalizeRow(raw: unknown, packVertical: PackVertical): EdtechPackRow {
   const row = object(raw);
   const provider = String(row.provider || "").trim() as EdtechPackRow["provider"];
   const boardId = String(row.board_id || "").trim();
@@ -121,7 +135,7 @@ function normalizeRow(raw: unknown): EdtechPackRow {
     provider,
     board_id: boardId,
     evidence_url: String(row.evidence_url || evidenceUrlFor(provider, boardId)).trim(),
-    vertical: "edtech",
+    vertical: parsePackVertical(row.vertical, packVertical),
     employer_kind: row.employer_kind ? String(row.employer_kind).trim() : undefined,
   };
 }
@@ -129,6 +143,24 @@ function normalizeRow(raw: unknown): EdtechPackRow {
 export async function loadEdtechPack(filePath = EDTECH_PACK_PATH) {
   const payload = JSON.parse(await readFile(filePath, "utf8")) as unknown;
   return parseEdtechPack(payload);
+}
+
+export async function loadOtherPack(filePath = OTHER_PACK_PATH) {
+  const payload = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  return parseEdtechPack(payload);
+}
+
+export async function loadIngestPack(selection: IngestPackSelection = "edtech") {
+  if (selection === "edtech") return loadEdtechPack();
+  if (selection === "other") return loadOtherPack();
+  const [edtech, other] = await Promise.all([loadEdtechPack(), loadOtherPack()]);
+  assertValidEdtechPack(edtech);
+  assertValidEdtechPack(other);
+  return {
+    ...edtech,
+    reviewRule: `${edtech.reviewRule} Combined with ${other.reviewRule}`,
+    rows: [...edtech.rows, ...other.rows],
+  };
 }
 
 export type EdtechPackValidationIssue = {
@@ -151,10 +183,10 @@ export function validateEdtechPack(pack: EdtechPack): EdtechPackValidationIssue[
         });
       }
     }
-    if (row.vertical !== "edtech") {
+    if (row.vertical !== pack.vertical) {
       issues.push({
         code: "vertical",
-        message: `Row ${index} must set vertical to edtech`,
+        message: `Row ${index} must set vertical to ${pack.vertical}`,
         index,
       });
     }

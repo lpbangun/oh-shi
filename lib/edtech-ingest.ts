@@ -5,7 +5,7 @@ import {
   dedupeNormalizedJobs,
   type NormalizedJob,
 } from "./ats-adapters";
-import type { EdtechPackRow } from "./edtech-pack";
+import type { EdtechPackRow, PackVertical } from "./edtech-pack";
 import {
   changeEventId,
   planCanonicalClosures,
@@ -73,7 +73,7 @@ export type CompactEdtechJob = {
   canonical_url: string;
   apply_url: string;
   status: "verified_open" | "verified_closed";
-  vertical: "edtech";
+  vertical: PackVertical;
   employer_kind?: string;
 };
 
@@ -143,7 +143,7 @@ export function edtechJobId(
 
 export function toCompactEdtechJob(
   job: NormalizedJob,
-  board: Pick<EdtechPackRow, "provider" | "board_id" | "employer_kind">,
+  board: Pick<EdtechPackRow, "provider" | "board_id" | "employer_kind" | "vertical">,
   status: CompactEdtechJob["status"] = "verified_open"
 ): CompactEdtechJob {
   return {
@@ -158,7 +158,7 @@ export function toCompactEdtechJob(
     canonical_url: job.canonicalUrl,
     apply_url: job.canonicalUrl,
     status,
-    vertical: "edtech",
+    vertical: board.vertical,
     employer_kind: board.employer_kind,
   };
 }

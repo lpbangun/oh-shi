@@ -5,9 +5,10 @@ import {
   type CompactEdtechJob,
   type EdtechBoardSnapshotStore,
 } from "./edtech-ingest";
+import type { PackArtifactVertical, PackVertical } from "./edtech-pack";
 import { normalizeRoleFamily, ROLE_FAMILIES } from "./job-normalization";
 
-export const EDTECH_AGENT_PARAMETERS = new Set(["boards", "titles", "role_family"]);
+export const EDTECH_AGENT_PARAMETERS = new Set(["boards", "titles", "role_family", "vertical"]);
 
 const BOARD_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/i;
 const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "outputs");
@@ -24,10 +25,13 @@ export class EdtechAgentError extends Error {
   }
 }
 
+export type AgentVerticalFilter = PackVertical | "all";
+
 export type EdtechAgentFilters = {
   boardIds: string[];
   titles: string[];
   roleFamilies: string[];
+  vertical: AgentVerticalFilter;
 };
 
 export type EdtechAgentPublicJob = {
@@ -42,7 +46,7 @@ export type EdtechAgentPublicJob = {
   canonicalUrl: string;
   applyUrl: string;
   status: "verified_open" | "verified_closed";
-  vertical: "edtech";
+  vertical: PackVertical;
   employerKind?: string;
 };
 
@@ -63,6 +67,17 @@ function collectDelimitedValues(params: URLSearchParams, name: string) {
     }
   }
   return values;
+}
+
+function parseVerticalFilter(params: URLSearchParams): AgentVerticalFilter {
+  const values = params.getAll("vertical");
+  if (values.length > 1) {
+    throw new EdtechAgentError('Parameter "vertical" may appear only once.');
+  }
+  const raw = values[0]?.trim().toLowerCase();
+  if (!raw) return "edtech";
+  if (raw === "edtech" || raw === "other" || raw === "all") return raw;
+  throw new EdtechAgentError('Parameter "vertical" must be edtech, other, or all.');
 }
 
 export function parseEdtechAgentParams(params: URLSearchParams): EdtechAgentFilters {
@@ -93,7 +108,7 @@ export function parseEdtechAgentParams(params: URLSearchParams): EdtechAgentFilt
     }
   }
 
-  return { boardIds, titles, roleFamilies };
+  return { boardIds, titles, roleFamilies, vertical: parseVerticalFilter(params) };
 }
 
 export function toEdtechAgentPublicJob(job: CompactEdtechJob): EdtechAgentPublicJob {
@@ -122,7 +137,9 @@ export function queryEdtechAgent(
   const scoped = filterCompactJobs(store.jobs, {
     boardIds: filters.boardIds,
     titles: filters.titles.length ? filters.titles : undefined,
-  }).filter((job) => job.status === "verified_open");
+  })
+    .filter((job) => job.status === "verified_open")
+    .filter((job) => filters.vertical === "all" || job.vertical === filters.vertical);
 
   const roleFiltered = filters.roleFamilies.length
     ? scoped.filter((job) =>
@@ -166,15 +183,18 @@ export function buildEdtechAgentJobsPayload(
 
   const appliedFilters: Record<string, unknown> = {
     boards: filters.boardIds,
+    vertical: filters.vertical,
   };
   if (filters.titles.length) appliedFilters.titles = filters.titles;
   if (filters.roleFamilies.length) appliedFilters.role_family = filters.roleFamilies;
+
+  const responseVertical: PackArtifactVertical = filters.vertical;
 
   return {
     count: result.count,
     schema_version: "1.0",
     generated_at: generatedAt,
-    vertical: "edtech",
+    vertical: responseVertical,
     license:
       "CC BY 4.0 applies only to project-owned material; source rights remain with their owners.",
     applied_filters: appliedFilters,

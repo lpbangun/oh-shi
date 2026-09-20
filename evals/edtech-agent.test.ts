@@ -82,6 +82,7 @@ test("queryEdtechAgent returns count first and excludes unrequested boards", () 
     boardIds: ["coursera", "duolingo"],
     titles: [],
     roleFamilies: [],
+    vertical: "edtech",
   });
   assert.equal(result.count, 3);
   assert.equal(result.jobs.length, 3);
@@ -97,6 +98,7 @@ test("queryEdtechAgent filters by title and role family", () => {
     boardIds: ["coursera", "duolingo"],
     titles: ["engineer"],
     roleFamilies: [],
+    vertical: "edtech",
   });
   assert.equal(byTitle.count, 1);
   assert.equal(byTitle.jobs[0]?.title, "Software Engineer");
@@ -105,6 +107,7 @@ test("queryEdtechAgent filters by title and role family", () => {
     boardIds: ["coursera", "duolingo"],
     titles: [],
     roleFamilies: ["GTM"],
+    vertical: "edtech",
   });
   assert.equal(byFamily.count, 1);
   assert.equal(byFamily.jobs[0]?.title, "Account Executive");
@@ -165,7 +168,7 @@ test("daily edtech pack workflow exists with bounded daily ingest", async () => 
   assert.doesNotMatch(workflow, /\*\/2 \* \* \*/);
   assert.match(workflow, /timeout-minutes:\s*(?:30|45|60)/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);
-  assert.match(workflow, /pnpm ingest:edtech --concurrency=6/);
+  assert.match(workflow, /pnpm ingest:edtech --pack=all --concurrency=6/);
   assert.match(workflow, /upload-artifact@v(?:[4-9]|\d{2,})/);
 });
 

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "vertical": "other",
+  "generatedAt": "2026-09-20T02:00:00.000Z",
+  "reviewRule": "Include LastRound-confirmed non-education employers with public Ashby ATS JSON. Exclude education/learning employers already covered by packs/edtech.json. Dedup provider+board_id; website must be first-party HTTPS.",
+  "attribution": {
+    "lastround": "LastRound AI ATS company directory (CC BY 4.0), https://github.com/fyrosofttech/lastroundai-hiring-data",
+    "lastroundLicense": "CC BY 4.0",
+    "lastroundUrl": "https://github.com/fyrosofttech/lastroundai-hiring-data",
+    "wikidata": "Wikidata structured data (CC0), https://www.wikidata.org/wiki/Wikidata:Copyright"
+  },
+  "rows": [
+    {
+      "name": "Ramp",
+      "website": "https://ramp.com/",
+      "provider": "ashby",
+      "board_id": "ramp",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/ramp",
+      "vertical": "other",
+      "employer_kind": "fintech"
+    },
+    {
+      "name": "Vanta",
+      "website": "https://www.vanta.com/",
+      "provider": "ashby",
+      "board_id": "vanta",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/vanta",
+      "vertical": "other",
+      "employer_kind": "security_compliance"
+    },
+    {
+      "name": "Cognition",
+      "website": "https://cognition.ai/",
+      "provider": "ashby",
+      "board_id": "cognition",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/cognition",
+      "vertical": "other",
+      "employer_kind": "ai"
+    },
+    {
+      "name": "Harvey",
+      "website": "https://www.harvey.ai/",
+      "provider": "ashby",
+      "board_id": "harvey",
+      "evidence_url": "https://api.ashbyhq.com/posting-api/job-board/harvey",
+      "vertical": "other",
+      "employer_kind": "legal_ai"
+    }
+  ]
+}

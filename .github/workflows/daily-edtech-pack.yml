@@ -34,8 +34,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Ingest reviewed edtech pack boards
-        run: pnpm ingest:edtech --concurrency=6
+      - name: Ingest reviewed employer packs
+        run: pnpm ingest:edtech --pack=all --concurrency=6
 
       - name: Upload edtech ingest snapshot
         uses: actions/upload-artifact@v7
