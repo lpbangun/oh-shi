@@ -1,4 +1,4 @@
-name: Daily edtech pack
+name: Daily reviewed employer packs
 
 on:
   schedule:
@@ -20,38 +20,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 22.22.0
-          cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Ingest reviewed employer packs
-        run: pnpm ingest:edtech --pack=all --concurrency=6
-
-      - name: Upload edtech ingest snapshot
-        uses: actions/upload-artifact@v7
-        with:
-          name: edtech-ingest-${{ github.run_id }}
-          path: outputs/edtech-ingest-*.json
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Summarize ingest run
-        if: always()
-        run: |
-          if compgen -G "outputs/edtech-ingest-*.json" > /dev/null; then
-            latest="$(ls -1 outputs/edtech-ingest-*.json | sort | tail -n 1)"
-            echo "Latest snapshot: ${latest}"
-            node -e "const fs=require('node:fs');const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p,'utf8'));console.log('open_jobs='+(j.jobs||[]).filter(x=>x.status==='verified_open').length);"
-          else
-            echo "No edtech ingest snapshot was written."
-          fi
+      - name: Refresh reviewed packs into canonical D1 storage
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+        run: node scripts/run-reviewed-pack-refresh.mjs

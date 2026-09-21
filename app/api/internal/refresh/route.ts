@@ -117,10 +117,24 @@ export function GET(request: Request) {
 export async function POST(request: Request) {
   const denied = authenticate(request);
   if (denied) return denied;
-  const phase = new URL(request.url).searchParams.get("phase");
+  const url = new URL(request.url);
+  const phase = url.searchParams.get("phase");
   if (phase !== "discovery" && phase !== "canonical") {
     return Response.json(
       { error: "Refresh phase must be discovery or canonical." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  const cadenceValue = url.searchParams.get("cadence") || "frequent";
+  if (cadenceValue !== "frequent" && cadenceValue !== "daily") {
+    return Response.json(
+      { error: "Refresh cadence must be frequent or daily." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  if (phase === "discovery" && url.searchParams.has("cadence")) {
+    return Response.json(
+      { error: "Refresh cadence applies only to the canonical phase." },
       { status: 400, headers: { "Cache-Control": "no-store" } }
     );
   }
@@ -142,7 +156,11 @@ export async function POST(request: Request) {
   };
 
   try {
-    const storageKey = await phaseRefreshRunKey(runKey, phase);
+    const storageKey = await phaseRefreshRunKey(
+      runKey,
+      phase,
+      cadenceValue === "daily" ? "daily" : undefined
+    );
     const execution = await executeRefreshOnce(storageKey, store, async () => {
       if (phase === "discovery") {
         const discovery = await discoveryWithFallback();
@@ -162,7 +180,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        const canonical = await refreshCanonicalBoards();
+        const canonical = await refreshCanonicalBoards({ cadence: cadenceValue });
         const coverage = await getCoverageMetrics();
         const discovery = emptyDiscovery(canonical.refreshed_at);
         const body = refreshEnvelope({ runKey, canonical, discovery, coverage });

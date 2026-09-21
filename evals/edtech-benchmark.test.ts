@@ -7,7 +7,6 @@ import {
   computeSnapshotDiff,
   EDTECH_COM_BENCHMARK,
   type EdtechBenchmarkArtifact,
-  type EdtechBoardReceipt,
 } from "../scripts/measure-edtech-yield";
 
 const root = process.cwd();

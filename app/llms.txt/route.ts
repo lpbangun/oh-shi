@@ -33,7 +33,6 @@ last 30 days; no events in that window is reported as flat.
 - Coverage and freshness: ${origin}/api/v1/coverage
 - Verified off-board openings: ${origin}/api/v1/off-board-openings
 - Off-board hiring signals: ${origin}/api/v1/signals
-- Edtech pack jobs (compact, count-first): ${origin}/api/v1/agent/jobs
 
 Call the capabilities URL first. It lists every supported filter. Unknown filters,
 invalid values, and malformed cursors return HTTP 400 rather than silently returning
@@ -125,25 +124,16 @@ recent complete source observation; sourceUpdatedAt is a source-provided update 
 when available; lastVerifiedAt is Oh Shi's successful canonical verification time;
 closedAt is the confirmed closure time; occurredAt is the event observation time.
 
-## Reviewed pack agent jobs
-- Compact board-scoped jobs: ${origin}/api/v1/agent/jobs
-- Required boards filter: boards=coursera,duolingo or repeated boards=
-- Optional title filters: titles=curriculum,account%20executive or repeated titles=
-- Optional vertical filter: vertical=edtech|other|all (defaults to edtech)
-- Optional role_family uses the same canonical families as /api/v1/intelligence
-- Responses put count first, then schema_version, generated_at, applied_filters,
-  and jobs. Compact rows use camelCase, stable ids, canonicalUrl, applyUrl on
-  the employer ATS, and a vertical tag (edtech or other). Posting description/body
-  is omitted by default.
-- Only requested board ids are returned; unrequested boards are excluded.
-- Empty boards or zero matches return HTTP 200 with count=0 and jobs=[].
-- Unknown parameters or invalid board syntax return HTTP 400.
-- Example edtech-only:
-  ${origin}/api/v1/agent/jobs?boards=coursera,duolingo&titles=curriculum,software%20engineer
-- Example all verticals:
-  ${origin}/api/v1/agent/jobs?boards=coursera,ramp&vertical=all&titles=engineer
-- Incremental receipt: use incremental.changes_url (/api/v1/changes) for canonical
-  OH SHI job synchronization. Pack rows remain compact in the change feed.
+## Reviewed employer packs
+Reviewed education and other employer packs are persisted into the same canonical
+D1 jobs, observations, and changes tables as discovered companies. Agents do not
+need to know ATS board identifiers and should use the preferred jobs view.
+- Education technology jobs:
+  ${origin}/api/v1/intelligence?view=jobs&sector=Education%20Technology
+- Education technology engineering jobs:
+  ${origin}/api/v1/intelligence?view=jobs&sector=Education%20Technology&role_family=Engineering
+- Use the response page.next_cursor and incremental.changes_url normally; pack
+  jobs have the same pagination, freshness, provenance, and closure semantics.
 
 ## Compatibility and bulk endpoints
 - Companies: ${origin}/api/v1/companies
@@ -152,7 +142,6 @@ closedAt is the confirmed closure time; occurredAt is the event observation time
 - Coverage: ${origin}/api/v1/coverage
 - Verified off-board openings: ${origin}/api/v1/off-board-openings
 - Off-board hiring signals: ${origin}/api/v1/signals
-- Reviewed pack jobs: ${origin}/api/v1/agent/jobs
 - Company JSONL: ${origin}/exports/companies.jsonl
 - Job JSONL: ${origin}/exports/jobs.jsonl
 - Daily changes export: ${origin}/exports/daily-changes.json

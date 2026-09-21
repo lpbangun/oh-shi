@@ -1,5 +1,12 @@
 # OH SHI ingest scorecards
 
+> Integration remediation (iteration 5): the earlier board-scoped agent endpoint
+> and GitHub-artifact snapshot design were rejected during deployment review.
+> Reviewed packs now register durable canonical D1 sources, refresh on a bounded
+> daily cadence through the authenticated canonical pipeline, and use the existing
+> paginated `/api/v1/intelligence` and `/api/v1/changes` contracts. Historical
+> iteration-4 rows below document the superseded design and are not release evidence.
+
 Gate 0 template. Scores are integers 0–10 per row. Leave scores as `_` or `unscored` until a gate worker runs the required commands and records evidence.
 
 ## Scoring rules

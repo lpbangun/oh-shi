@@ -21,16 +21,18 @@ export function validRunKey(value: string) {
 
 export async function phaseRefreshRunKey(
   runKey: string,
-  phase: "discovery" | "canonical"
+  phase: "discovery" | "canonical",
+  scope = "default"
 ) {
+  const scopedPhase = scope === "default" ? phase : `${phase}:${scope}`;
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`${phase}:${runKey}`)
+    new TextEncoder().encode(`${scopedPhase}:${runKey}`)
   );
   const hex = [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-  return `${phase}:${hex}`;
+  return `${scopedPhase}:${hex}`;
 }
 
 export async function executeRefreshOnce<T>(

@@ -1,224 +1,57 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import {
-  buildEdtechAgentJobsPayload,
-  EdtechAgentError,
-  loadEdtechAgentStore,
-  parseEdtechAgentParams,
-  queryEdtechAgent,
-  toEdtechAgentPublicJob,
-} from "../lib/edtech-agent";
-import { toCompactEdtechJob } from "../lib/edtech-ingest";
-import type { EdtechPackRow } from "../lib/edtech-pack";
+  REVIEWED_PACK_ROWS,
+  reviewedPackCareersUrl,
+  reviewedPackIdentity,
+} from "../lib/reviewed-pack-registry";
 
 const root = process.cwd();
 const read = (file: string) => readFile(path.join(root, file), "utf8");
 
-const courseraBoard: EdtechPackRow = {
-  name: "Coursera",
-  website: "https://example.test/coursera",
-  provider: "greenhouse",
-  board_id: "coursera",
-  evidence_url: "https://boards-api.greenhouse.io/v1/boards/coursera/jobs?content=true",
-  vertical: "edtech",
-};
-
-const duolingoBoard: EdtechPackRow = {
-  name: "Duolingo",
-  website: "https://example.test/duolingo",
-  provider: "greenhouse",
-  board_id: "duolingo",
-  evidence_url: "https://boards-api.greenhouse.io/v1/boards/duolingo/jobs?content=true",
-  vertical: "edtech",
-};
-
-const khanBoard: EdtechPackRow = {
-  name: "Khan Academy",
-  website: "https://example.test/khan",
-  provider: "greenhouse",
-  board_id: "khanacademy",
-  evidence_url: "https://boards-api.greenhouse.io/v1/boards/khanacademy/jobs?content=true",
-  vertical: "edtech",
-};
-
-function compactJob(
-  board: EdtechPackRow,
-  externalId: string,
-  title: string,
-  roleFamily: string
-) {
-  return toCompactEdtechJob(
-    {
-      externalId,
-      title,
-      roleFamily,
-      location: "Remote - US",
-      remoteStatus: "Remote",
-      employmentType: "Full-time",
-      compensation: "See posting",
-      canonicalUrl: `https://boards.greenhouse.io/${board.board_id}/jobs/${externalId}`,
-      publishedAt: "2026-09-20T00:00:00.000Z",
-      description: "Posting body that must not leak into compact rows.",
-      summary: "Summary",
-    },
-    board
-  );
-}
-
-const fixtureStore = {
-  jobs: [
-    compactJob(courseraBoard, "1", "Curriculum Specialist", "Other"),
-    compactJob(courseraBoard, "2", "Software Engineer", "Engineering"),
-    compactJob(duolingoBoard, "3", "Account Executive", "GTM"),
-    compactJob(khanBoard, "4", "Software Engineer", "Engineering"),
-  ],
-};
-
-test("queryEdtechAgent returns count first and excludes unrequested boards", () => {
-  const result = queryEdtechAgent(fixtureStore, {
-    boardIds: ["coursera", "duolingo"],
-    titles: [],
-    roleFamilies: [],
-    vertical: "edtech",
-  });
-  assert.equal(result.count, 3);
-  assert.equal(result.jobs.length, 3);
-  assert.deepEqual(
-    [...new Set(result.jobs.map((job) => job.boardId))].sort(),
-    ["coursera", "duolingo"]
-  );
-  assert.ok(!result.jobs.some((job) => job.boardId === "khanacademy"));
+test("reviewed packs expose unique canonical source identities", () => {
+  assert.equal(REVIEWED_PACK_ROWS.length, 95);
+  const identities = REVIEWED_PACK_ROWS.map(reviewedPackIdentity);
+  assert.equal(new Set(identities.map((item) => item.sourceId)).size, identities.length);
+  assert.ok(identities.every((item) => item.domain && item.companyId && item.slug));
 });
 
-test("queryEdtechAgent filters by title and role family", () => {
-  const byTitle = queryEdtechAgent(fixtureStore, {
-    boardIds: ["coursera", "duolingo"],
-    titles: ["engineer"],
-    roleFamilies: [],
-    vertical: "edtech",
-  });
-  assert.equal(byTitle.count, 1);
-  assert.equal(byTitle.jobs[0]?.title, "Software Engineer");
-
-  const byFamily = queryEdtechAgent(fixtureStore, {
-    boardIds: ["coursera", "duolingo"],
-    titles: [],
-    roleFamilies: ["GTM"],
-    vertical: "edtech",
-  });
-  assert.equal(byFamily.count, 1);
-  assert.equal(byFamily.jobs[0]?.title, "Account Executive");
+test("reviewed pack careers URLs remain employer-facing application surfaces", () => {
+  for (const row of REVIEWED_PACK_ROWS) {
+    const url = new URL(reviewedPackCareersUrl(row));
+    assert.equal(url.protocol, "https:");
+    assert.ok(!/boards-api\.greenhouse\.io|api\.lever\.co|api\.ashbyhq\.com/.test(url.hostname));
+  }
 });
 
-test("compact agent rows omit description and keep employer ATS URLs", () => {
-  const job = toEdtechAgentPublicJob(fixtureStore.jobs[0]);
-  assert.equal("description" in job, false);
-  assert.match(job.canonicalUrl, /^https:\/\/boards\.greenhouse\.io\//);
-  assert.equal(job.applyUrl, job.canonicalUrl);
-  assert.equal(job.vertical, "edtech");
+test("reviewed pack sources are registered durably with a daily cadence", async () => {
+  const data = await read("lib/data.ts");
+  const refresh = await read("lib/refresh.ts");
+  const schema = await read("db/schema.ts");
+  assert.match(data, /registerReviewedPackSources\(discoveredAt\)/);
+  assert.match(data, /refresh_cadence[\s\S]*'daily'/);
+  assert.match(schema, /refreshCadence: text\("refresh_cadence"\)/);
+  assert.match(refresh, /refresh_cadence=\?/);
+  assert.match(refresh, /\.bind\(cadence\)/);
 });
 
-test("buildEdtechAgentJobsPayload returns empty results for empty boards", () => {
-  const payload = buildEdtechAgentJobsPayload(
-    new URLSearchParams("boards="),
-    fixtureStore,
-    "2026-09-20T00:00:00.000Z"
-  );
-  assert.equal(payload.count, 0);
-  assert.deepEqual(payload.jobs, []);
-  assert.equal(payload.incremental.changes_url, "/api/v1/changes?after=2026-09-20T00%3A00%3A00.000Z");
-});
-
-test("buildEdtechAgentJobsPayload rejects unknown and invalid parameters", () => {
-  assert.throws(
-    () => buildEdtechAgentJobsPayload(new URLSearchParams("boards=coursera&bogus=1"), fixtureStore),
-    (error: unknown) => error instanceof EdtechAgentError && /Unknown parameter/.test(error.message)
-  );
-  assert.throws(
-    () => parseEdtechAgentParams(new URLSearchParams("boards=bad board")),
-    (error: unknown) => error instanceof EdtechAgentError && /Invalid board id/.test(error.message)
-  );
-  assert.throws(
-    () => buildEdtechAgentJobsPayload(new URLSearchParams("titles=engineer"), fixtureStore),
-    (error: unknown) => error instanceof EdtechAgentError && /boards/.test(error.message)
-  );
-});
-
-test("buildEdtechAgentJobsPayload supports comma and repeated board parameters", () => {
-  const comma = buildEdtechAgentJobsPayload(
-    new URLSearchParams("boards=coursera,duolingo&titles=engineer,account"),
-    fixtureStore,
-    "2026-09-20T00:00:00.000Z"
-  );
-  assert.equal(comma.count, 2);
-  const repeated = buildEdtechAgentJobsPayload(
-    new URLSearchParams("boards=coursera&boards=duolingo"),
-    fixtureStore,
-    "2026-09-20T00:00:00.000Z"
-  );
-  assert.equal(repeated.count, 3);
-});
-
-test("daily edtech pack workflow exists with bounded daily ingest", async () => {
+test("daily reviewed-pack workflow refreshes canonical D1 storage", async () => {
   const workflow = await read(".github/workflows/daily-edtech-pack.yml");
+  const script = await read("scripts/run-reviewed-pack-refresh.mjs");
   assert.match(workflow, /cron:\s*["']15 8 \* \* \*["']/);
-  assert.doesNotMatch(workflow, /\*\/2 \* \* \*/);
-  assert.match(workflow, /timeout-minutes:\s*(?:30|45|60)/);
-  assert.match(workflow, /pnpm install --frozen-lockfile/);
-  assert.match(workflow, /pnpm ingest:edtech --pack=all --concurrency=6/);
-  assert.match(workflow, /upload-artifact@v(?:[4-9]|\d{2,})/);
+  assert.match(workflow, /OH_SHI_INGEST_TOKEN/);
+  assert.match(workflow, /run-reviewed-pack-refresh\.mjs/);
+  assert.doesNotMatch(workflow, /upload-artifact|outputs\/edtech-ingest/);
+  assert.match(script, /phase=canonical&cadence=daily/);
+  assert.match(script, /runVersionedRefresh/);
 });
 
-test("ingest CLI still avoids cloudflare worker refresh imports", async () => {
-  const scriptSource = await read("scripts/ingest-edtech-pack.ts");
-  assert.doesNotMatch(scriptSource, /lib\/refresh/);
-  assert.doesNotMatch(scriptSource, /cloudflare:workers/);
-});
-
-test("agent jobs route is a public GET surface without auth", async () => {
-  const source = await read("app/api/v1/agent/jobs/route.ts");
-  assert.match(source, /export async function GET/);
-  assert.doesNotMatch(source, /authorization|INGEST_TOKEN/i);
-  assert.match(source, /buildEdtechAgentJobsPayload/);
-  assert.match(source, /conditionalJsonResponse/);
-  assert.match(source, /loadEdtechAgentStore/);
-});
-
-test("loadEdtechAgentStore reads scheduled ingest snapshot output", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "edtech-agent-store-"));
-  const compact = compactJob(courseraBoard, "9001", "Synthetic Curriculum Lead", "Other");
-  const artifact = {
-    schemaVersion: "1.0",
-    vertical: "edtech",
-    generatedAt: "2026-09-20T01:00:00.000Z",
-    runId: "edtech-pack-test",
-    dryRun: false,
-    fresh: true,
-    resumedFrom: 0,
-    boards: 1,
-    jobs: [compact],
-    receipts: [],
-    summary: { success: 1, quarantined: 0, failed: 0, openJobs: 1 },
-  };
-  await writeFile(
-    path.join(dir, "edtech-ingest-2026-09-20T01-00-00-000Z.json"),
-    `${JSON.stringify(artifact, null, 2)}\n`,
-    "utf8"
-  );
-
-  const store = await loadEdtechAgentStore(dir);
-  const payload = buildEdtechAgentJobsPayload(
-    new URLSearchParams("boards=coursera"),
-    store,
-    "2026-09-20T01:00:00.000Z"
-  );
-
-  assert.equal(payload.count, 1);
-  assert.equal(payload.jobs.length, 1);
-  assert.equal(payload.jobs[0]?.boardId, "coursera");
-  assert.equal(payload.jobs[0]?.title, "Synthetic Curriculum Lead");
-  assert.equal("description" in payload.jobs[0], false);
+test("public discovery keeps one canonical jobs API", async () => {
+  const llms = await read("app/llms.txt/route.ts");
+  const policy = await read("public/agent-policy.json");
+  assert.doesNotMatch(llms, /api\/v1\/agent\/jobs/);
+  assert.doesNotMatch(policy, /edtech_jobs/);
+  assert.match(llms, /api\/v1\/intelligence\?view=jobs/);
 });

@@ -256,7 +256,7 @@ test("runtime, migration, and Drizzle discovery schemas stay aligned", async () 
     "legacy provider and source id must select the same deterministic source row"
   );
   assert.match(refreshRoute, /attemptWithFallback/);
-  assert.match(refreshRoute, /const canonical = await refreshCanonicalBoards\(\)/);
+  assert.match(refreshRoute, /const canonical = await refreshCanonicalBoards\(\{ cadence: cadenceValue \}\)/);
   assert.ok(schema.includes('sqliteTable("refresh_runs"'));
   assert.ok(runtime.includes("CREATE TABLE IF NOT EXISTS refresh_runs"));
   assert.ok(idempotencyMigration.includes("CREATE TABLE IF NOT EXISTS refresh_runs"));

@@ -3,15 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import {
-  buildEdtechAgentJobsPayload,
-  parseEdtechAgentParams,
-  queryEdtechAgent,
-  toEdtechAgentPublicJob,
-} from "../lib/edtech-agent";
-import {
   ingestEdtechBoardSnapshot,
   resolveEdtechFetch,
-  toCompactEdtechJob,
 } from "../lib/edtech-ingest";
 import {
   assertValidEdtechPack,
@@ -29,15 +22,6 @@ const read = (file: string) => readFile(path.join(root, file), "utf8");
 const readJson = async (name: string) =>
   JSON.parse(await readFile(path.join(fixtures, name), "utf8")) as unknown;
 
-const courseraBoard: EdtechPackRow = {
-  name: "Coursera",
-  website: "https://example.test/coursera",
-  provider: "greenhouse",
-  board_id: "coursera",
-  evidence_url: "https://boards-api.greenhouse.io/v1/boards/coursera/jobs?content=true",
-  vertical: "edtech",
-};
-
 const rampBoard: EdtechPackRow = {
   name: "Ramp",
   website: "https://ramp.com/",
@@ -50,30 +34,6 @@ const rampBoard: EdtechPackRow = {
 
 const now = "2026-09-20T00:00:00.000Z";
 const runId = "all-types-ingest-test";
-
-function compactJob(
-  board: EdtechPackRow,
-  externalId: string,
-  title: string,
-  roleFamily: string
-) {
-  return toCompactEdtechJob(
-    {
-      externalId,
-      title,
-      roleFamily,
-      location: "Remote - US",
-      remoteStatus: "Remote",
-      employmentType: "Full-time",
-      compensation: "See posting",
-      canonicalUrl: `https://jobs.ashbyhq.com/${board.board_id}/${externalId}`,
-      publishedAt: now,
-      description: "Posting body that must not leak into compact rows.",
-      summary: "Summary",
-    },
-    board
-  );
-}
 
 test("non-edtech ashby fixture ingests through the same ingestEdtechBoardSnapshot path", async () => {
   const jobs = normalizeAshby(await readJson("ashby-mixed.json"));
@@ -112,63 +72,6 @@ test("other pack parses with LastRound-confirmed non-education employers", async
     assert.equal(containsDisallowedHost(row.evidence_url), false);
   }
   assertValidEdtechPack(pack);
-});
-
-test("queryEdtechAgent with vertical=all returns edtech and other boards", () => {
-  const store = {
-    jobs: [
-      compactJob(courseraBoard, "1", "Curriculum Specialist", "Other"),
-      compactJob(rampBoard, "ashby-eng", "Software Engineer", "Engineering"),
-    ],
-  };
-  const result = queryEdtechAgent(store, {
-    boardIds: ["coursera", "ramp"],
-    titles: [],
-    roleFamilies: [],
-    vertical: "all",
-  });
-  assert.equal(result.count, 2);
-  assert.deepEqual(
-    [...new Set(result.jobs.map((job) => job.vertical))].sort(),
-    ["edtech", "other"]
-  );
-});
-
-test("queryEdtechAgent with default vertical=edtech excludes other boards", () => {
-  const store = {
-    jobs: [
-      compactJob(courseraBoard, "1", "Curriculum Specialist", "Other"),
-      compactJob(rampBoard, "ashby-eng", "Software Engineer", "Engineering"),
-    ],
-  };
-  const filters = parseEdtechAgentParams(
-    new URLSearchParams("boards=coursera,ramp&titles=engineer")
-  );
-  assert.equal(filters.vertical, "edtech");
-  const result = queryEdtechAgent(store, filters);
-  assert.equal(result.count, 0);
-  assert.ok(!result.jobs.some((job) => job.boardId === "ramp"));
-});
-
-test("buildEdtechAgentJobsPayload applies vertical=all across board and title filters", () => {
-  const store = {
-    jobs: [
-      compactJob(courseraBoard, "1", "Software Engineer", "Engineering"),
-      compactJob(rampBoard, "ashby-eng", "Software Engineer", "Engineering"),
-    ],
-  };
-  const payload = buildEdtechAgentJobsPayload(
-    new URLSearchParams("boards=coursera,ramp&titles=engineer&vertical=all"),
-    store,
-    now
-  );
-  assert.equal(payload.count, 2);
-  assert.equal(payload.vertical, "all");
-  assert.equal(payload.applied_filters.vertical, "all");
-  for (const job of payload.jobs) {
-    assert.equal("description" in job, false);
-    assert.equal(job.applyUrl, job.canonicalUrl);
-  }
 });
 
 test("non-edtech snapshot set-diff still closes missing jobs via planCanonicalClosures", async () => {
@@ -210,11 +113,11 @@ test("gate 5 code and other pack avoid disallowed scrape hosts", async () => {
     assert.equal(containsDisallowedHost(row.evidence_url), false);
   }
   const ingestSource = await read("lib/edtech-ingest.ts");
-  const agentSource = await read("lib/edtech-agent.ts");
+  const registrySource = await read("lib/reviewed-pack-registry.ts");
   for (const host of DISALLOWED_PACK_HOSTS) {
     const pattern = new RegExp(host.replace(/\./g, "\\."), "i");
     assert.doesNotMatch(ingestSource, pattern, `edtech-ingest must not reference ${host}`);
-    assert.doesNotMatch(agentSource, pattern, `edtech-agent must not reference ${host}`);
+    assert.doesNotMatch(registrySource, pattern, `reviewed pack registry must not reference ${host}`);
   }
 });
 
@@ -241,15 +144,13 @@ test("other pack validation rejects wrong vertical rows", () => {
   assert.ok(issues.some((issue) => issue.code === "vertical"));
 });
 
-test("README and llms.txt document boards, titles, and vertical filters", async () => {
+test("README and llms.txt document canonical reviewed-pack integration", async () => {
   const readme = await read("README.md");
   const llms = await read("app/llms.txt/route.ts");
-  assert.match(readme, /vertical=edtech\|other\|all/);
   assert.match(readme, /packs\/other\.json/);
   assert.match(readme, /ramp|vanta|cognition|harvey/i);
-  assert.match(llms, /vertical=edtech\|other\|all/);
-  assert.match(llms, /boards=coursera,duolingo/);
-  assert.match(llms, /titles=/);
+  assert.match(readme, /canonical D1/i);
+  assert.match(llms, /sector=Education%20Technology/);
 });
 
 test("daily edtech pack workflow stays bounded and can ingest all reviewed packs", async () => {
@@ -257,12 +158,6 @@ test("daily edtech pack workflow stays bounded and can ingest all reviewed packs
   assert.match(workflow, /cron:\s*["']15 8 \* \* \*["']/);
   assert.doesNotMatch(workflow, /\*\/2 \* \* \*/);
   assert.match(workflow, /timeout-minutes:\s*(?:30|45|60)/);
-  assert.match(workflow, /pnpm ingest:edtech --pack=all --concurrency=6/);
-});
-
-test("compact other vertical agent rows omit description", () => {
-  const job = toEdtechAgentPublicJob(compactJob(rampBoard, "ashby-eng", "Software Engineer", "Engineering"));
-  assert.equal("description" in job, false);
-  assert.equal(job.vertical, "other");
-  assert.equal(job.applyUrl, job.canonicalUrl);
+  assert.match(workflow, /run-reviewed-pack-refresh\.mjs/);
+  assert.doesNotMatch(workflow, /upload-artifact|outputs\/edtech-ingest/);
 });

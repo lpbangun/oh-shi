@@ -16,6 +16,11 @@ import { fundingLeadEvidenceInput } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
+import {
+  REVIEWED_PACK_ROWS,
+  reviewedPackCareersUrl,
+  reviewedPackIdentity,
+} from "./reviewed-pack-registry";
 import { buildJobSearchSql, JobSearchError, type JobSearchInput } from "./job-search";
 import { seedChanges, seedCompanies, seedJobs } from "./seed";
 import {
@@ -83,6 +88,69 @@ async function batchInChunks(statements: D1PreparedStatement[], size = 50) {
   for (let index = 0; index < statements.length; index += size) {
     await env.DB.batch(statements.slice(index, index + size));
   }
+}
+
+async function registerReviewedPackSources(discoveredAt: string) {
+  const [storedCompanies, storedSources] = await Promise.all([
+    env.DB.prepare("SELECT id, lower(domain) as domain FROM companies")
+      .all<{ id: string; domain: string }>(),
+    env.DB.prepare("SELECT id, company_id as companyId FROM company_sources")
+      .all<{ id: string; companyId: string }>(),
+  ]);
+  const companyByDomain = new Map(
+    storedCompanies.results.map((company) => [company.domain, company.id])
+  );
+  const companyBySource = new Map(
+    storedSources.results.map((source) => [source.id, source.companyId])
+  );
+  const statements: D1PreparedStatement[] = [];
+  for (const row of REVIEWED_PACK_ROWS) {
+    const identity = reviewedPackIdentity(row);
+    if (!identity.domain || companyBySource.has(identity.sourceId)) continue;
+    const companyId = companyByDomain.get(identity.domain) || identity.companyId;
+    const careersUrl = reviewedPackCareersUrl(row);
+    if (!companyByDomain.has(identity.domain)) {
+      const industry = row.vertical === "edtech"
+        ? "Education technology"
+        : (row.employer_kind || "Not published").replace(/_/g, " ");
+      statements.push(env.DB.prepare(`INSERT OR IGNORE INTO companies (
+        id, slug, name, domain, description, founded_year, headquarters, employee_range,
+        industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
+        evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
+        source_url, open_job_count, last_verified_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, 'Not published', 'Not published', ?, ?,
+        'Not published', 'Not published', 'active', 0, 0, 'Not published', NULL,
+        ?, ?, 0, ?)`)
+        .bind(
+          companyId,
+          identity.slug,
+          row.name,
+          identity.domain,
+          `Profile from the reviewed ${row.vertical} employer pack; detailed company metadata is not published.`,
+          industry,
+          normalizeSector(industry, { name: row.name, domain: identity.domain }),
+          careersUrl,
+          row.website,
+          discoveredAt
+        ));
+      companyByDomain.set(identity.domain, companyId);
+    }
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
+      id, company_id, provider, board_id, careers_url, enabled, refresh_cadence,
+      discovery_status, first_discovered_at, consecutive_failures, review_notes
+    ) VALUES (?, ?, ?, ?, ?, 1, 'daily', 'active', ?, 0, ?)`)
+      .bind(
+        identity.sourceId,
+        companyId,
+        row.provider,
+        row.board_id,
+        careersUrl,
+        discoveredAt,
+        `Reviewed ${row.vertical} employer pack; canonical public ATS JSON. Evidence: ${row.evidence_url}`
+      ));
+    companyBySource.set(identity.sourceId, companyId);
+  }
+  await batchInChunks(statements);
 }
 
 /**
@@ -278,6 +346,7 @@ async function initializeDatabase() {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS company_sources (
       id TEXT PRIMARY KEY, company_id TEXT NOT NULL, provider TEXT NOT NULL, board_id TEXT NOT NULL,
       careers_url TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+      refresh_cadence TEXT NOT NULL DEFAULT 'frequent',
       discovery_status TEXT NOT NULL DEFAULT 'active', first_discovered_at TEXT NOT NULL,
       last_attempted_at TEXT, last_successful_at TEXT, last_error TEXT,
       consecutive_failures INTEGER NOT NULL DEFAULT 0, review_notes TEXT NOT NULL DEFAULT '',
@@ -437,6 +506,13 @@ async function initializeDatabase() {
   }
   const sourceInfo = await env.DB.prepare("PRAGMA table_info(company_sources)")
     .all<{ name: string }>();
+  if (!sourceInfo.results.some((column) => column.name === "refresh_cadence")) {
+    await env.DB.prepare(
+      "ALTER TABLE company_sources ADD COLUMN refresh_cadence TEXT NOT NULL DEFAULT 'frequent' CHECK(refresh_cadence IN ('frequent','daily'))"
+    ).run();
+  }
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS company_sources_refresh_cadence_idx
+    ON company_sources(enabled, refresh_cadence, id)`).run();
   if (!sourceInfo.results.some((column) => column.name === "quarantine_snapshot_id")) {
     await env.DB.prepare(
       "ALTER TABLE company_sources ADD COLUMN quarantine_snapshot_id TEXT"
@@ -600,6 +676,7 @@ async function initializeDatabase() {
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS hiring_signal_promotions_company_idx
       ON hiring_signal_promotions(company_id, verified_at)`),
   ]);
+
   await backfillCompanySectors();
 
   const existing = await env.DB.prepare("SELECT COUNT(*) as count FROM companies").first<{ count: number }>();
@@ -666,6 +743,7 @@ async function initializeDatabase() {
       source.boardId, source.careersUrl, discoveredAt
     )),
   ]);
+  await registerReviewedPackSources(discoveredAt);
   const registryCompanies = await env.DB.prepare(`SELECT
     c.id, c.name, c.domain, c.careers_url as careersUrl, c.source_url as sourceUrl,
     s.provider, s.board_id as boardId

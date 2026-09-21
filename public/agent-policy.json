@@ -10,8 +10,7 @@
     "movements": "/api/v1/intelligence?view=movements",
     "sectors": "/api/v1/intelligence?view=sectors",
     "signals": "/api/v1/signals",
-    "off_board_openings": "/api/v1/off-board-openings",
-    "edtech_jobs": "/api/v1/agent/jobs"
+    "off_board_openings": "/api/v1/off-board-openings"
   },
   "coverage": "/api/v1/coverage",
   "capability_status": "Read data.capabilityAvailability from /api/v1/coverage before using investor filters, signals, or off-board openings.",
