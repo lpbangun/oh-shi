@@ -14,7 +14,13 @@
 /coverage
 /playwright-report/
 /test-results/
-/artifacts/
+# Generated review dumps and tmp files; committed templates under artifacts/ are tracked.
+/artifacts/*
+!/artifacts/scorecard.md
+!/artifacts/edtech-benchmark.md
+!/artifacts/goal-stop.md
+!/artifacts/edtech-pack-yield.md
+!/artifacts/edtech-snapshot-diff.md
 
 # next.js
 /.next/

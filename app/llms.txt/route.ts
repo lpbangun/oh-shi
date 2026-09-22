@@ -124,6 +124,17 @@ recent complete source observation; sourceUpdatedAt is a source-provided update 
 when available; lastVerifiedAt is Oh Shi's successful canonical verification time;
 closedAt is the confirmed closure time; occurredAt is the event observation time.
 
+## Reviewed employer packs
+Reviewed education and other employer packs are persisted into the same canonical
+D1 jobs, observations, and changes tables as discovered companies. Agents do not
+need to know ATS board identifiers and should use the preferred jobs view.
+- Education technology jobs:
+  ${origin}/api/v1/intelligence?view=jobs&sector=Education%20Technology
+- Education technology engineering jobs:
+  ${origin}/api/v1/intelligence?view=jobs&sector=Education%20Technology&role_family=Engineering
+- Use the response page.next_cursor and incremental.changes_url normally; pack
+  jobs have the same pagination, freshness, provenance, and closure semantics.
+
 ## Compatibility and bulk endpoints
 - Companies: ${origin}/api/v1/companies
 - Jobs: ${origin}/api/v1/jobs

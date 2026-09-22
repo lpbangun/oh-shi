@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-09-20T01:00:00.000Z",
+  "packRows": 91,
+  "boardsAttempted": 2,
+  "boardsComplete": 2,
+  "boardsQuarantined": 0,
+  "boardsFailed": 0,
+  "totalOpenJobs": 3,
+  "selection": "bounded",
+  "limit": 2,
+  "receipts": [
+    {
+      "schemaVersion": "1.0",
+      "name": "Coursera",
+      "provider": "greenhouse",
+      "board_id": "coursera",
+      "website": "https://www.coursera.org/",
+      "pack_identity": true,
+      "fetch_status": "success",
+      "live_complete": true,
+      "observed_open_jobs": 2,
+      "role_family_histogram": {
+        "GTM": 0,
+        "Operations": 1,
+        "Engineering": 1,
+        "Product": 0,
+        "Other": 0
+      },
+      "sample_titles": [
+        "Customer Success Manager",
+        "Software Engineer"
+      ],
+      "external_ids": [
+        "c2",
+        "c3"
+      ],
+      "elapsed_ms": 1100
+    },
+    {
+      "schemaVersion": "1.0",
+      "name": "Duolingo",
+      "provider": "greenhouse",
+      "board_id": "duolingo",
+      "website": "https://www.duolingo.com/",
+      "pack_identity": true,
+      "fetch_status": "success",
+      "live_complete": true,
+      "observed_open_jobs": 1,
+      "role_family_histogram": {
+        "GTM": 0,
+        "Operations": 0,
+        "Engineering": 0,
+        "Product": 0,
+        "Other": 1
+      },
+      "sample_titles": [
+        "Curriculum Designer"
+      ],
+      "external_ids": [
+        "d2"
+      ],
+      "elapsed_ms": 950
+    }
+  ],
+  "edtech_com_benchmark": {
+    "companies": 756,
+    "openJobs": 2003,
+    "checkedDate": "2026-09-19",
+    "notScraped": true
+  }
+}

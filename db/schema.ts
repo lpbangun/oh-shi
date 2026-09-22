@@ -214,6 +214,7 @@ export const companySources = sqliteTable("company_sources", {
   boardId: text("board_id").notNull(),
   careersUrl: text("careers_url").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  refreshCadence: text("refresh_cadence").notNull().default("frequent"),
   discoveryStatus: text("discovery_status").notNull().default("active"),
   firstDiscoveredAt: text("first_discovered_at").notNull(),
   lastAttemptedAt: text("last_attempted_at"),
@@ -226,6 +227,8 @@ export const companySources = sqliteTable("company_sources", {
 }, (table) => [
   unique("company_sources_provider_board_unique").on(table.provider, table.boardId),
   index("company_sources_company_idx").on(table.companyId, table.enabled),
+  index("company_sources_refresh_cadence_idx").on(table.enabled, table.refreshCadence, table.id),
+  check("company_sources_refresh_cadence_check", sql`${table.refreshCadence} IN ('frequent','daily')`),
 ]);
 
 export const companyInvestors = sqliteTable("company_investors", {

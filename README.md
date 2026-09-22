@@ -232,7 +232,15 @@ the GitHub Actions secret `OH_SHI_INGEST_TOKEN`, and the deployment secret
 `INGEST_TOKEN`.
 
 Canonical discovery and refresh runs at minute 30 every two hours. Funding
-discovery runs daily at 11:20 UTC.
+discovery runs daily at 11:20 UTC. Reviewed employer packs (`packs/edtech.json`
+for education employers and `packs/other.json` for a small non-education set such
+as Ramp, Vanta, Cognition, and Harvey) are registered as canonical D1 companies
+and sources. Their bounded daily refresh uses the same canonical persistence,
+closure, provenance, and change-feed path as every other OH SHI job.
+
+Agents query reviewed-pack jobs through the preferred intelligence endpoint;
+they do not need ATS board identifiers. For example:
+`/api/v1/intelligence?view=jobs&sector=Education%20Technology&role_family=Engineering`.
 
 Maintainers should follow [`docs/releasing.md`](docs/releasing.md) for the
 pre-release gate, migration checks, deployment verification, rollback rules,

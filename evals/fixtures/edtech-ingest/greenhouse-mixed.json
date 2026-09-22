@@ -1,0 +1,58 @@
+{
+  "jobs": [
+    {
+      "id": 101,
+      "title": "Account Executive",
+      "location": { "name": "Remote - US" },
+      "departments": [{ "name": "Sales" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/101",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Own the sales cycle.</p>"
+    },
+    {
+      "id": 102,
+      "title": "Curriculum Specialist",
+      "location": { "name": "Boston, MA" },
+      "departments": [{ "name": "Curriculum" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/102",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Design learning pathways.</p>"
+    },
+    {
+      "id": 103,
+      "title": "Customer Success Manager",
+      "location": { "name": "New York, NY" },
+      "departments": [{ "name": "Customer Success" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/103",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Support district partners.</p>"
+    },
+    {
+      "id": 104,
+      "title": "Operations Manager",
+      "location": { "name": "Austin, TX" },
+      "departments": [{ "name": "Operations" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/104",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Run district launches.</p>"
+    },
+    {
+      "id": 105,
+      "title": "Software Engineer",
+      "location": { "name": "San Francisco, CA" },
+      "departments": [{ "name": "Engineering" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/105",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Build the learning platform.</p>"
+    },
+    {
+      "id": 106,
+      "title": "Design Intern",
+      "location": { "name": "Remote - US" },
+      "departments": [{ "name": "Design" }],
+      "absolute_url": "https://boards.greenhouse.io/edtech-demo/jobs/106",
+      "updated_at": "2026-09-01T00:00:00Z",
+      "content": "<p>Support product design.</p>"
+    }
+  ]
+}

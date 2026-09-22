@@ -95,19 +95,21 @@ export async function refreshCanonicalBoards(options: {
   database?: D1Database;
   now?: string;
   runId?: string;
+  cadence?: "frequent" | "daily";
 } = {}) {
   if (!options.database) await ensureDatabase();
   const database = options.database || env.DB;
   const now = options.now || new Date().toISOString();
   const runId = options.runId || `canonical_${crypto.randomUUID()}`;
+  const cadence = options.cadence || "frequent";
   const sourcesResult = await database.prepare(`SELECT id, company_id as companyId,
     provider, board_id as boardId FROM company_sources
-    WHERE enabled=1 AND provider IN (
+    WHERE enabled=1 AND refresh_cadence=? AND provider IN (
       'ashby','greenhouse','lever','workable','recruitee','personio',
       'smartrecruiters','structured'
     )
     AND discovery_status!='applying_quarantine'
-    ORDER BY id`).all<ActiveCompanySource>();
+    ORDER BY id`).bind(cadence).all<ActiveCompanySource>();
   const sources = sourcesResult.results;
   const groupedResults = await mapBounded(
     groupSourcesByCompany(sources),
@@ -143,6 +145,7 @@ export async function refreshCanonicalBoards(options: {
   const threshold = options.minimumSuccessRatio ?? 0.5;
   const summary = {
     run_id: runId,
+    cadence,
     refreshed_at: now,
     boards: sources.length,
     successful_sources: successful.length,

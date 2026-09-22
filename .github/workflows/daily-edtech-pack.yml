@@ -1,0 +1,32 @@
+name: Daily reviewed employer packs
+
+on:
+  schedule:
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-edtech-pack
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+
+      - name: Refresh reviewed packs into canonical D1 storage
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_INGEST_TOKEN }}
+        run: node scripts/run-reviewed-pack-refresh.mjs

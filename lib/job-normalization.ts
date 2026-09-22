@@ -84,6 +84,14 @@ export function classifyRole(title: string, department = "") {
     return "People operations";
   }
   if (/sales|growth|gtm|marketing|capture|revenue/.test(text)) return "GTM";
+  if (/customer success|client success|\bcsm\b/.test(text)) return "GTM";
+  if (
+    /curriculum|instructional|learning design|learning designer|teacher|teaching|educator|pedagog|faculty|tutor/.test(
+      text
+    )
+  ) {
+    return "Other";
+  }
   if (/operations|chief of staff|strategy/.test(text)) return "Operations";
   if (/research|scient|eval|data|biostat/.test(text)) return "Data and research";
   if (/engineer|developer|technical|software/.test(text)) return "Engineering";

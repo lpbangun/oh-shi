@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "id": "ashby-ops",
+      "title": "Operations Manager",
+      "department": "Operations",
+      "location": "Denver, CO",
+      "isRemote": false,
+      "employmentType": "Full-time",
+      "jobUrl": "https://jobs.ashbyhq.com/edtech-demo/ashby-ops",
+      "publishedAt": "2026-09-01T00:00:00Z",
+      "descriptionPlain": "Coordinate school onboarding."
+    },
+    {
+      "id": "ashby-eng",
+      "title": "Software Engineer",
+      "department": "Engineering",
+      "location": "Remote",
+      "isRemote": true,
+      "employmentType": "Full-time",
+      "jobUrl": "https://jobs.ashbyhq.com/edtech-demo/ashby-eng",
+      "publishedAt": "2026-09-01T00:00:00Z",
+      "descriptionPlain": "Ship classroom APIs."
+    }
+  ]
+}
