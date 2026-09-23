@@ -19,6 +19,7 @@ import "./canonical-snapshot-review.test";
 import "./hiring-signals-d1.test";
 import "./structured-career-page.test";
 import "./fragile-source-d1.test";
+import "./lifecycle-semantics-d1.test";
 import "./ats-retry.test";
 import "./job-canonicalization.test";
 import "./signal-promotion.test";
