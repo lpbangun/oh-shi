@@ -1,0 +1,1942 @@
+{
+  "cohort": "general-v1",
+  "generatedAt": "2026-09-23T08:53:58.705Z",
+  "method": [
+    "Candidate employers are real: each carries the careers/board URL it was published with and is re-confirmed by a read-only probe during --mode=build.",
+    "Prod-derived candidates come from the public prod corpus export (read-only GET of /exports/companies.jsonl; top employers per ATS family by published open-job count).",
+    "Repo-documented candidates come from docs/discovery-sources.md and scripts/verify-*-source.ts, which already re-verified those boards live.",
+    "Recruitee/SmartRecruiters/Personio identifiers that are not repo-documented are probe candidates: the probe must confirm the board and the API's own company identity fields, otherwise the candidate is rejected and swapped (never invented).",
+    "Sector labels come from the source that published the candidate, else from the Wikidata entity whose official website host matches the employer domain."
+  ],
+  "sources": [
+    {
+      "id": "prod_public_corpus",
+      "detail": "read-only GET of the production companies export (public JSON, no auth)",
+      "url": "https://oh-shi-intelligence.logsam-fans-triple3.chatgpt.site/exports/companies.jsonl",
+      "observed_at": "2026-09-23T08:53:58.705Z"
+    },
+    {
+      "id": "repo_documented_verified_boards",
+      "detail": "docs/discovery-sources.md + scripts/verify-*-source.ts real-source verifiers",
+      "url": "https://github.com/lpbangun/oh-shi/blob/extend/jobs-index/docs/discovery-sources.md",
+      "observed_at": "2026-09-23T08:53:58.705Z"
+    },
+    {
+      "id": "wikidata_api",
+      "detail": "wbsearchentities + wbgetentities identity evidence (name search plus official-website host match)",
+      "url": "https://www.wikidata.org/w/api.php",
+      "observed_at": "2026-09-23T08:53:58.705Z"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "ashby-abridge",
+      "name": "Abridge",
+      "domain": "abridge.com",
+      "website_url": "https://abridge.com",
+      "website_alternates": [
+        "https://www.abridge.com"
+      ],
+      "sector": "Healthcare",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "abridge",
+      "careers_url": "https://jobs.ashbyhq.com/abridge",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/abridge (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/abridge",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-cognition",
+      "name": "Cognition",
+      "domain": "cognition.ai",
+      "website_url": "https://cognition.ai",
+      "website_alternates": [
+        "https://www.cognition.ai"
+      ],
+      "sector": "Developer Tools",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "cognition",
+      "careers_url": "https://jobs.ashbyhq.com/cognition",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/cognition (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/cognition",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-deepgram",
+      "name": "Deepgram",
+      "domain": "deepgram.com",
+      "website_url": "https://deepgram.com",
+      "website_alternates": [
+        "https://www.deepgram.com"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "Deepgram",
+      "careers_url": "https://jobs.ashbyhq.com/Deepgram",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/Deepgram (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/Deepgram",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q115770008",
+        "label": "Deepgram",
+        "entity_url": "https://www.wikidata.org/wiki/Q115770008",
+        "industry": [],
+        "instance_of": [
+          "Q4830453"
+        ],
+        "official_website": "https://deepgram.com/"
+      }
+    },
+    {
+      "id": "ashby-edison-20scientific",
+      "name": "Edison Scientific",
+      "domain": "edisonscientific.com",
+      "website_url": "https://edisonscientific.com",
+      "website_alternates": [
+        "https://www.edisonscientific.com"
+      ],
+      "sector": "Science & Research",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "Edison Scientific",
+      "careers_url": "https://jobs.ashbyhq.com/Edison%20Scientific",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/Edison%20Scientific (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/Edison%20Scientific",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q137204528",
+        "label": "Edison Scientific Inc. (United States)",
+        "entity_url": "https://www.wikidata.org/wiki/Q137204528",
+        "industry": [],
+        "instance_of": [
+          "Q4830453"
+        ],
+        "official_website": "https://edisonscientific.com"
+      }
+    },
+    {
+      "id": "ashby-exa",
+      "name": "Exa",
+      "domain": "exa.ai",
+      "website_url": "https://exa.ai",
+      "website_alternates": [
+        "https://www.exa.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "exa",
+      "careers_url": "https://jobs.ashbyhq.com/exa",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/exa (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/exa",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-harvey",
+      "name": "Harvey",
+      "domain": "harvey.ai",
+      "website_url": "https://harvey.ai",
+      "website_alternates": [
+        "https://www.harvey.ai"
+      ],
+      "sector": "Legal Technology",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "harvey",
+      "careers_url": "https://jobs.ashbyhq.com/harvey",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/harvey (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/harvey",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-legionhealth",
+      "name": "Legion Health",
+      "domain": "legionhealth.com",
+      "website_url": "https://legionhealth.com",
+      "website_alternates": [
+        "https://www.legionhealth.com"
+      ],
+      "sector": "Healthcare",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "legionhealth",
+      "careers_url": "https://jobs.ashbyhq.com/legionhealth",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/legionhealth (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/legionhealth",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-legora",
+      "name": "Legora",
+      "domain": "legora.com",
+      "website_url": "https://legora.com",
+      "website_alternates": [
+        "https://www.legora.com"
+      ],
+      "sector": "Legal Technology",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "legora",
+      "careers_url": "https://jobs.ashbyhq.com/legora",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/legora (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/legora",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q138654085",
+        "label": "Legora",
+        "entity_url": "https://www.wikidata.org/wiki/Q138654085",
+        "industry": [],
+        "instance_of": [
+          "Q4830453"
+        ],
+        "official_website": "https://legora.com"
+      }
+    },
+    {
+      "id": "ashby-pear-vc",
+      "name": "Spur",
+      "domain": "spurtest.com",
+      "website_url": "https://spurtest.com",
+      "website_alternates": [
+        "https://www.spurtest.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "ashby",
+      "board_id": "Pear-VC",
+      "careers_url": "https://jobs.ashbyhq.com/Pear-VC",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/Pear-VC (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/Pear-VC",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-permitflow",
+      "name": "PermitFlow",
+      "domain": "permitflow.com",
+      "website_url": "https://permitflow.com",
+      "website_alternates": [
+        "https://www.permitflow.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "ashby",
+      "board_id": "permitflow",
+      "careers_url": "https://jobs.ashbyhq.com/permitflow",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/permitflow (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/permitflow",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-ramp",
+      "name": "Ramp",
+      "domain": "ramp.com",
+      "website_url": "https://ramp.com",
+      "website_alternates": [
+        "https://www.ramp.com"
+      ],
+      "sector": "Financial Technology",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "ramp",
+      "careers_url": "https://jobs.ashbyhq.com/ramp",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/ramp (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/ramp",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-reducto",
+      "name": "Reducto",
+      "domain": "reducto.ai",
+      "website_url": "https://reducto.ai",
+      "website_alternates": [
+        "https://www.reducto.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "reducto",
+      "careers_url": "https://jobs.ashbyhq.com/reducto",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/reducto (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/reducto",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-suno",
+      "name": "Suno",
+      "domain": "suno.com",
+      "website_url": "https://suno.com",
+      "website_alternates": [
+        "https://www.suno.com"
+      ],
+      "sector": "Media & Entertainment",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "suno",
+      "careers_url": "https://jobs.ashbyhq.com/suno",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/suno (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/suno",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-trm-labs",
+      "name": "TRM Labs",
+      "domain": "trmlabs.com",
+      "website_url": "https://trmlabs.com",
+      "website_alternates": [
+        "https://www.trmlabs.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "ashby",
+      "board_id": "trm-labs",
+      "careers_url": "https://jobs.ashbyhq.com/trm-labs",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/trm-labs (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/trm-labs",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-vanta",
+      "name": "Vanta",
+      "domain": "vanta.com",
+      "website_url": "https://vanta.com",
+      "website_alternates": [
+        "https://www.vanta.com"
+      ],
+      "sector": "Cybersecurity",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "vanta",
+      "careers_url": "https://jobs.ashbyhq.com/vanta",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/vanta (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/vanta",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "ashby-watershed",
+      "name": "Watershed",
+      "domain": "watershed.com",
+      "website_url": "https://watershed.com",
+      "website_alternates": [
+        "https://www.watershed.com"
+      ],
+      "sector": "Climate & Energy",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "ashby",
+      "board_id": "watershed",
+      "careers_url": "https://jobs.ashbyhq.com/watershed",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[ashby] careersUrl=https://jobs.ashbyhq.com/watershed (read-only GET)",
+        "evidence_url": "https://jobs.ashbyhq.com/watershed",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-alloy",
+      "name": "Alloy",
+      "domain": "alloy.app",
+      "website_url": "https://alloy.app",
+      "website_alternates": [
+        "https://www.alloy.app"
+      ],
+      "sector": "Financial Technology",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "alloy",
+      "careers_url": "https://job-boards.greenhouse.io/alloy",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/alloy (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/alloy",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-checkr",
+      "name": "Checkr",
+      "domain": "checkr.com",
+      "website_url": "https://checkr.com",
+      "website_alternates": [
+        "https://www.checkr.com"
+      ],
+      "sector": "Human Resources",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "checkr",
+      "careers_url": "https://job-boards.greenhouse.io/checkr",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/checkr (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/checkr",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-clear",
+      "name": "Clear",
+      "domain": "getclearapp.com",
+      "website_url": "https://getclearapp.com",
+      "website_alternates": [
+        "https://www.getclearapp.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "greenhouse",
+      "board_id": "clear",
+      "careers_url": "https://job-boards.greenhouse.io/clear",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/clear (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/clear",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-faire",
+      "name": "Faire",
+      "domain": "faire.com",
+      "website_url": "https://faire.com",
+      "website_alternates": [
+        "https://www.faire.com"
+      ],
+      "sector": "Food & Commerce",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "faire",
+      "careers_url": "https://job-boards.greenhouse.io/faire",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/faire (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/faire",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-fivetran",
+      "name": "Fivetran",
+      "domain": "fivetran.com",
+      "website_url": "https://fivetran.com",
+      "website_alternates": [
+        "https://www.fivetran.com"
+      ],
+      "sector": "Developer Tools",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "fivetran",
+      "careers_url": "https://job-boards.greenhouse.io/fivetran",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/fivetran (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/fivetran",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q109827378",
+        "label": "Fivetran",
+        "entity_url": "https://www.wikidata.org/wiki/Q109827378",
+        "industry": [],
+        "instance_of": [
+          "Q783794",
+          "Q43229"
+        ],
+        "official_website": "https://fivetran.com"
+      }
+    },
+    {
+      "id": "greenhouse-flexport",
+      "name": "Flexport",
+      "domain": "flexport.com",
+      "website_url": "https://flexport.com",
+      "website_alternates": [
+        "https://www.flexport.com"
+      ],
+      "sector": "Logistics & Mobility",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "flexport",
+      "careers_url": "https://job-boards.greenhouse.io/flexport",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/flexport (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/flexport",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q23016856",
+        "label": "Flexport",
+        "entity_url": "https://www.wikidata.org/wiki/Q23016856",
+        "industry": [],
+        "instance_of": [
+          "Q783794"
+        ],
+        "official_website": "https://www.flexport.com"
+      }
+    },
+    {
+      "id": "greenhouse-gusto",
+      "name": "Gusto",
+      "domain": "gusto.com",
+      "website_url": "https://gusto.com",
+      "website_alternates": [
+        "https://www.gusto.com"
+      ],
+      "sector": "Human Resources",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "gusto",
+      "careers_url": "https://job-boards.greenhouse.io/gusto",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/gusto (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/gusto",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q20540697",
+        "label": "Gusto",
+        "entity_url": "https://www.wikidata.org/wiki/Q20540697",
+        "industry": [
+          "Q1056396",
+          "Q880371",
+          "Q56611700",
+          "Q97466003"
+        ],
+        "instance_of": [
+          "Q4830453",
+          "Q6881511",
+          "Q20983877"
+        ],
+        "official_website": "https://gusto.com/"
+      }
+    },
+    {
+      "id": "greenhouse-humaninterest",
+      "name": "Human Interest",
+      "domain": "humaninterest.com",
+      "website_url": "https://humaninterest.com",
+      "website_alternates": [
+        "https://www.humaninterest.com"
+      ],
+      "sector": "Human Resources",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "humaninterest",
+      "careers_url": "https://job-boards.greenhouse.io/humaninterest",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/humaninterest (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/humaninterest",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-inversionspace",
+      "name": "Inversion Space",
+      "domain": "inversionspace.com",
+      "website_url": "https://inversionspace.com",
+      "website_alternates": [
+        "https://www.inversionspace.com"
+      ],
+      "sector": "space industry",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q136649890 P452/P31 label",
+      "ats_hint": "greenhouse",
+      "board_id": "inversionspace",
+      "careers_url": "https://job-boards.greenhouse.io/inversionspace",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/inversionspace (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/inversionspace",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q136649890",
+        "label": "Inversion Space",
+        "entity_url": "https://www.wikidata.org/wiki/Q136649890",
+        "industry": [
+          "Q2729047"
+        ],
+        "instance_of": [
+          "Q124972530",
+          "Q936518"
+        ],
+        "official_website": "https://www.inversionspace.com/"
+      }
+    },
+    {
+      "id": "greenhouse-kalshi",
+      "name": "Kalshi",
+      "domain": "kalshi.com",
+      "website_url": "https://kalshi.com",
+      "website_alternates": [
+        "https://www.kalshi.com"
+      ],
+      "sector": "Financial Technology",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "kalshi",
+      "careers_url": "https://job-boards.greenhouse.io/kalshi",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/kalshi (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/kalshi",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q114586938",
+        "label": "Kalshi",
+        "entity_url": "https://www.wikidata.org/wiki/Q114586938",
+        "industry": [],
+        "instance_of": [
+          "Q113643580",
+          "Q11691",
+          "Q282283"
+        ],
+        "official_website": "https://kalshi.com/"
+      }
+    },
+    {
+      "id": "greenhouse-mixpanel",
+      "name": "Mixpanel",
+      "domain": "mixpanel.com",
+      "website_url": "https://mixpanel.com",
+      "website_alternates": [
+        "https://www.mixpanel.com"
+      ],
+      "sector": "Enterprise Software",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "mixpanel",
+      "careers_url": "https://job-boards.greenhouse.io/mixpanel",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/mixpanel (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/mixpanel",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q25048114",
+        "label": "Mixpanel",
+        "entity_url": "https://www.wikidata.org/wiki/Q25048114",
+        "industry": [
+          "Q485396"
+        ],
+        "instance_of": [
+          "Q4830453"
+        ],
+        "official_website": "http://mixpanel.com"
+      }
+    },
+    {
+      "id": "greenhouse-orchestra",
+      "name": "Orchestra",
+      "domain": "orchestra.ai",
+      "website_url": "https://orchestra.ai",
+      "website_alternates": [
+        "https://www.orchestra.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "orchestra",
+      "careers_url": "https://job-boards.greenhouse.io/orchestra",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/orchestra (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/orchestra",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "greenhouse-scaleai",
+      "name": "Scale AI",
+      "domain": "scale.com",
+      "website_url": "https://scale.com",
+      "website_alternates": [
+        "https://www.scale.com"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "greenhouse",
+      "board_id": "scaleai",
+      "careers_url": "https://job-boards.greenhouse.io/scaleai",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/scaleai (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/scaleai",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q112629176",
+        "label": "Scale AI",
+        "entity_url": "https://www.wikidata.org/wiki/Q112629176",
+        "industry": [],
+        "instance_of": [
+          "Q18388277"
+        ],
+        "official_website": "https://www.scale.com"
+      }
+    },
+    {
+      "id": "greenhouse-singlestore",
+      "name": "SingleStore",
+      "domain": "singlestore.com",
+      "website_url": "https://singlestore.com",
+      "website_alternates": [
+        "https://www.singlestore.com"
+      ],
+      "sector": "relational database management system",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q15275385 P452/P31 label",
+      "ats_hint": "greenhouse",
+      "board_id": "singlestore",
+      "careers_url": "https://job-boards.greenhouse.io/singlestore",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/singlestore (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/singlestore",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q15275385",
+        "label": "SingleStore",
+        "entity_url": "https://www.wikidata.org/wiki/Q15275385",
+        "industry": [],
+        "instance_of": [
+          "Q3932296",
+          "Q4830453"
+        ],
+        "official_website": "http://www.memsql.com/"
+      }
+    },
+    {
+      "id": "greenhouse-stripe",
+      "name": "Stripe",
+      "domain": "stripe.com",
+      "website_url": "https://stripe.com",
+      "website_alternates": [
+        "https://www.stripe.com"
+      ],
+      "sector": "financial services",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q7624104 P452/P31 label",
+      "ats_hint": "greenhouse",
+      "board_id": "stripe",
+      "careers_url": "https://job-boards.greenhouse.io/stripe",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/stripe (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/stripe",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q7624104",
+        "label": "Stripe",
+        "entity_url": "https://www.wikidata.org/wiki/Q7624104",
+        "industry": [
+          "Q837171",
+          "Q97466005"
+        ],
+        "instance_of": [
+          "Q4830453",
+          "Q12738586"
+        ],
+        "official_website": "https://stripe.com/"
+      }
+    },
+    {
+      "id": "greenhouse-usenourish",
+      "name": "Nourish",
+      "domain": "nourish.com",
+      "website_url": "https://nourish.com",
+      "website_alternates": [
+        "https://www.nourish.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "greenhouse",
+      "board_id": "usenourish",
+      "careers_url": "https://job-boards.greenhouse.io/usenourish",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[greenhouse] careersUrl=https://job-boards.greenhouse.io/usenourish (read-only GET)",
+        "evidence_url": "https://job-boards.greenhouse.io/usenourish",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-gridware",
+      "name": "Gridware",
+      "domain": "gridware.io",
+      "website_url": "https://gridware.io",
+      "website_alternates": [
+        "https://www.gridware.io"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "gridware",
+      "careers_url": "https://jobs.lever.co/gridware",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/gridware (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/gridware",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-handoff",
+      "name": "Handoff",
+      "domain": "handoff.ai",
+      "website_url": "https://handoff.ai",
+      "website_alternates": [
+        "https://www.handoff.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "lever",
+      "board_id": "handoff",
+      "careers_url": "https://jobs.lever.co/handoff",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/handoff (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/handoff",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-instrumentl",
+      "name": "Instrumentl",
+      "domain": "instrumentl.com",
+      "website_url": "https://instrumentl.com",
+      "website_alternates": [
+        "https://www.instrumentl.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "Instrumentl",
+      "careers_url": "https://jobs.lever.co/Instrumentl",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/Instrumentl (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/Instrumentl",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-ion",
+      "name": "ion design",
+      "domain": "ion.design",
+      "website_url": "https://ion.design",
+      "website_alternates": [
+        "https://www.ion.design"
+      ],
+      "sector": "Developer Tools",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "lever",
+      "board_id": "ion",
+      "careers_url": "https://jobs.lever.co/ion",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/ion (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/ion",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-mashgin",
+      "name": "Mashgin",
+      "domain": "mashgin.com",
+      "website_url": "https://mashgin.com",
+      "website_alternates": [
+        "https://www.mashgin.com"
+      ],
+      "sector": "Hardware & Robotics",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "lever",
+      "board_id": "mashgin",
+      "careers_url": "https://jobs.lever.co/mashgin",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/mashgin (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/mashgin",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-maverickx",
+      "name": "MaverickX",
+      "domain": "maverickx.com",
+      "website_url": "https://maverickx.com",
+      "website_alternates": [
+        "https://www.maverickx.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "maverickx",
+      "careers_url": "https://jobs.lever.co/maverickx",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/maverickx (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/maverickx",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-revi",
+      "name": "Revi",
+      "domain": "revi.ai",
+      "website_url": "https://revi.ai",
+      "website_alternates": [
+        "https://www.revi.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "lever",
+      "board_id": "revi",
+      "careers_url": "https://jobs.lever.co/revi",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/revi (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/revi",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-skyways",
+      "name": "Skyways",
+      "domain": "skyways.com",
+      "website_url": "https://skyways.com",
+      "website_alternates": [
+        "https://www.skyways.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "skyways",
+      "careers_url": "https://jobs.lever.co/skyways",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/skyways (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/skyways",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-suger",
+      "name": "Suger",
+      "domain": "suger.io",
+      "website_url": "https://suger.io",
+      "website_alternates": [
+        "https://www.suger.io"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "suger",
+      "careers_url": "https://jobs.lever.co/suger",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/suger (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/suger",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-superside",
+      "name": "Superside",
+      "domain": "superside.com",
+      "website_url": "https://superside.com",
+      "website_alternates": [
+        "https://www.superside.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "lever",
+      "board_id": "superside",
+      "careers_url": "https://jobs.lever.co/superside",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/superside (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/superside",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "lever-unusual",
+      "name": "Unusual",
+      "domain": "unusual.ai",
+      "website_url": "https://unusual.ai",
+      "website_alternates": [
+        "https://www.unusual.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "lever",
+      "board_id": "unusual",
+      "careers_url": "https://jobs.lever.co/unusual",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[lever] careersUrl=https://jobs.lever.co/unusual (read-only GET)",
+        "evidence_url": "https://jobs.lever.co/unusual",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "personio-1komma5grad",
+      "name": "1KOMMA5°",
+      "domain": "1komma5grad.com",
+      "website_url": "https://1komma5grad.com",
+      "website_alternates": [
+        "https://www.1komma5grad.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "personio",
+      "board_id": "1komma5grad.jobs.personio.de",
+      "careers_url": "https://1komma5grad.jobs.personio.de/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "Personio tenant subdomain derived from the employer domain (1komma5grad.com); the probe re-confirms the documented XML feed and the employer website",
+        "evidence_url": "https://1komma5grad.jobs.personio.de/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "personio-demodesk-gmbh.jobs.personio.de",
+      "name": "Demodesk",
+      "domain": "demodesk.com",
+      "website_url": "https://demodesk.com",
+      "website_alternates": [
+        "https://www.demodesk.com"
+      ],
+      "sector": "Enterprise Software",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "personio",
+      "board_id": "demodesk-gmbh.jobs.personio.de",
+      "careers_url": "https://demodesk-gmbh.jobs.personio.de/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[personio] careersUrl=https://demodesk-gmbh.jobs.personio.de/ (read-only GET)",
+        "evidence_url": "https://demodesk-gmbh.jobs.personio.de/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "personio-helpling",
+      "name": "Helpling",
+      "domain": "helpling.com",
+      "website_url": "https://www.helpling.com",
+      "website_alternates": [
+        "https://helpling.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "personio",
+      "board_id": "helpling.jobs.personio.de",
+      "careers_url": "https://helpling.jobs.personio.de/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "Personio tenant subdomain derived from the employer domain (helpling.com); the probe re-confirms the documented XML feed and the employer website",
+        "evidence_url": "https://helpling.jobs.personio.de/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "recruitee-bunq",
+      "name": "bunq",
+      "domain": "bunq.com",
+      "website_url": "https://www.bunq.com",
+      "website_alternates": [
+        "https://bunq.com"
+      ],
+      "sector": "financial services",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q24084541 P452/P31 label",
+      "ats_hint": "recruitee",
+      "board_id": "bunq",
+      "careers_url": "https://bunq.recruitee.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "Recruitee tenant slug derived from the employer domain (bunq.com); confirmation requires the read-only board probe, including the API's own company_name field",
+        "evidence_url": "https://bunq.recruitee.com/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q24084541",
+        "label": "bunq",
+        "entity_url": "https://www.wikidata.org/wiki/Q24084541",
+        "industry": [
+          "Q837171",
+          "Q16319025"
+        ],
+        "instance_of": [
+          "Q22687",
+          "Q60767305",
+          "Q39049085"
+        ],
+        "official_website": "https://www.bunq.com"
+      }
+    },
+    {
+      "id": "recruitee-channable",
+      "name": "Channable",
+      "domain": "channable.com",
+      "website_url": "https://www.channable.com",
+      "website_alternates": [
+        "https://channable.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "recruitee",
+      "board_id": "channable",
+      "careers_url": "https://channable.recruitee.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "Recruitee tenant slug derived from the employer domain (channable.com); confirmation requires the read-only board probe, including the API's own company_name field",
+        "evidence_url": "https://channable.recruitee.com/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "recruitee-make",
+      "name": "Make",
+      "domain": "make.com",
+      "website_url": "https://www.make.com",
+      "website_alternates": [
+        "https://make.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "recruitee",
+      "board_id": "make",
+      "careers_url": "https://make.recruitee.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "repo_documented_verified_board",
+        "detail": "docs/discovery-sources.md §Recruitee Careers Site API — pnpm run verify:recruitee -- make",
+        "evidence_url": "https://make.recruitee.com/",
+        "observed_at": "2026-07-31T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "recruitee-spotzer",
+      "name": "Spotzer",
+      "domain": "spotzer.com",
+      "website_url": "https://www.spotzer.com",
+      "website_alternates": [
+        "https://spotzer.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "recruitee",
+      "board_id": "spotzer",
+      "careers_url": "https://spotzer.recruitee.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "Recruitee tenant slug derived from the employer domain (spotzer.com); confirmation requires the probe's company_name identity field",
+        "evidence_url": "https://spotzer.recruitee.com/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "smartrecruiters-adidas",
+      "name": "adidas",
+      "domain": "adidas.com",
+      "website_url": "https://www.adidas.com",
+      "website_alternates": [
+        "https://adidas.com"
+      ],
+      "sector": "textile industry",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q3895 P452/P31 label",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Adidas",
+      "careers_url": "https://careers.smartrecruiters.com/Adidas",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters board page title 'Careers at adidas' observed read-only; the probe re-confirms the page title plus the API company identity",
+        "evidence_url": "https://careers.smartrecruiters.com/Adidas",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q3895",
+        "label": "Adidas AG",
+        "entity_url": "https://www.wikidata.org/wiki/Q3895",
+        "industry": [
+          "Q607081",
+          "Q4438117"
+        ],
+        "instance_of": [
+          "Q4830453",
+          "Q891723",
+          "Q431289",
+          "Q641347"
+        ],
+        "official_website": "https://www.adidas.com/"
+      }
+    },
+    {
+      "id": "smartrecruiters-continental",
+      "name": "Continental",
+      "domain": "continental.com",
+      "website_url": "https://www.continental.com",
+      "website_alternates": [
+        "https://continental.com"
+      ],
+      "sector": "automotive industry",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q163241 P452/P31 label",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Continental",
+      "careers_url": "https://careers.smartrecruiters.com/Continental",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters company identifier matching the employer's own name; confirmation requires the read-only board probe, which echoes company.name/company.identifier",
+        "evidence_url": "https://careers.smartrecruiters.com/Continental",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q163241",
+        "label": "Continental AG",
+        "entity_url": "https://www.wikidata.org/wiki/Q163241",
+        "industry": [
+          "Q190117",
+          "Q17018236",
+          "Q29585181",
+          "Q107598157"
+        ],
+        "instance_of": [
+          "Q3477381",
+          "Q891723"
+        ],
+        "official_website": "https://continental.com/"
+      }
+    },
+    {
+      "id": "smartrecruiters-ericsson",
+      "name": "Ericsson",
+      "domain": "ericsson.com",
+      "website_url": "https://www.ericsson.com",
+      "website_alternates": [
+        "https://ericsson.com"
+      ],
+      "sector": "information and communications technology",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q52618 P452/P31 label",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Ericsson",
+      "careers_url": "https://careers.smartrecruiters.com/Ericsson",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters board page title 'Careers at Ericsson' observed read-only; the probe re-confirms the page title plus the API company identity",
+        "evidence_url": "https://careers.smartrecruiters.com/Ericsson",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q52618",
+        "label": "Ericsson",
+        "entity_url": "https://www.wikidata.org/wiki/Q52618",
+        "industry": [
+          "Q5268834"
+        ],
+        "instance_of": [
+          "Q56604316",
+          "Q891723",
+          "Q4830453"
+        ],
+        "official_website": "https://www.ericsson.com/"
+      }
+    },
+    {
+      "id": "smartrecruiters-lidl",
+      "name": "Lidl",
+      "domain": "lidl.com",
+      "website_url": "https://www.lidl.com",
+      "website_alternates": [
+        "https://lidl.com"
+      ],
+      "sector": "food retail sector",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q151954 P452/P31 label",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Lidl",
+      "careers_url": "https://careers.smartrecruiters.com/Lidl",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters board page title 'Careers at Lidl' observed read-only; the probe re-confirms the page title plus the API company identity",
+        "evidence_url": "https://careers.smartrecruiters.com/Lidl",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q151954",
+        "label": "Lidl",
+        "entity_url": "https://www.wikidata.org/wiki/Q151954",
+        "industry": [
+          "Q15825471",
+          "Q126793"
+        ],
+        "instance_of": [
+          "Q18043413",
+          "Q4830453",
+          "Q261428"
+        ],
+        "official_website": "https://www.lidl.de"
+      }
+    },
+    {
+      "id": "smartrecruiters-nexthink",
+      "name": "Nexthink",
+      "domain": "nexthink.com",
+      "website_url": "https://www.nexthink.com",
+      "website_alternates": [
+        "https://nexthink.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Nexthink",
+      "careers_url": "https://careers.smartrecruiters.com/Nexthink",
+      "terms_url": null,
+      "provenance": {
+        "kind": "repo_documented_verified_board",
+        "detail": "docs/discovery-sources.md §SmartRecruiters Posting API — pnpm run verify:smartrecruiters -- Nexthink (93 published postings, 32 US roles, observed 2026-07-30)",
+        "evidence_url": "https://careers.smartrecruiters.com/Nexthink",
+        "observed_at": "2026-07-30T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "smartrecruiters-siemens",
+      "name": "Siemens",
+      "domain": "siemens.com",
+      "website_url": "https://www.siemens.com",
+      "website_alternates": [
+        "https://siemens.com"
+      ],
+      "sector": "electrical engineering",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q81230 P452/P31 label",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Siemens",
+      "careers_url": "https://careers.smartrecruiters.com/Siemens",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters board page title 'Careers at Siemens' observed read-only; the probe re-confirms the page title plus the API company identity",
+        "evidence_url": "https://careers.smartrecruiters.com/Siemens",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q81230",
+        "label": "Siemens",
+        "entity_url": "https://www.wikidata.org/wiki/Q81230",
+        "industry": [
+          "Q43035",
+          "Q609131",
+          "Q327092",
+          "Q1786253",
+          "Q101333",
+          "Q17177506",
+          "Q6554101",
+          "Q1326885",
+          "Q5358497",
+          "Q2401742"
+        ],
+        "instance_of": [
+          "Q778575",
+          "Q4830453",
+          "Q6881511"
+        ],
+        "official_website": "https://www.siemens.com/"
+      }
+    },
+    {
+      "id": "smartrecruiters-visa",
+      "name": "Visa",
+      "domain": "visa.com",
+      "website_url": "https://usa.visa.com",
+      "website_alternates": [
+        "https://www.visa.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "smartrecruiters",
+      "board_id": "Visa",
+      "careers_url": "https://careers.smartrecruiters.com/Visa",
+      "terms_url": null,
+      "provenance": {
+        "kind": "probe_candidate",
+        "detail": "SmartRecruiters board page title 'Careers at Visa' observed read-only; the probe re-confirms the page title plus the API company identity",
+        "evidence_url": "https://careers.smartrecruiters.com/Visa",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "structured-getstructured.ai",
+      "name": "Structured AI",
+      "domain": "getstructured.ai",
+      "website_url": "https://getstructured.ai",
+      "website_alternates": [
+        "https://www.getstructured.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://getstructured.ai/",
+      "careers_url": "https://getstructured.ai/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://getstructured.ai/ (read-only GET)",
+        "evidence_url": "https://getstructured.ai/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-insforge.dev",
+      "name": "InsForge",
+      "domain": "insforge.dev",
+      "website_url": "https://insforge.dev",
+      "website_alternates": [
+        "https://www.insforge.dev"
+      ],
+      "sector": "Developer Tools",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://insforge.dev/",
+      "careers_url": "https://insforge.dev/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://insforge.dev/ (read-only GET)",
+        "evidence_url": "https://insforge.dev/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q140026880",
+        "label": "InsForge",
+        "entity_url": "https://www.wikidata.org/wiki/Q140026880",
+        "industry": [],
+        "instance_of": [
+          "Q1130645"
+        ],
+        "official_website": "https://insforge.dev"
+      }
+    },
+    {
+      "id": "structured-joinhealthspark.com",
+      "name": "HealthSpark",
+      "domain": "joinhealthspark.com",
+      "website_url": "https://joinhealthspark.com",
+      "website_alternates": [
+        "https://www.joinhealthspark.com"
+      ],
+      "sector": "Healthcare",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://joinhealthspark.com/",
+      "careers_url": "https://joinhealthspark.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://joinhealthspark.com/ (read-only GET)",
+        "evidence_url": "https://joinhealthspark.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-lucaiq.com",
+      "name": "Luca IQ",
+      "domain": "lucaiq.com",
+      "website_url": "https://lucaiq.com",
+      "website_alternates": [
+        "https://www.lucaiq.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://lucaiq.com/",
+      "careers_url": "https://lucaiq.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://lucaiq.com/ (read-only GET)",
+        "evidence_url": "https://lucaiq.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-lumari.ai",
+      "name": "Lumari",
+      "domain": "lumari.ai",
+      "website_url": "https://lumari.ai",
+      "website_alternates": [
+        "https://www.lumari.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://lumari.ai/",
+      "careers_url": "https://lumari.ai/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://lumari.ai/ (read-only GET)",
+        "evidence_url": "https://lumari.ai/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-tsenta.com",
+      "name": "Tsenta",
+      "domain": "tsenta.com",
+      "website_url": "https://tsenta.com",
+      "website_alternates": [
+        "https://www.tsenta.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://tsenta.com/",
+      "careers_url": "https://tsenta.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://tsenta.com/ (read-only GET)",
+        "evidence_url": "https://tsenta.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-aurorincad.com",
+      "name": "Aurorin CAD",
+      "domain": "aurorincad.com",
+      "website_url": "https://aurorincad.com",
+      "website_alternates": [
+        "https://www.aurorincad.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://www.aurorincad.com/",
+      "careers_url": "https://www.aurorincad.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.aurorincad.com/ (read-only GET)",
+        "evidence_url": "https://www.aurorincad.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-jarmin.ai",
+      "name": "Jarmin",
+      "domain": "jarmin.ai",
+      "website_url": "https://jarmin.ai",
+      "website_alternates": [
+        "https://www.jarmin.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://www.jarmin.ai/",
+      "careers_url": "https://www.jarmin.ai/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.jarmin.ai/ (read-only GET)",
+        "evidence_url": "https://www.jarmin.ai/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-mozilla",
+      "name": "Mozilla",
+      "domain": "mozilla.org",
+      "website_url": "https://www.mozilla.org/en-US/",
+      "sector": "news aggregator",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q698 P452/P31 label",
+      "ats_hint": "structured",
+      "board_id": "https://www.mozilla.org/en-US/careers/listings/",
+      "careers_url": "https://www.mozilla.org/en-US/careers/listings/",
+      "terms_url": "https://www.mozilla.org/en-US/about/legal/terms/mozilla/",
+      "provenance": {
+        "kind": "repo_documented_verified_source",
+        "detail": "docs/discovery-sources.md §First-party structured career pages — pnpm run verify:structured -- https://www.mozilla.org/en-US/careers/listings/",
+        "evidence_url": "https://www.mozilla.org/en-US/careers/listings/",
+        "observed_at": "2026-09-23T00:00:00.000Z"
+      },
+      "wikidata": {
+        "qid": "Q698",
+        "label": "Mozilla Firefox",
+        "entity_url": "https://www.wikidata.org/wiki/Q698",
+        "industry": [],
+        "instance_of": [
+          "Q498267",
+          "Q15614021",
+          "Q6368",
+          "Q3503189",
+          "Q845620",
+          "Q341"
+        ],
+        "official_website": "https://www.mozilla.org/zh-TW/firefox/new/"
+      }
+    },
+    {
+      "id": "structured-pelica.com",
+      "name": "Pelica",
+      "domain": "pelica.com",
+      "website_url": "https://pelica.com",
+      "website_alternates": [
+        "https://www.pelica.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://www.pelica.com/",
+      "careers_url": "https://www.pelica.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.pelica.com/ (read-only GET)",
+        "evidence_url": "https://www.pelica.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-rethoric.com",
+      "name": "Rethoric",
+      "domain": "rethoric.com",
+      "website_url": "https://rethoric.com",
+      "website_alternates": [
+        "https://www.rethoric.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://www.rethoric.com/ycombinator",
+      "careers_url": "https://www.rethoric.com/ycombinator",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.rethoric.com/ycombinator (read-only GET)",
+        "evidence_url": "https://www.rethoric.com/ycombinator",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-trellistech.com",
+      "name": "Trellis",
+      "domain": "trellistech.com",
+      "website_url": "https://trellistech.com",
+      "website_alternates": [
+        "https://www.trellistech.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "structured",
+      "board_id": "https://www.trellistech.com/",
+      "careers_url": "https://www.trellistech.com/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.trellistech.com/ (read-only GET)",
+        "evidence_url": "https://www.trellistech.com/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "structured-trybloom.ai",
+      "name": "Bloom",
+      "domain": "trybloom.ai",
+      "website_url": "https://trybloom.ai",
+      "website_alternates": [
+        "https://www.trybloom.ai"
+      ],
+      "sector": "Artificial Intelligence",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "structured",
+      "board_id": "https://www.trybloom.ai/",
+      "careers_url": "https://www.trybloom.ai/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus_structured_source",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[structured] careersUrl=https://www.trybloom.ai/ (read-only GET)",
+        "evidence_url": "https://www.trybloom.ai/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-1stcollab",
+      "name": "1stCollab",
+      "domain": "1stcollab.com",
+      "website_url": "https://1stcollab.com",
+      "website_alternates": [
+        "https://www.1stcollab.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "1stcollab",
+      "careers_url": "https://apply.workable.com/1stcollab/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/1stcollab/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/1stcollab/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-hokali",
+      "name": "HOKALI",
+      "domain": "hokali.com",
+      "website_url": "https://hokali.com",
+      "website_alternates": [
+        "https://www.hokali.com"
+      ],
+      "sector": "Food & Commerce",
+      "sector_source": "prod public corpus sector label (/exports/companies.jsonl)",
+      "ats_hint": "workable",
+      "board_id": "hokali",
+      "careers_url": "https://apply.workable.com/hokali/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/hokali/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/hokali/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-intellecthq",
+      "name": "Intellect",
+      "domain": "intellect.co",
+      "website_url": "https://intellect.co",
+      "website_alternates": [
+        "https://www.intellect.co"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "intellecthq",
+      "careers_url": "https://apply.workable.com/intellecthq/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/intellecthq/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/intellecthq/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-povio",
+      "name": "Povio",
+      "domain": "povio.com",
+      "website_url": "https://povio.com",
+      "website_alternates": [
+        "https://www.povio.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "povio",
+      "careers_url": "https://apply.workable.com/povio/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/povio/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/povio/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-riot",
+      "name": "Riot",
+      "domain": "tryriot.com",
+      "website_url": "https://tryriot.com",
+      "website_alternates": [
+        "https://www.tryriot.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "riot",
+      "careers_url": "https://apply.workable.com/riot/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/riot/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/riot/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-testrigor",
+      "name": "testRigor",
+      "domain": "testrigor.com",
+      "website_url": "https://testrigor.com",
+      "website_alternates": [
+        "https://www.testrigor.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "testrigor",
+      "careers_url": "https://apply.workable.com/testrigor/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/testrigor/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/testrigor/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      }
+    },
+    {
+      "id": "workable-tetrascience",
+      "name": "TetraScience",
+      "domain": "tetrascience.com",
+      "website_url": "https://tetrascience.com",
+      "website_alternates": [
+        "https://www.tetrascience.com"
+      ],
+      "sector": "business",
+      "sector_source": "Wikidata entity https://www.wikidata.org/wiki/Q54957095 P452/P31 label",
+      "ats_hint": "workable",
+      "board_id": "tetrascience",
+      "careers_url": "https://apply.workable.com/tetrascience/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "prod_public_corpus",
+        "detail": "prod public corpus /exports/companies.jsonl providers=[workable] careersUrl=https://apply.workable.com/tetrascience/ (read-only GET)",
+        "evidence_url": "https://apply.workable.com/tetrascience/",
+        "observed_at": "2026-09-23T08:53:58.705Z"
+      },
+      "wikidata": {
+        "qid": "Q54957095",
+        "label": "TetraScience",
+        "entity_url": "https://www.wikidata.org/wiki/Q54957095",
+        "industry": [],
+        "instance_of": [
+          "Q4830453"
+        ],
+        "official_website": "http://www.tetrascience.com/"
+      }
+    },
+    {
+      "id": "workable-uncapped",
+      "name": "Uncapped",
+      "domain": "weareuncapped.com",
+      "website_url": "https://www.weareuncapped.com",
+      "website_alternates": [
+        "https://weareuncapped.com"
+      ],
+      "sector": "Unspecified",
+      "sector_source": "not published by the candidate source or Wikidata",
+      "ats_hint": "workable",
+      "board_id": "uncapped",
+      "careers_url": "https://apply.workable.com/uncapped/",
+      "terms_url": null,
+      "provenance": {
+        "kind": "repo_documented_verified_board",
+        "detail": "docs/discovery-sources.md §Workable public account endpoint — pnpm run verify:workable -- uncapped",
+        "evidence_url": "https://apply.workable.com/uncapped/",
+        "observed_at": "2026-07-31T00:00:00.000Z"
+      }
+    }
+  ]
+}
