@@ -8,6 +8,15 @@ import { boundedText, discardResponseBody, PublicWebSession } from "./public-web
 
 export const ATS_SLUG_PROBE_VERSION = "1.1";
 
+/**
+ * Version of the evidence-slug corroboration rule below. Raising it is part of
+ * the composite `DISCOVERY_PIPELINE_VERSION` (lib/discovery-version.ts), which
+ * is the designed re-check trigger: rows stamped at an older version become
+ * runnable again through the pipeline's own predicate instead of any direct
+ * data surgery.
+ */
+export const ATS_SLUG_CORROBORATION_VERSION = "1";
+
 const PROBE_USER_AGENT = "OH-SHI/1.0 ats-slug-probe (https://ohshi.work/about)";
 
 /**
@@ -20,17 +29,46 @@ const PROBED_PROVIDERS: AtsProvider[] = [
 ];
 
 /**
+ * The two families whose public board lives on a vendor host that names the
+ * board by the employer's own slug: `<slug>.jobs.personio.de|.com` and
+ * `<slug>.recruitee.com`. Only these can corroborate a slug the candidate's own
+ * registry evidence recorded (a board URL the employer published) when that
+ * slug differs from the registrable domain label.
+ */
+const EVIDENCE_SLUG_PROVIDERS = new Set<AtsProvider>(["personio", "recruitee"]);
+
+/**
  * Slugs short or generic enough that a match is more likely to be a different
  * company than the one being probed.
  */
 const AMBIGUOUS_SLUG = /^(?:app|api|get|the|inc|team|labs|hq|io|ai|co|dev|web|new|now|one|go|up|my)$/;
 
+function normalizeSlug(value: unknown) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "");
+}
+
+/**
+ * The slugs a registry evidence row recorded for this candidate, exactly as
+ * recorded and with no heuristic expansion: an evidence id is the employer's
+ * own board id (`curated:demodesk-gmbh` -> `demodesk-gmbh`), and it is the only
+ * slug allowed to corroborate a vendor-host board the domain label does not
+ * name.
+ */
+function evidenceSlugs(extraSlugs: string[] = []) {
+  const slugs = new Set<string>();
+  for (const value of extraSlugs) {
+    const normalized = normalizeSlug(value);
+    if (normalized.length < 3 || AMBIGUOUS_SLUG.test(normalized)) continue;
+    slugs.add(normalized);
+  }
+  return slugs;
+}
+
 export function slugCandidates(domain: string, extraSlugs: string[] = []) {
   const label = domain.split(".")[0].toLowerCase();
   const slugs = new Set<string>();
   for (const value of [...extraSlugs, label]) {
-    const normalized = String(value || "").trim().toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "");
+    const normalized = normalizeSlug(value);
     if (normalized.length < 3 || AMBIGUOUS_SLUG.test(normalized)) continue;
     slugs.add(normalized);
     // Companies routinely register the hyphenless form of a hyphenated name.
@@ -121,6 +159,14 @@ export type SlugProbeResult = {
  * Website crawling misses any employer whose careers page is client-rendered or
  * bot-protected. These board APIs are public JSON published for exactly this
  * purpose, so probing them recovers employers the crawl cannot reach.
+ *
+ * `extraSlugs` are the candidate's registry-evidence slugs
+ * (`registryBoardSlugs` in `lib/discovery.ts`): board ids the employer's own
+ * directory or careers record published. They are the only slugs that may
+ * corroborate a non-greenhouse board whose host the registrable domain label
+ * does not name, and only on the two vendor hosts keyed by that slug
+ * (`<slug>.jobs.personio.de|.com`, `<slug>.recruitee.com`) once the payload has
+ * passed the adapter's completeness gate.
  */
 export async function probeAtsBySlug(
   domain: string,
@@ -131,6 +177,7 @@ export async function probeAtsBySlug(
   const session = new PublicWebSession(fetcher, PROBE_USER_AGENT);
   const guardedFetcher = (async (input: string | URL | Request) =>
     session.fetch(String(input))) as typeof fetch;
+  const evidence = evidenceSlugs(options.extraSlugs);
   let probeFailure: unknown = null;
   for (const slug of slugCandidates(domain, options.extraSlugs)) {
     for (const provider of PROBED_PROVIDERS) {
@@ -151,10 +198,17 @@ export async function probeAtsBySlug(
               confirmedBy: "board_name",
             };
           }
-          // These APIs do not expose a trustworthy employer identity, so require
-          // the probed slug to come from the registrable domain, never an alias.
+          // These APIs do not expose a trustworthy employer identity, so a slug
+          // match is circumstantial evidence: the slug must come from the
+          // registrable domain, never an alias. The one exception is a slug the
+          // candidate's own registry evidence recorded — a board URL the
+          // employer published — and only on the two vendor hosts that key the
+          // board by that slug. The payload above already passed the adapter's
+          // completeness gate, so the board exists and parses.
           const domainLabel = domain.split(".")[0].toLowerCase().replace(/[^a-z0-9]+/g, "");
-          if (slug.replaceAll("-", "") !== domainLabel) continue;
+          if (slug.replaceAll("-", "") !== domainLabel) {
+            if (!(evidence.has(slug) && EVIDENCE_SLUG_PROVIDERS.has(provider))) continue;
+          }
           const careersUrl = provider === "lever"
             ? `https://jobs.lever.co/${slug}`
             : provider === "ashby"

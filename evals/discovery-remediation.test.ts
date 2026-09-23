@@ -280,9 +280,13 @@ test("the pipeline version bump re-queues rows stamped at the older pipeline ver
     LEGACY_PIPELINE_VERSION,
     "the ceiling reclassification is a real pipeline behavior change, so the version must move"
   );
+  // The composite shape pin also carries `slug-corroboration-<n>`: the
+  // user-approved corroboration fix (2026-09-23, second decision) added that
+  // named component in its own commit, so the pin still requires every
+  // component, in order — it grew with the composite, it was not weakened.
   assert.match(
     DISCOVERY_PIPELINE_VERSION,
-    /^ats-detection-[\d.]+:ats-adapter-[\d.]+:canonical-probe-[\d.]+:ats-slug-probe-[\d.]+:structured-adapter-[\d.]+:error-classification-\d+$/
+    /^ats-detection-[\d.]+:ats-adapter-[\d.]+:canonical-probe-[\d.]+:ats-slug-probe-[\d.]+:structured-adapter-[\d.]+:error-classification-\d+:slug-corroboration-\d+$/
   );
 
   const { miniflare, database } = await withDatabase("discovery-version-recheck");

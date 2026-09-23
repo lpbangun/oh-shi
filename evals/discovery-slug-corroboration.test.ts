@@ -28,7 +28,7 @@ import { DISCOVERY_PIPELINE_VERSION } from "../lib/discovery-version";
  * slugs and every other family keep the guard byte-unchanged.
  *
  * The characterization tests below started green against the pre-fix code;
- * the relaxation's own tests land with its fix.
+ * the relaxation's own tests started red against that same code.
  */
 
 const root = process.cwd();
@@ -250,4 +250,172 @@ test("an evidence-derived slug resolves only on a complete validated payload", a
       `${domain}: an incomplete vendor payload must not resolve`
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// The approved relaxation — evidence-derived personio/recruitee slugs
+// ---------------------------------------------------------------------------
+
+test("an evidence-derived personio slug resolves the corrected demodesk board", async () => {
+  // Measured before the fix: `probeAtsBySlug("demodesk.com", "Demodesk",
+  // extraSlugs: ["demodesk-gmbh"])` returned null with 53 fetches
+  // (`evidence/cohorts/remediation/personio-slug-probe.json`) because the
+  // registrable domain label strips to `demodesk`, not `demodeskgmbh`. The
+  // corrected evidence id (`curated:demodesk-gmbh`, derived from the careers
+  // URL hostname) is what `registryBoardSlugs` hands the probe, and the vendor
+  // host answers with a complete validated board.
+  const fetcher = routeFetcher({
+    "https://demodesk-gmbh.jobs.personio.de/xml?language=en":
+      () => xmlResponse(PERSONIO_XML),
+  });
+  assert.deepEqual(
+    await probeAtsBySlug("demodesk.com", "Demodesk", {
+      fetcher,
+      extraSlugs: ["demodesk-gmbh"],
+    }),
+    {
+      provider: "personio",
+      boardId: "demodesk-gmbh.jobs.personio.de",
+      careersUrl: "https://demodesk-gmbh.jobs.personio.de/",
+      confirmedBy: "board_url",
+    }
+  );
+
+  // The personio `.com` host is the same board family: the probe takes whichever
+  // host answers first and reports that host as the board id.
+  assert.deepEqual(
+    await probeAtsBySlug("demodesk.com", "Demodesk", {
+      fetcher: routeFetcher({
+        "https://demodesk-gmbh.jobs.personio.com/xml?language=en":
+          () => xmlResponse(PERSONIO_XML),
+      }),
+      extraSlugs: ["demodesk-gmbh"],
+    }),
+    {
+      provider: "personio",
+      boardId: "demodesk-gmbh.jobs.personio.com",
+      careersUrl: "https://demodesk-gmbh.jobs.personio.com/",
+      confirmedBy: "board_url",
+    }
+  );
+});
+
+test("an evidence-derived recruitee slug resolves the corrected board", async () => {
+  const fetcher = routeFetcher({
+    "https://acme-gmbh.recruitee.com/api/offers/": () => jsonResponse(recruiteeOffers()),
+  });
+  assert.deepEqual(
+    await probeAtsBySlug("acme.com", "Acme", {
+      fetcher,
+      extraSlugs: ["acme-gmbh"],
+    }),
+    {
+      provider: "recruitee",
+      boardId: "acme-gmbh",
+      careersUrl: "https://acme-gmbh.recruitee.com/",
+      confirmedBy: "board_url",
+    }
+  );
+
+  // The bunq shape: the evidence slug equals the domain label, so it keeps
+  // resolving through the unchanged guard.
+  assert.deepEqual(
+    await probeAtsBySlug("bunq.com", "bunq", {
+      fetcher: routeFetcher({
+        "https://bunq.recruitee.com/api/offers/": () => jsonResponse(recruiteeOffers()),
+      }),
+      extraSlugs: ["bunq"],
+    }),
+    {
+      provider: "recruitee",
+      boardId: "bunq",
+      careersUrl: "https://bunq.recruitee.com/",
+      confirmedBy: "board_url",
+    }
+  );
+});
+
+test("the relaxation covers exactly the recorded evidence slug, never its hyphenless expansion", async () => {
+  // `slugCandidates` also tries the hyphenless form of a hyphenated slug
+  // (companies routinely register it). That guess is not the id the candidate's
+  // own evidence recorded, so it keeps the guard — only the recorded id may
+  // corroborate a vendor-host board.
+  const hyphenless = routeFetcher({
+    "https://acmeinc.jobs.personio.de/xml?language=en": () => xmlResponse(PERSONIO_XML),
+  });
+  assert.equal(
+    await probeAtsBySlug("acme.com", "Acme", {
+      fetcher: hyphenless,
+      extraSlugs: ["acme-inc"],
+    }),
+    null,
+    "the hyphenless expansion of an evidence slug is still refused"
+  );
+  assert.deepEqual(
+    await probeAtsBySlug("acme.com", "Acme", {
+      fetcher: hyphenless,
+      extraSlugs: ["acmeinc"],
+    }),
+    {
+      provider: "personio",
+      boardId: "acmeinc.jobs.personio.de",
+      careersUrl: "https://acmeinc.jobs.personio.de/",
+      confirmedBy: "board_url",
+    },
+    "the recorded id itself resolves on the same board"
+  );
+});
+
+test("the pipeline version records the slug-corroboration rule as a new named component", async () => {
+  // A real pipeline behavior change, so the composite version moves with it —
+  // by adding a NEW named component. No detector or adapter version is bumped
+  // for behavior it did not change, and the components that did not change keep
+  // their values. The version is the designed re-check trigger
+  // (`discoveryRunnableSql`), so rows stamped at the previous version re-queue
+  // through the product's own predicate, never by direct D1 writes.
+  assert.match(
+    DISCOVERY_PIPELINE_VERSION,
+    /^ats-detection-[\d.]+:ats-adapter-[\d.]+:canonical-probe-[\d.]+:ats-slug-probe-[\d.]+:structured-adapter-[\d.]+:error-classification-\d+:slug-corroboration-\d+$/
+  );
+  const { ATS_SLUG_CORROBORATION_VERSION } = await import("../lib/ats-slug-probe");
+  assert.equal(
+    typeof ATS_SLUG_CORROBORATION_VERSION,
+    "string",
+    "the new component carries its own named version constant"
+  );
+  assert.ok(
+    DISCOVERY_PIPELINE_VERSION.endsWith(`:slug-corroboration-${ATS_SLUG_CORROBORATION_VERSION}`)
+  );
+  assert.ok(
+    DISCOVERY_PIPELINE_VERSION.startsWith(
+      "ats-detection-1.1:ats-adapter-1.0:canonical-probe-1.1:ats-slug-probe-1.1:" +
+      "structured-adapter-1.0:error-classification-2"
+    ),
+    "this change must not bump a component whose behavior did not change"
+  );
+});
+
+test("the domain-label guard stays byte-unchanged and the relaxation stays gated", async () => {
+  const source = await read("lib/ats-slug-probe.ts");
+  // The guard itself is unchanged: a non-greenhouse slug must equal the
+  // registrable domain label...
+  assert.match(
+    source,
+    /const domainLabel = domain\.split\("\."\)\[0\]\.toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\+\/g, ""\);/
+  );
+  assert.match(source, /if \(slug\.replaceAll\("-", ""\) !== domainLabel\) \{/);
+  // ...and the one approved exception is gated on both the candidate's own
+  // registry evidence and the two vendor hosts that key the board by the slug.
+  assert.match(
+    source,
+    /const EVIDENCE_SLUG_PROVIDERS = new Set<AtsProvider>\(\["personio", "recruitee"\]\);/
+  );
+  assert.match(
+    source,
+    /if \(!\(evidence\.has\(slug\) && EVIDENCE_SLUG_PROVIDERS\.has\(provider\)\)\) continue;/
+  );
+  assert.match(source, /export const ATS_SLUG_CORROBORATION_VERSION = "\d+";/);
+  // The probe's only caller still hands it the candidate's registry evidence.
+  const discovery = await read("lib/discovery.ts");
+  assert.match(discovery, /extraSlugs: await registryBoardSlugs\(candidate\.normalizedDomain\)/);
 });
