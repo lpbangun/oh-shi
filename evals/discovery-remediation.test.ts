@@ -3,12 +3,16 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { Miniflare } from "miniflare";
+import { slugCandidates } from "../lib/ats-slug-probe";
 import {
   COHORT_MANIFEST_PATH,
   parseCohortManifest,
   type CohortManifestRow,
 } from "../lib/cohort-manifest";
-import { cohortEvidenceSourceId } from "../lib/cohort-manifest-import";
+import {
+  cohortEvidenceRecord,
+  cohortEvidenceSourceId,
+} from "../lib/cohort-manifest-import";
 import {
   discoveryRetryAt,
   discoveryRunnableSql,
@@ -313,4 +317,94 @@ test("the pipeline version bump re-queues rows stamped at the older pipeline ver
     ["burned"],
     "only the row stamped at an older pipeline version re-queues; a fresh terminal stamp does not"
   );
+});
+
+// ---------------------------------------------------------------------------
+// Remediation 2 — personio/recruitee board ids come from the URL hostname
+// ---------------------------------------------------------------------------
+
+test("personio and recruitee board ids are derived from the careers URL hostname", async () => {
+  const text = await readFile(path.join(root, COHORT_MANIFEST_PATH), "utf8");
+  const { rows } = parseCohortManifest(text);
+  const byDomain = new Map(rows.map((row) => [row.domain, row]));
+
+  // Real shipped rows. Both ATS families key their public board by a subdomain
+  // label (`demodesk-gmbh.jobs.personio.de`, `bunq.recruitee.com`), so the old
+  // path-derived id fell back to the registrable domain — `curated:demodesk.com`
+  // names no board at all and the slug probe could never retry the real id.
+  const demodesk = byDomain.get("demodesk.com");
+  assert.ok(demodesk, "the personio POC row must exist in the manifest");
+  assert.equal(demodesk.careers_url, "https://demodesk-gmbh.jobs.personio.de/");
+  assert.equal(cohortEvidenceSourceId(demodesk), "curated:demodesk-gmbh");
+  assert.equal(
+    cohortEvidenceRecord(demodesk, "2026-09-23T09:46:32.671Z").sourceId,
+    "curated:demodesk-gmbh"
+  );
+
+  const bunq = byDomain.get("bunq.com");
+  assert.ok(bunq, "the recruitee POC row must exist in the manifest");
+  assert.equal(bunq.careers_url, "https://bunq.recruitee.com/");
+  assert.equal(cohortEvidenceSourceId(bunq), "curated:bunq");
+  assert.equal(cohortEvidenceRecord(bunq, "2026-09-23T09:46:32.671Z").sourceId, "curated:bunq");
+
+  // The slug component of the id is what `registryBoardSlugs` hands the slug
+  // probe as an extra candidate, and the probe can only build the personio
+  // board id from that slug (`<slug>.jobs.personio.de`).
+  assert.equal(cohortEvidenceSourceId(demodesk).split(":").pop(), "demodesk-gmbh");
+  assert.ok(slugCandidates("demodesk.com", ["demodesk-gmbh"]).includes("demodesk-gmbh"));
+
+  // Same rule for synthetic board shapes; non-board hosts keep the old
+  // path/domain derivation.
+  const base: CohortManifestRow = {
+    name: "Example Health",
+    website_url: "https://examplehealth.example",
+    domain: "examplehealth.example",
+    sector: "Healthcare",
+    ats_hint: "personio",
+    careers_url: null,
+    access_mode: "public_page",
+    terms_url: "https://examplehealth.example/terms",
+    evidence_url: "https://examplehealth.example",
+    notes: "general:v1 POC seed; probe receipt evidence/cohorts/probes/example.json",
+  };
+  const row = (domain: string, careersUrl: string): CohortManifestRow => ({
+    ...base,
+    domain,
+    website_url: `https://${domain}`,
+    careers_url: careersUrl,
+    evidence_url: careersUrl,
+  });
+  const cases: Array<[string, CohortManifestRow, string]> = [
+    ["personio .de host", row("acme.com", "https://acme.jobs.personio.de/"), "curated:acme"],
+    ["personio .com host", row("acme.com", "https://acme.jobs.personio.com/"), "curated:acme"],
+    [
+      "personio host with a path",
+      row("acme.com", "https://acme.jobs.personio.de/jobs/12345"),
+      "curated:acme",
+    ],
+    [
+      "hyphenated personio board",
+      row("acme-gmbh.com", "https://acme-gmbh.jobs.personio.de/"),
+      "curated:acme-gmbh",
+    ],
+    ["recruitee host", row("acme.com", "https://acme.recruitee.com/"), "curated:acme"],
+    [
+      "recruitee host with a path",
+      row("acme.com", "https://acme.recruitee.com/o/engineer"),
+      "curated:acme",
+    ],
+    [
+      "the vendor's own host is not a board",
+      row("recruitee.com", "https://www.recruitee.com/"),
+      "curated:recruitee.com",
+    ],
+    [
+      "the bare personio host is not a board",
+      row("personio.de", "https://jobs.personio.de/"),
+      "curated:personio.de",
+    ],
+  ];
+  for (const [name, manifestRow, expected] of cases) {
+    assert.equal(cohortEvidenceSourceId(manifestRow), expected, name);
+  }
 });

@@ -37,6 +37,28 @@ export const COHORT_STAGED_SOURCE_CLASSIFICATION = "general_v1_staged";
 const WIKIDATA_ENTITY = /^https:\/\/www\.wikidata\.org\/wiki\/(Q\d+)$/;
 
 /**
+ * Board hosts keyed by a subdomain label rather than a path segment:
+ * `<slug>.jobs.personio.de|.com` and `<slug>.recruitee.com`. These careers URLs
+ * have no meaningful path, so the path-derived slug fell back to the
+ * registrable domain — `demodesk-gmbh.jobs.personio.de` became
+ * `curated:demodesk.com`, an id that names no board, and the slug probe could
+ * therefore never retry the real board id (`demodesk-gmbh`).
+ */
+const SUBDOMAIN_BOARD_HOSTS = [
+  /^([a-z0-9-]+)\.jobs\.personio\.(?:de|com)$/,
+  /^([a-z0-9-]+)\.recruitee\.com$/,
+];
+
+function subdomainBoardSlug(hostname: string) {
+  for (const host of SUBDOMAIN_BOARD_HOSTS) {
+    const slug = host.exec(hostname)?.[1] || "";
+    // The vendor's own marketing host (`www.recruitee.com`) is not a board.
+    if (slug && slug !== "www") return slug;
+  }
+  return "";
+}
+
+/**
  * Evidence source id. Enumerated rows cite the Wikidata entity that named the
  * employer; curated rows cite the probed board, whose own slug is both the
  * employer's identifier and the slug the ATS probe retries when a site never
@@ -47,7 +69,10 @@ export function cohortEvidenceSourceId(row: CohortManifestRow) {
   if (entity) return `wikidata:${entity[1]}`;
   const board = row.careers_url || row.evidence_url;
   try {
-    const segments = new URL(board).pathname.split("/").filter(Boolean);
+    const url = new URL(board);
+    const boardSlug = subdomainBoardSlug(url.hostname.toLowerCase());
+    if (boardSlug) return `curated:${boardSlug.slice(0, 80)}`;
+    const segments = url.pathname.split("/").filter(Boolean);
     const slug = (segments[segments.length - 1] || row.domain).toLowerCase();
     return `curated:${slug.slice(0, 80)}`;
   } catch {
