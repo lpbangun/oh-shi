@@ -31,3 +31,4 @@ import "./workflow-isolation.test";
 import "./cohort-manifest.test";
 import "./cohort-permission-gating.test";
 import "./discovery-remediation.test";
+import "./discovery-slug-corroboration.test";
