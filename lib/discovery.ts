@@ -364,7 +364,7 @@ async function processCandidate(
   fetcher: typeof fetch,
   now: string,
   allowActivation: boolean
-) {
+): Promise<{ activated: boolean; boardDetected: boolean; deferred: boolean }> {
   const attemptCount = Number(candidate.attemptCount || 0) + 1;
   await env.DB.prepare(`UPDATE discovery_queue SET status='resolving',
     last_attempted_at=?, attempt_count=?, next_attempt_at=NULL WHERE id=?`)
@@ -391,7 +391,7 @@ async function processCandidate(
           : "Automatic board discovery was blocked or failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, deferred: retryable };
   }
   const detection = resolution.detection;
   if (!detection) {
@@ -413,7 +413,7 @@ async function processCandidate(
               ? "Official website linked to an external career system without a supported canonical adapter."
             : "Official website checked; no supported public ATS or actionable first-party career page was detected.",
           candidate.id).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, deferred: false };
   }
   try {
     const canonical = await fetchCanonicalBoard(detection.provider, detection.boardId, fetcher);
@@ -423,7 +423,7 @@ async function processCandidate(
         last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
         .bind(DISCOVERY_PIPELINE_VERSION,
           "Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, deferred: false };
     }
     if (!allowActivation) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='canonical_source_found',
@@ -435,10 +435,10 @@ async function processCandidate(
           discoveryActivationDueAt(now),
           candidate.id
         ).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, deferred: false };
     }
     await activateDiscoveredCandidate(candidate, detection, now);
-    return { activated: true, boardDetected: true };
+    return { activated: true, boardDetected: true, deferred: false };
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     const retryable = isTransientDiscoveryError(error);
@@ -456,7 +456,7 @@ async function processCandidate(
           : "ATS detected but canonical verification failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: true };
+    return { activated: false, boardDetected: true, deferred: retryable };
   }
 }
 
@@ -616,6 +616,10 @@ export async function runDiscovery(options: {
     ).all<Candidate>();
   let canonicalBoardsDetected = 0;
   let companiesActivated = 0;
+  // Candidates whose attempt ended in the transient path (the subrequest
+  // ceiling included): the queue row is back in a re-runnable state with a
+  // backoff, so the run reports them as deferred instead of failed.
+  let candidatesDeferred = 0;
   const processed = await processSequentiallyIsolated(
     queued.results,
     async (candidate) => {
@@ -625,11 +629,13 @@ export async function runDiscovery(options: {
       );
       if (result.boardDetected) canonicalBoardsDetected += 1;
       if (result.activated) companiesActivated += 1;
+      if (result.deferred) candidatesDeferred += 1;
       return result;
     },
     async (candidate, error) => {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       const attemptCount = Number(candidate.attemptCount || 0) + 1;
+      candidatesDeferred += 1;
       await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
         discovery_version=?, last_outcome='probe_failed', attempt_count=MAX(attempt_count, ?),
         next_attempt_at=?,
@@ -664,6 +670,7 @@ export async function runDiscovery(options: {
     candidates_processed: Math.min(queued.results.length, options.processLimit || DEFAULT_PROCESS_LIMIT),
     canonical_boards_detected: canonicalBoardsDetected,
     companies_activated: companiesActivated,
+    candidates_deferred: candidatesDeferred,
     failed_sources: failedSources,
     failed_candidates: failedCandidates,
     blocked_sources: blockedSources,

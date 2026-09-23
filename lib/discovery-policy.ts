@@ -101,6 +101,26 @@ export function discoveryPromotionOrderSql(domainsAlias = "domains") {
   return `${domainsAlias}.first_seen_at DESC, directoryRanked DESC, ${domainsAlias}.canonical_domain`;
 }
 
+/**
+ * The Workers platform refuses further fetches once a single invocation has
+ * spent its subrequest budget ("Too many subrequests by single Worker
+ * invocation"). That is a per-invocation capacity limit, not evidence about
+ * the employer: the candidate never received a full attempt, so it must be
+ * deferred, never stamped terminal. One discovery candidate costs several
+ * fetches (website probe + ATS slug probes + canonical board), so the default
+ * 50-subrequest budget can burn most of a batch.
+ */
+const SUBREQUEST_CEILING = /\bsubrequests?\b/i;
+
+/**
+ * Version of the error-classification behavior above. Raising it is part of
+ * the composite `DISCOVERY_PIPELINE_VERSION` (lib/discovery-version.ts), which
+ * is the designed re-check trigger: rows stamped at an older version become
+ * runnable again through the pipeline's own predicate instead of any direct
+ * data surgery.
+ */
+export const DISCOVERY_CLASSIFICATION_VERSION = "2";
+
 export function isTransientDiscoveryError(error: unknown) {
   if (error instanceof TypeError) return true;
   if (!error || typeof error !== "object") return false;
@@ -110,8 +130,9 @@ export function isTransientDiscoveryError(error: unknown) {
     return candidate.status === 408 || candidate.status === 425 ||
       candidate.status === 429 || candidate.status >= 500;
   }
-  return typeof candidate.message === "string" &&
-    /timeout|timed out|abort|network|fetch failed|robots|429|5\d\d/i.test(candidate.message);
+  if (typeof candidate.message !== "string") return false;
+  if (SUBREQUEST_CEILING.test(candidate.message)) return true;
+  return /timeout|timed out|abort|network|fetch failed|robots|429|5\d\d/i.test(candidate.message);
 }
 
 export function discoveryRetryAt(
