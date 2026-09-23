@@ -29,3 +29,4 @@ import "./discovery-review-d1.test";
 import "./discovery-policy-d1.test";
 import "./workflow-isolation.test";
 import "./cohort-manifest.test";
+import "./cohort-permission-gating.test";

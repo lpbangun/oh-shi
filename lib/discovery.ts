@@ -22,10 +22,12 @@ import { normalizeDomain, sourceKey } from "./source-registry";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import {
   discoveryActivationDueAt,
+  discoveryPromotionGateSql,
   discoveryPromotionOrderSql,
   discoveryQueueOrderSql,
   discoveryRetryAt,
   discoveryRunnableSql,
+  discoverySourceFetchRefusal,
   isTransientDiscoveryError,
 } from "./discovery-policy";
 import { normalizeSector } from "./types";
@@ -160,11 +162,12 @@ const excludedDiscoveryDomain = (domain: string, sourceDomain: string) =>
 async function discoverInvestorSource(source: {
   id: string; portfolioUrl: string; accessMode: string; discoveryCursor: number;
 }, fetcher: typeof fetch, now: string) {
-  if (source.accessMode !== "public_page") {
+  const refusal = discoverySourceFetchRefusal(source.accessMode);
+  if (refusal) {
     return {
       discovered: 0,
       nextCursor: source.discoveryCursor,
-      status: source.accessMode === "manual_import" ? "manual" as const : "blocked" as const,
+      status: refusal,
     };
   }
   const response = await permittedFetch(source.portfolioUrl, fetcher);
@@ -487,6 +490,8 @@ export async function promoteRegistryDomains(
 ) {
   // Newest registry evidence first so today's YC/news domains are queued before
   // a years-old encyclopedia backlog. Directory-ranked is only a tie-break.
+  // The gate (pending, unowned, never queued, permitted evidence) lives in
+  // `discoveryPromotionGateSql`: permission is refused there, never deferred.
   const pending = await env.DB.prepare(`SELECT
       domains.canonical_domain as canonicalDomain,
       domains.company_name as companyName,
@@ -497,10 +502,7 @@ export async function promoteRegistryDomains(
       ON evidence.canonical_domain=domains.canonical_domain
     LEFT JOIN discovery_queue queue
       ON queue.normalized_domain=domains.canonical_domain
-    WHERE evidence.permission_status='permitted'
-      AND domains.review_status='pending'
-      AND domains.company_id IS NULL
-      AND queue.id IS NULL
+    WHERE ${discoveryPromotionGateSql()}
     GROUP BY domains.canonical_domain
     ORDER BY ${discoveryPromotionOrderSql("domains")}
     LIMIT ?`)

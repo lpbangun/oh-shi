@@ -50,19 +50,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Keeps the experimental company universe growing on its own. Evidence
-      # only: this step never activates a company, so a directory change cannot
-      # publish a job. It runs the public startup directory sync until the
-      # employer cohort sync (`pnpm exec tsx scripts/sync-cohort-manifest.ts`)
-      # lands; swap the command then and keep this step's shape.
-      - name: Sync the public startup directory into the experimental domain registry
+      # Keeps the experimental employer cohort registered. Evidence only: this
+      # step never activates a company and only `permitted` rows ever run, so a
+      # manifest change cannot publish a job. Re-running is idempotent (domains,
+      # evidence, and cohort membership are upserts).
+      - name: Sync the general:v1 employer cohort into the experimental domain registry
         if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
         id: directory_sync
         continue-on-error: true
         env:
           OH_SHI_BASE_URL: ${{ vars.OH_SHI_EXPERIMENTAL_BASE_URL }}
           OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_EXPERIMENTAL_INGEST_TOKEN }}
-        run: pnpm exec tsx scripts/sync-startup-directory.ts
+        run: pnpm exec tsx scripts/sync-cohort-manifest.ts
 
       - name: Preflight, refresh, and verify freshness
         if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
