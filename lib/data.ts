@@ -12,7 +12,7 @@ import {
 } from "./domain-registry";
 import { companyScoreReceipts } from "./hiring-score";
 import type { FundingCompanyLead, FundingDiscovery } from "./funding-discovery";
-import { fundingLeadEvidenceInput } from "./funding-discovery";
+import { registerFundingCompanyLeads } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
@@ -1364,15 +1364,24 @@ export async function persistFundingDiscoveries(
   leads: FundingCompanyLead[] = []
 ) {
   await ensureDatabase();
-  let leadsRegistered = 0;
-  for (const lead of leads) {
-    const receipt = await registerStartupDomainEvidence(fundingLeadEvidenceInput(lead), "funding-news");
-    leadsRegistered += receipt.accepted;
+  // Persist verified announcements before optional news leads. Lead
+  // registration can throw on an existing-alias identity conflict; that must
+  // not drop the day's funding movements for companies already on the board.
+  const persisted = discoveries.length
+    ? await persistFundingDiscoveryRecords(env.DB, discoveries)
+    : { announcementsAdded: 0, companiesUpdated: 0, affectedCompanyIds: [] as string[] };
+  const leadsRegistered = await registerFundingCompanyLeads(
+    leads,
+    registerStartupDomainEvidence
+  );
+  if (!persisted.affectedCompanyIds.length) {
+    return {
+      announcementsAdded: persisted.announcementsAdded,
+      companiesUpdated: persisted.companiesUpdated,
+      scoresUpdated: 0,
+      leadsRegistered,
+    };
   }
-  if (!discoveries.length) {
-    return { announcementsAdded: 0, companiesUpdated: 0, scoresUpdated: 0, leadsRegistered };
-  }
-  const persisted = await persistFundingDiscoveryRecords(env.DB, discoveries);
 
   const [companies, jobs, changes] = await Promise.all([
     env.DB.prepare(`SELECT ${companyColumns} FROM companies`).all<Company>(),

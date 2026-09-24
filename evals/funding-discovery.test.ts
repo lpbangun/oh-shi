@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import {
@@ -8,6 +9,7 @@ import {
   fundingLeadEvidenceInput,
   fundingLinksFromHtml,
   pageMetadata,
+  registerFundingCompanyLeads,
 } from "../lib/funding-discovery";
 import { fundingMovements } from "../lib/derive";
 import { persistFundingDiscoveryRecords } from "../lib/funding-store";
@@ -230,4 +232,50 @@ test("D1 funding persistence is idempotent and never rolls company facts backwar
     "SELECT source_url AS sourceUrl FROM changes WHERE id=?"
   ).bind(fresh.id).first<{ sourceUrl: string }>();
   assert.equal(change?.sourceUrl, fresh.sourceUrl);
+});
+
+test("a conflicting news lead does not abort sibling lead registration", async () => {
+  const accepted: string[] = [];
+  const leadsRegistered = await registerFundingCompanyLeads(
+    [
+      {
+        companyName: "NovaCorp",
+        websiteUrl: "https://novacorp.com/",
+        evidenceUrl: "https://techcrunch.com/2026/08/01/novacorp-raises/",
+        publisher: "TechCrunch",
+        observedAt: "2026-08-01T14:30:00.000Z",
+      },
+      {
+        companyName: "AliasCo",
+        websiteUrl: "https://aliasco.com/",
+        evidenceUrl: "https://techcrunch.com/2026/08/01/aliasco-raises/",
+        publisher: "TechCrunch",
+        observedAt: "2026-08-01T15:00:00.000Z",
+      },
+      {
+        companyName: "LaterCorp",
+        websiteUrl: "https://latercorp.com/",
+        evidenceUrl: "https://techcrunch.com/2026/08/01/latercorp-raises/",
+        publisher: "TechCrunch",
+        observedAt: "2026-08-01T16:00:00.000Z",
+      },
+    ],
+    async (input) => {
+      if (input.websiteUrl.includes("aliasco.com")) {
+        throw new Error("Domain registry identity conflict: canonical_is_existing_alias:aliasco.com");
+      }
+      accepted.push(input.websiteUrl);
+      return { accepted: 1 };
+    }
+  );
+  assert.equal(leadsRegistered, 2);
+  assert.deepEqual(accepted, ["https://novacorp.com/", "https://latercorp.com/"]);
+});
+
+test("daily funding persist writes announcements before optional news leads", async () => {
+  const source = await readFile(new URL("../lib/data.ts", import.meta.url), "utf8");
+  const persistAt = source.indexOf("persistFundingDiscoveryRecords(env.DB, discoveries)");
+  const leadsAt = source.indexOf("registerFundingCompanyLeads(");
+  assert.ok(persistAt > 0, "announcements must be persisted through D1");
+  assert.ok(leadsAt > persistAt, "news leads must register after announcements persist");
 });

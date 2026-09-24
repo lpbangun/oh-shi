@@ -361,6 +361,31 @@ export function fundingLeadEvidenceInput(lead: FundingCompanyLead): StartupDomai
   };
 }
 
+/**
+ * News leads are optional watchlist growth. A conflicting or unpersistable
+ * domain must not abort the daily persist after verified announcements have
+ * already been extracted — otherwise one alias collision drops every
+ * company funding update from that run.
+ */
+export async function registerFundingCompanyLeads(
+  leads: FundingCompanyLead[],
+  register: (
+    input: StartupDomainEvidenceInput,
+    cohort: string
+  ) => Promise<{ accepted: number }>
+) {
+  let leadsRegistered = 0;
+  for (const lead of leads) {
+    try {
+      const receipt = await register(fundingLeadEvidenceInput(lead), "funding-news");
+      leadsRegistered += Number(receipt.accepted || 0);
+    } catch {
+      // Identity conflicts and other registry failures stay local to the lead.
+    }
+  }
+  return leadsRegistered;
+}
+
 async function mapWithConcurrency<T, U>(
   values: T[],
   limit: number,
