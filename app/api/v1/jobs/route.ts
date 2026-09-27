@@ -1,6 +1,7 @@
 import { apiEnvelope, searchJobs } from "@/lib/data";
 import { JOB_SEARCH_PARAMETERS, JobSearchError, parseJobSearch } from "@/lib/job-search";
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
+import { parseJobFields, projectJob } from "@/lib/job-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,11 @@ export async function GET(request: Request) {
         throw new JobSearchError(`Unknown job parameter "${name}".`);
       }
     }
+    const fields = parseJobFields(params);
     const query = parseJobSearch(params, { defaultLimit: 100, allowOffset: true });
     const result = await searchJobs(query);
     const payload = {
-      ...apiEnvelope(result.jobs),
+      ...apiEnvelope(fields ? result.jobs.map((job) => projectJob(job, fields)) : result.jobs),
       applied_filters: query,
       page: {
         limit: result.limit,
@@ -33,7 +35,8 @@ export async function GET(request: Request) {
     };
     return conditionalJsonResponse(request, payload, {
       cacheControl: "public, max-age=180, s-maxage=600",
-      validator: JSON.stringify({ query, jobs: result.jobs, total: result.total }),
+      validator: JSON.stringify({ query, jobs: result.jobs, total: result.total,
+        ...(fields ? { fields: fields.tokens } : {}) }),
     });
   } catch (error) {
     if (error instanceof JobSearchError) {
