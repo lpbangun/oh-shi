@@ -104,6 +104,59 @@ test("fields= rejects malformed vocabulary across jobs and dashboard", async ({ 
   expect((await request.get("/api/v1/jobs?fields=%20id%2C%20title%20")).status()).toBe(200);
 });
 
+test("intelligence jobs fields= preserves envelope, row identity and cursor", async ({ request }) => {
+  const path = "/api/v1/intelligence?view=jobs&limit=2";
+  const plain = await (await request.get(path)).json();
+  const projected = await (await request.get(`${path}&fields=id,title`)).json();
+  expect(Object.keys(projected.data[0])).toEqual(core);
+  expect(projected.data.map((row: { id: string }) => row.id)).toEqual(plain.data.map((row: { id: string }) => row.id));
+  expect(projected.page).toEqual(plain.page);
+  expect(projected.applied_filters).toEqual(plain.applied_filters);
+  expect(projected.coverage).toEqual(plain.coverage);
+  expect(projected.license).toEqual(plain.license);
+  expect(projected.methodology_version).toEqual(plain.methodology_version);
+  const envelopeBytes = (payload: typeof plain) => {
+    const envelope = structuredClone(payload);
+    delete envelope.data;
+    delete envelope.generated_at;
+    delete envelope.data_as_of;
+    const after = envelope.incremental.after;
+    // Changes URL is a deterministic encoding of the deleted clock field;
+    // assert its entire shape and substitute only that derived value.
+    expect(envelope.incremental.changes_url).toBe(`/api/v1/changes?after=${encodeURIComponent(after)}`);
+    delete envelope.incremental.after;
+    envelope.incremental.changes_url = "/api/v1/changes?after=<derived-from-after>";
+    return JSON.stringify(envelope);
+  };
+  expect(envelopeBytes(projected)).toBe(envelopeBytes(plain));
+  const next = await (await request.get(`${path}&fields=id&cursor=${projected.page.next_cursor}`)).json();
+  const originalNext = await (await request.get(`${path}&cursor=${plain.page.next_cursor}`)).json();
+  expect(next.page).toEqual(originalNext.page);
+  expect(next.data.map((row: { id: string }) => row.id)).toEqual(originalNext.data.map((row: { id: string }) => row.id));
+});
+
+test("intelligence jobs fields= has distinct canonical ETags and fail-closed 400", async ({ request }) => {
+  const path = "/api/v1/intelligence?view=jobs&q=Capture&limit=2";
+  const base = await request.get(path);
+  const id = await request.get(`${path}&fields=id`);
+  const summary = await request.get(`${path}&fields=summary`);
+  const description = await request.get(`${path}&fields=description,id`);
+  const reverse = await request.get(`${path}&fields=id,description`);
+  expect(new Set([base.headers().etag, id.headers().etag, summary.headers().etag, description.headers().etag]).size).toBe(4);
+  expect(reverse.headers().etag).toBe(description.headers().etag);
+  expect((await id.json()).data).toEqual((await summary.json()).data);
+  const replay = await request.get(`${path}&fields=id`, { headers: { "If-None-Match": id.headers().etag } });
+  expect(replay.status()).toBe(304);
+  expect(replay.headers().etag).toBe(id.headers().etag);
+  expect((await request.get(`${path}&fields=id`, { headers: { "If-None-Match": base.headers().etag } })).status()).toBe(200);
+  for (const value of ["bogus", "excerpt", "company", "location", "", "id,,title"]) {
+    const bad = await request.get(`${path}&fields=${encodeURIComponent(value)}`);
+    expect(bad.status(), value).toBe(400);
+    expect((await bad.json()).error).toBe("invalid_request");
+    expect(bad.headers()["cache-control"]).toBe("no-store");
+  }
+});
+
 test("job detail fields= preserves no-ETag behavior and ignores unrelated query", async ({ request }) => {
   const path = "/api/v1/jobs/job_cognition_capture";
   const base = await request.get(path);
