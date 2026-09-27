@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 
-// Characterization captured from the pre-projection routes against the same
-// seed corpus. Only the contract's clock fields are masked; changes_url is
-// compared in full after interpolating its encoded incremental.after timestamp.
+// Characterization captured on the default routes against the same seed corpus
+// with a frozen Workerd clock. Only the contract's clock fields are masked;
+// derived changes_url and all other bytes are compared unchanged.
 function golden(name: string) {
   return JSON.parse(readFileSync(path.join(process.cwd(), "e2e/goldens", name), "utf8"));
 }
@@ -22,10 +22,7 @@ function defaultBytes(body: Record<string, unknown>, expected: Record<string, un
   }
   if ("incremental" in baseline) {
     const incremental = actual.incremental as { after: string; changes_url: string };
-    const expectedIncremental = baseline.incremental as { after: string; changes_url: string };
-    expectedIncremental.changes_url = expectedIncremental.changes_url.replace(
-      "<encoded-after>", encodeURIComponent(incremental.after)
-    );
+    expect(typeof incremental.after).toBe("string");
     incremental.after = "<clock>";
   }
   return [JSON.stringify(actual), JSON.stringify(baseline)];
@@ -121,11 +118,10 @@ test("intelligence jobs fields= preserves envelope, row identity and cursor", as
     delete envelope.generated_at;
     delete envelope.data_as_of;
     const after = envelope.incremental.after;
-    // Changes URL is a deterministic encoding of the deleted clock field;
-    // assert its entire shape and substitute only that derived value.
+    // Frozen Workerd time means the derived URL must also be byte-identical;
+    // verify its relationship to after without masking it.
     expect(envelope.incremental.changes_url).toBe(`/api/v1/changes?after=${encodeURIComponent(after)}`);
     delete envelope.incremental.after;
-    envelope.incremental.changes_url = "/api/v1/changes?after=<derived-from-after>";
     return JSON.stringify(envelope);
   };
   expect(envelopeBytes(projected)).toBe(envelopeBytes(plain));

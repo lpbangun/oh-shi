@@ -27,6 +27,7 @@ import {
 import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } from "@/lib/data";
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { JobSearchError, parseJobSearch } from "@/lib/job-search";
+import { JOB_ELIGIBILITY } from "@/lib/job-eligibility-label";
 import { parseJobFields, projectJob } from "@/lib/job-fields";
 import { ROLE_FAMILIES, ROLE_FAMILY_ALIASES } from "@/lib/job-normalization";
 import { EMPLOYMENT_TYPES } from "@/lib/natural-language-job-search";
@@ -47,6 +48,7 @@ const capabilities = {
   views: {
     jobs: {
       default_limit: 25,
+      eligibility: JOB_ELIGIBILITY,
       default_order: "company-diverse ranked round-robin with stable job id tie-breaker",
       filters: [
         "q",

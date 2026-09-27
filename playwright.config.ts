@@ -45,8 +45,12 @@ export default defineConfig({
   ],
   webServer: {
     command: `pnpm exec vinext dev --hostname 127.0.0.1 --port ${port}`,
+    env: {
+      OHSHI_E2E_STATE_DIR: `/tmp/ohshi-pi-playwright-${process.pid}`,
+      OHSHI_E2E_FIXED_CLOCK: "2026-09-27T00:00:00.000Z",
+    },
     url: baseURL,
-    reuseExistingServer: !ci,
+    reuseExistingServer: false,
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",

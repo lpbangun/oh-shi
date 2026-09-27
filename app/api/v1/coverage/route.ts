@@ -1,6 +1,7 @@
 import { apiEnvelope, getCoverageMetrics } from "@/lib/data";
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { deployedSha, REFRESH_CONTRACT_VERSION } from "@/lib/refresh-contract";
+import { JOB_ELIGIBILITY } from "@/lib/job-eligibility-label";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
   const payload = {
     contract_version: REFRESH_CONTRACT_VERSION,
     deployed_sha: deployedSha(),
-    ...apiEnvelope(coverage),
+    ...apiEnvelope({ ...coverage, jobEligibility: JOB_ELIGIBILITY }),
   };
   return conditionalJsonResponse(request, payload, {
     cacheControl: "public, max-age=180, s-maxage=600",
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
       contract_version: REFRESH_CONTRACT_VERSION,
       deployed_sha: payload.deployed_sha,
       coverage,
+      jobEligibility: JOB_ELIGIBILITY,
     }),
   });
 }

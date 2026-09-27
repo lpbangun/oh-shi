@@ -33,3 +33,5 @@ import "./cohort-permission-gating.test";
 import "./discovery-remediation.test";
 import "./discovery-slug-corroboration.test";
 import "./discovery-evidence-slugs.test";
+import "./non-tech-title-search.test";
+import "./frozen-clock-isolation.test";
