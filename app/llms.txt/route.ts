@@ -1,4 +1,5 @@
 import { conditionalResponse } from "@/lib/conditional-cache";
+import { JOB_ELIGIBILITY } from "@/lib/job-eligibility-label";
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
@@ -136,6 +137,7 @@ closedAt is the confirmed closure time; occurredAt is the event observation time
 - Daily changes export: ${origin}/exports/daily-changes.json
 
 Job states are verified_open or verified_closed; collection queries default to open.
+${JOB_ELIGIBILITY.label}: ${JOB_ELIGIBILITY.semantics}
 Treat canonicalUrl as the
 application source. Job provenance includes rawUrl, evidenceUrl, discoveryChannel,
 parserVersion, snapshotRunId, firstSeenAt, lastSeenAt, sourceUpdatedAt, and

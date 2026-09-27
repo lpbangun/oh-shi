@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { CanonicalHttpError, fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
 import { probeAtsBySlug } from "./ats-slug-probe";
+import { registryProbeSlugs } from "./discovery-evidence-slugs";
 import { YC_SOURCE_KIND } from "./startup-directory";
 import {
   ensureDatabase,
@@ -22,10 +23,12 @@ import { normalizeDomain, sourceKey } from "./source-registry";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import {
   discoveryActivationDueAt,
+  discoveryPromotionGateSql,
   discoveryPromotionOrderSql,
   discoveryQueueOrderSql,
   discoveryRetryAt,
   discoveryRunnableSql,
+  discoverySourceFetchRefusal,
   isTransientDiscoveryError,
 } from "./discovery-policy";
 import { normalizeSector } from "./types";
@@ -160,11 +163,12 @@ const excludedDiscoveryDomain = (domain: string, sourceDomain: string) =>
 async function discoverInvestorSource(source: {
   id: string; portfolioUrl: string; accessMode: string; discoveryCursor: number;
 }, fetcher: typeof fetch, now: string) {
-  if (source.accessMode !== "public_page") {
+  const refusal = discoverySourceFetchRefusal(source.accessMode);
+  if (refusal) {
     return {
       discovered: 0,
       nextCursor: source.discoveryCursor,
-      status: source.accessMode === "manual_import" ? "manual" as const : "blocked" as const,
+      status: refusal,
     };
   }
   const response = await permittedFetch(source.portfolioUrl, fetcher);
@@ -241,10 +245,12 @@ async function resolveCanonicalSourceResult(
   if (probe.detectionStatus === "ambiguous") {
     return { detection: null, outcome: "ambiguous" };
   }
+  const registrySlugs = await registryBoardSlugs(candidate.normalizedDomain);
   const slugMatch = await probeAtsBySlug(
     candidate.normalizedDomain,
     candidate.companyName,
-    { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
+    { fetcher, extraSlugs: registrySlugs.candidates,
+      corroboratingSlugs: registrySlugs.corroborating }
   );
   if (!slugMatch || slugMatch.provider === "manual") {
     const allWebsiteFetchesBlocked = probe.pages.length > 0 && probe.pages.every(
@@ -281,12 +287,15 @@ export async function resolveCanonicalSource(
  * better slug guess than the domain label whenever the two differ.
  */
 async function registryBoardSlugs(domain: string) {
-  const evidence = await env.DB.prepare(`SELECT source_id as sourceId
+  const evidence = await env.DB.prepare(`SELECT source_id as sourceId,
+    source_kind as sourceKind, source_classification as sourceClassification,
+    permission_status as permissionStatus, evidence_url as evidenceUrl
     FROM startup_domain_evidence WHERE canonical_domain=?`)
-    .bind(domain).all<{ sourceId: string }>();
-  return evidence.results
-    .map((row) => row.sourceId.includes(":") ? row.sourceId.split(":").pop() || "" : "")
-    .filter(Boolean);
+    .bind(domain).all<{
+      sourceId: string; sourceKind: string; sourceClassification: string;
+      permissionStatus: string; evidenceUrl: string;
+    }>();
+  return registryProbeSlugs(evidence.results);
 }
 
 export async function activateDiscoveredCandidate(
@@ -361,7 +370,7 @@ async function processCandidate(
   fetcher: typeof fetch,
   now: string,
   allowActivation: boolean
-) {
+): Promise<{ activated: boolean; boardDetected: boolean; deferred: boolean }> {
   const attemptCount = Number(candidate.attemptCount || 0) + 1;
   await env.DB.prepare(`UPDATE discovery_queue SET status='resolving',
     last_attempted_at=?, attempt_count=?, next_attempt_at=NULL WHERE id=?`)
@@ -388,7 +397,7 @@ async function processCandidate(
           : "Automatic board discovery was blocked or failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, deferred: retryable };
   }
   const detection = resolution.detection;
   if (!detection) {
@@ -410,7 +419,7 @@ async function processCandidate(
               ? "Official website linked to an external career system without a supported canonical adapter."
             : "Official website checked; no supported public ATS or actionable first-party career page was detected.",
           candidate.id).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, deferred: false };
   }
   try {
     const canonical = await fetchCanonicalBoard(detection.provider, detection.boardId, fetcher);
@@ -420,7 +429,7 @@ async function processCandidate(
         last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
         .bind(DISCOVERY_PIPELINE_VERSION,
           "Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, deferred: false };
     }
     if (!allowActivation) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='canonical_source_found',
@@ -432,10 +441,10 @@ async function processCandidate(
           discoveryActivationDueAt(now),
           candidate.id
         ).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, deferred: false };
     }
     await activateDiscoveredCandidate(candidate, detection, now);
-    return { activated: true, boardDetected: true };
+    return { activated: true, boardDetected: true, deferred: false };
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     const retryable = isTransientDiscoveryError(error);
@@ -453,7 +462,7 @@ async function processCandidate(
           : "ATS detected but canonical verification failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: true };
+    return { activated: false, boardDetected: true, deferred: retryable };
   }
 }
 
@@ -487,6 +496,8 @@ export async function promoteRegistryDomains(
 ) {
   // Newest registry evidence first so today's YC/news domains are queued before
   // a years-old encyclopedia backlog. Directory-ranked is only a tie-break.
+  // The gate (pending, unowned, never queued, permitted evidence) lives in
+  // `discoveryPromotionGateSql`: permission is refused there, never deferred.
   const pending = await env.DB.prepare(`SELECT
       domains.canonical_domain as canonicalDomain,
       domains.company_name as companyName,
@@ -497,10 +508,7 @@ export async function promoteRegistryDomains(
       ON evidence.canonical_domain=domains.canonical_domain
     LEFT JOIN discovery_queue queue
       ON queue.normalized_domain=domains.canonical_domain
-    WHERE evidence.permission_status='permitted'
-      AND domains.review_status='pending'
-      AND domains.company_id IS NULL
-      AND queue.id IS NULL
+    WHERE ${discoveryPromotionGateSql()}
     GROUP BY domains.canonical_domain
     ORDER BY ${discoveryPromotionOrderSql("domains")}
     LIMIT ?`)
@@ -614,6 +622,10 @@ export async function runDiscovery(options: {
     ).all<Candidate>();
   let canonicalBoardsDetected = 0;
   let companiesActivated = 0;
+  // Candidates whose attempt ended in the transient path (the subrequest
+  // ceiling included): the queue row is back in a re-runnable state with a
+  // backoff, so the run reports them as deferred instead of failed.
+  let candidatesDeferred = 0;
   const processed = await processSequentiallyIsolated(
     queued.results,
     async (candidate) => {
@@ -623,11 +635,13 @@ export async function runDiscovery(options: {
       );
       if (result.boardDetected) canonicalBoardsDetected += 1;
       if (result.activated) companiesActivated += 1;
+      if (result.deferred) candidatesDeferred += 1;
       return result;
     },
     async (candidate, error) => {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       const attemptCount = Number(candidate.attemptCount || 0) + 1;
+      candidatesDeferred += 1;
       await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
         discovery_version=?, last_outcome='probe_failed', attempt_count=MAX(attempt_count, ?),
         next_attempt_at=?,
@@ -662,6 +676,7 @@ export async function runDiscovery(options: {
     candidates_processed: Math.min(queued.results.length, options.processLimit || DEFAULT_PROCESS_LIMIT),
     canonical_boards_detected: canonicalBoardsDetected,
     companies_activated: companiesActivated,
+    candidates_deferred: candidatesDeferred,
     failed_sources: failedSources,
     failed_candidates: failedCandidates,
     blocked_sources: blockedSources,

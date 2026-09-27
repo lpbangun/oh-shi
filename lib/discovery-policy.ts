@@ -58,11 +58,68 @@ export function discoveryQueueOrderSql(queueAlias = "q") {
   return `COALESCE(${queueAlias}.attempt_count, 0) ASC, ${queueAlias}.first_discovered_at DESC, ${queueAlias}.id DESC`;
 }
 
+/**
+ * The registry's enqueue gate. Promotion is the only path from the domain
+ * registry into `discovery_queue`, and it admits a row only when the row is
+ * pending, unowned, not yet queued, and carries at least one `permitted`
+ * evidence row. `manual_only` and `awaiting_permission` leads stay in the
+ * registry: permission is refused here, not deferred into the queue.
+ */
+export function discoveryPromotionGateSql(options: {
+  domainsAlias?: string;
+  evidenceAlias?: string;
+  queueAlias?: string;
+} = {}) {
+  const domains = options.domainsAlias || "domains";
+  const evidence = options.evidenceAlias || "evidence";
+  const queue = options.queueAlias || "queue";
+  for (const alias of [domains, evidence, queue]) {
+    if (!/^[a-z][a-z0-9_]*$/i.test(alias)) throw new Error("invalid_sql_alias");
+  }
+  return `${evidence}.permission_status='permitted'
+      AND ${domains}.review_status='pending'
+      AND ${domains}.company_id IS NULL
+      AND ${queue}.id IS NULL`;
+}
+
+/**
+ * The other enqueue path is an investor portfolio, and a source whose access
+ * mode is not `public_page` is never fetched at all — its candidates cannot be
+ * enqueued, so `manual_only` and `awaiting_permission` portfolios stay leads.
+ * Returns the non-fetching receipt status, or `null` when the source may run.
+ */
+export function discoverySourceFetchRefusal(
+  accessMode: string
+): "manual" | "blocked" | null {
+  if (accessMode === "public_page") return null;
+  return accessMode === "manual_import" ? "manual" : "blocked";
+}
+
 /** Registry promotion: newest evidence first; directory-ranked only as a tie-break. */
 export function discoveryPromotionOrderSql(domainsAlias = "domains") {
   if (!/^[a-z][a-z0-9_]*$/i.test(domainsAlias)) throw new Error("invalid_sql_alias");
   return `${domainsAlias}.first_seen_at DESC, directoryRanked DESC, ${domainsAlias}.canonical_domain`;
 }
+
+/**
+ * The Workers platform refuses further fetches once a single invocation has
+ * spent its subrequest budget ("Too many subrequests by single Worker
+ * invocation"). That is a per-invocation capacity limit, not evidence about
+ * the employer: the candidate never received a full attempt, so it must be
+ * deferred, never stamped terminal. One discovery candidate costs several
+ * fetches (website probe + ATS slug probes + canonical board), so the default
+ * 50-subrequest budget can burn most of a batch.
+ */
+const SUBREQUEST_CEILING = /\bsubrequests?\b/i;
+
+/**
+ * Version of the error-classification behavior above. Raising it is part of
+ * the composite `DISCOVERY_PIPELINE_VERSION` (lib/discovery-version.ts), which
+ * is the designed re-check trigger: rows stamped at an older version become
+ * runnable again through the pipeline's own predicate instead of any direct
+ * data surgery.
+ */
+export const DISCOVERY_CLASSIFICATION_VERSION = "2";
 
 export function isTransientDiscoveryError(error: unknown) {
   if (error instanceof TypeError) return true;
@@ -73,8 +130,9 @@ export function isTransientDiscoveryError(error: unknown) {
     return candidate.status === 408 || candidate.status === 425 ||
       candidate.status === 429 || candidate.status >= 500;
   }
-  return typeof candidate.message === "string" &&
-    /timeout|timed out|abort|network|fetch failed|robots|429|5\d\d/i.test(candidate.message);
+  if (typeof candidate.message !== "string") return false;
+  if (SUBREQUEST_CEILING.test(candidate.message)) return true;
+  return /timeout|timed out|abort|network|fetch failed|robots|429|5\d\d/i.test(candidate.message);
 }
 
 export function discoveryRetryAt(

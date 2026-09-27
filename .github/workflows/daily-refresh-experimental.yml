@@ -1,0 +1,80 @@
+# Experimental-only copy of the two-hour refresh workflow. It targets the
+# isolated experimental deployment (Worker `oh-shi-experimental` at
+# https://oh-shi-experimental.lpbangun.workers.dev, D1 `oh-shi-experimental`)
+# and sources credentials exclusively from the OH_SHI_EXPERIMENTAL_* variable
+# and secret. Production's schedule, credentials, and hosting pointer stay
+# untouched; `evals/workflow-isolation.test.ts` pins that contract.
+name: Experimental two-hour discovery and canonical refresh
+
+on:
+  schedule:
+    # Same cadence as production; the experimental corpus lives in its own
+    # database, so the two schedules never contend for the same rows.
+    - cron: "30 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Operation to run
+        required: true
+        default: refresh
+        type: choice
+        options:
+          - refresh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experimental-discovery-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Keeps the experimental employer cohort registered. Evidence only: this
+      # step never activates a company and only `permitted` rows ever run, so a
+      # manifest change cannot publish a job. Re-running is idempotent (domains,
+      # evidence, and cohort membership are upserts).
+      - name: Sync the general:v1 employer cohort into the experimental domain registry
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
+        id: directory_sync
+        continue-on-error: true
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_EXPERIMENTAL_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_EXPERIMENTAL_INGEST_TOKEN }}
+        run: pnpm exec tsx scripts/sync-cohort-manifest.ts
+
+      - name: Preflight, refresh, and verify freshness
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'refresh' }}
+        env:
+          OH_SHI_BASE_URL: ${{ vars.OH_SHI_EXPERIMENTAL_BASE_URL }}
+          OH_SHI_INGEST_TOKEN: ${{ secrets.OH_SHI_EXPERIMENTAL_INGEST_TOKEN }}
+          OH_SHI_RUN_KEY: exp-${{ github.run_id }}
+        run: node scripts/run-canonical-refresh.mjs
+
+      # Keep the job red for visibility without letting a malformed directory
+      # record prevent already-persisted candidates from being refreshed.
+      - name: Report directory sync failure
+        if: ${{ (github.event_name == 'schedule' || inputs.mode == 'refresh') && steps.directory_sync.outcome == 'failure' }}
+        run: |
+          echo "::error::Directory sync failed; canonical refresh still ran."
+          exit 1

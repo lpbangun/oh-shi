@@ -112,6 +112,38 @@ boards awaiting activation, and activated companies.
 Individual company and job records are available at
 `/api/v1/companies/:id` and `/api/v1/jobs/:id`.
 
+### Employer-first experiment and compact job reads
+
+The [experimental deployment](https://oh-shi-experimental.lpbangun.workers.dev)
+runs as a separate Worker with its own D1 database, ingestion token, and refresh
+workflow. It does not write to the production deployment. Employer leads from
+the `general-v1` cohort are only candidates: permitted evidence gates promotion,
+and a complete, validated employer-controlled source must verify each opening.
+The Free-plan Personio shortfall is reported honestly as **capacity-tested ≠
+coverage proven**; registry counts are not counts of verified jobs.
+
+On the experimental branch, `/api/v1/jobs`, `/api/v1/jobs/:id`, and
+`/api/v1/intelligence?view=jobs` accept `fields=` with exactly these tokens:
+`id,provider,sourceId,canonicalUrl,title,status,summary,description`.
+Projected rows always include the first six keys and the stored `summary`;
+`description` appears only when explicitly requested. For example, the
+compact Jobsss live read uses:
+
+```text
+/api/v1/intelligence?view=jobs&fields=id,provider,sourceId,canonicalUrl,title,status,summary
+```
+
+Without `fields`, the original response is unchanged. Invalid or empty token
+lists return HTTP 400. Projection leaves pagination, incremental receipts, and
+license attribution intact; the collection ETag distinguishes token sets.
+
+"US-eligible incl. global/unspecified remote" describes the ingest gate: US
+locations (including onsite) and bare/global/unspecified remote are included,
+while explicitly foreign-only roles are excluded. It is **not** a remote-only
+filter or proof of US work authorization. Consumers may filter `remote_status`
+separately. Non-tech titles such as nurse, driver, and accountant are searched
+through `q` title matching, not through the `Other` role-family bucket.
+
 ### Jobsss and other incremental consumers
 
 Use the initial jobs response and its `incremental` receipt as one workflow:
