@@ -417,5 +417,29 @@ test("the domain-label guard stays byte-unchanged and the relaxation stays gated
   assert.match(source, /export const ATS_SLUG_CORROBORATION_VERSION = "\d+";/);
   // The probe's only caller still hands it the candidate's registry evidence.
   const discovery = await read("lib/discovery.ts");
-  assert.match(discovery, /extraSlugs: await registryBoardSlugs\(candidate\.normalizedDomain\)/);
+  assert.match(discovery, /const registrySlugs = await registryBoardSlugs\(candidate\.normalizedDomain\)/);
+  assert.match(discovery, /extraSlugs: registrySlugs\.candidates/);
+  assert.match(discovery, /corroboratingSlugs: registrySlugs\.corroborating/);
+});
+
+test("a non-vendor alias remains a Greenhouse candidate but cannot bypass the vendor guard", async () => {
+  const fetcher = routeFetcher({
+    "https://boards-api.greenhouse.io/v1/boards/acme-gmbh/jobs?content=true":
+      () => jsonResponse(greenhouseJobs()),
+    "https://boards-api.greenhouse.io/v1/boards/acme-gmbh":
+      () => jsonResponse({ name: "Acme" }),
+    "https://acme-gmbh.jobs.personio.de/xml?language=en":
+      () => xmlResponse(PERSONIO_XML),
+  });
+  assert.deepEqual(await probeAtsBySlug("acme.com", "Acme", {
+    fetcher, extraSlugs: ["acme-gmbh"], corroboratingSlugs: [],
+  }), {
+    provider: "greenhouse", boardId: "acme-gmbh",
+    careersUrl: "https://job-boards.greenhouse.io/acme-gmbh", confirmedBy: "board_name",
+  });
+  assert.equal(await probeAtsBySlug("acme.com", "Acme", {
+    fetcher: routeFetcher({
+      "https://acme-gmbh.jobs.personio.de/xml?language=en": () => xmlResponse(PERSONIO_XML),
+    }), extraSlugs: ["acme-gmbh"], corroboratingSlugs: [],
+  }), null);
 });

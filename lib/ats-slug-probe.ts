@@ -15,7 +15,7 @@ export const ATS_SLUG_PROBE_VERSION = "1.1";
  * runnable again through the pipeline's own predicate instead of any direct
  * data surgery.
  */
-export const ATS_SLUG_CORROBORATION_VERSION = "1";
+export const ATS_SLUG_CORROBORATION_VERSION = "2";
 
 const PROBE_USER_AGENT = "OH-SHI/1.0 ats-slug-probe (https://ohshi.work/about)";
 
@@ -171,13 +171,15 @@ export type SlugProbeResult = {
 export async function probeAtsBySlug(
   domain: string,
   companyName: string,
-  options: { fetcher?: typeof fetch; extraSlugs?: string[] } = {}
+  options: { fetcher?: typeof fetch; extraSlugs?: string[]; corroboratingSlugs?: string[] } = {}
 ): Promise<SlugProbeResult | null> {
   const fetcher = options.fetcher || fetch;
   const session = new PublicWebSession(fetcher, PROBE_USER_AGENT);
   const guardedFetcher = (async (input: string | URL | Request) =>
     session.fetch(String(input))) as typeof fetch;
-  const evidence = evidenceSlugs(options.extraSlugs);
+  // Candidate guesses may help Greenhouse's board-name verification, but only
+  // vendor-host evidence may bypass the non-Greenhouse domain-label guard.
+  const evidence = evidenceSlugs(options.corroboratingSlugs ?? options.extraSlugs);
   let probeFailure: unknown = null;
   for (const slug of slugCandidates(domain, options.extraSlugs)) {
     for (const provider of PROBED_PROVIDERS) {

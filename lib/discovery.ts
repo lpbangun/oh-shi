@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { CanonicalHttpError, fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
 import { probeAtsBySlug } from "./ats-slug-probe";
+import { registryProbeSlugs } from "./discovery-evidence-slugs";
 import { YC_SOURCE_KIND } from "./startup-directory";
 import {
   ensureDatabase,
@@ -244,10 +245,12 @@ async function resolveCanonicalSourceResult(
   if (probe.detectionStatus === "ambiguous") {
     return { detection: null, outcome: "ambiguous" };
   }
+  const registrySlugs = await registryBoardSlugs(candidate.normalizedDomain);
   const slugMatch = await probeAtsBySlug(
     candidate.normalizedDomain,
     candidate.companyName,
-    { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
+    { fetcher, extraSlugs: registrySlugs.candidates,
+      corroboratingSlugs: registrySlugs.corroborating }
   );
   if (!slugMatch || slugMatch.provider === "manual") {
     const allWebsiteFetchesBlocked = probe.pages.length > 0 && probe.pages.every(
@@ -284,12 +287,15 @@ export async function resolveCanonicalSource(
  * better slug guess than the domain label whenever the two differ.
  */
 async function registryBoardSlugs(domain: string) {
-  const evidence = await env.DB.prepare(`SELECT source_id as sourceId
+  const evidence = await env.DB.prepare(`SELECT source_id as sourceId,
+    source_kind as sourceKind, source_classification as sourceClassification,
+    permission_status as permissionStatus, evidence_url as evidenceUrl
     FROM startup_domain_evidence WHERE canonical_domain=?`)
-    .bind(domain).all<{ sourceId: string }>();
-  return evidence.results
-    .map((row) => row.sourceId.includes(":") ? row.sourceId.split(":").pop() || "" : "")
-    .filter(Boolean);
+    .bind(domain).all<{
+      sourceId: string; sourceKind: string; sourceClassification: string;
+      permissionStatus: string; evidenceUrl: string;
+    }>();
+  return registryProbeSlugs(evidence.results);
 }
 
 export async function activateDiscoveredCandidate(

@@ -22,6 +22,10 @@ import { DISCOVERY_CLASSIFICATION_VERSION } from "./discovery-policy";
  * component — no detector or adapter version moves for behavior it did not
  * change — and the candidates the old guard refused re-queue through this
  * re-check, never by direct D1 writes.
+ *
+ * `slug-corroboration-2` narrows that exception to permitted general-v1 POC
+ * evidence whose HTTPS URL is the exact Personio/Recruitee board host for the
+ * recorded slug. A generic curated page suffix is not board corroboration.
  */
 export const DISCOVERY_PIPELINE_VERSION = [
   `ats-detection-${ATS_DETECTION_VERSION}`,
