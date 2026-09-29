@@ -27,6 +27,8 @@ import {
   discoveryRetryAt,
   discoveryRunnableSql,
   isTransientDiscoveryError,
+  resolveDiscoveredCompanySlug,
+  companySlugFromDomain,
 } from "./discovery-policy";
 import { normalizeSector } from "./types";
 
@@ -299,7 +301,13 @@ export async function activateDiscoveredCandidate(
     "SELECT id FROM companies WHERE lower(domain)=? LIMIT 1"
   ).bind(candidate.normalizedDomain).first<{ id: string }>();
   const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
-  const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
+  const baseSlug = companySlugFromDomain(candidate.normalizedDomain);
+  const slugOccupant = !existingCompany && baseSlug
+    ? await env.DB.prepare(
+        "SELECT domain FROM companies WHERE slug=? LIMIT 1"
+      ).bind(baseSlug).first<{ domain: string }>()
+    : null;
+  const slug = resolveDiscoveredCompanySlug(candidate.normalizedDomain, slugOccupant);
   const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
   // Discovery has no permitted source industry field. Keep that absence honest,
   // but use strong labels in the already-persisted company name/domain as
@@ -328,21 +336,24 @@ export async function activateDiscoveredCandidate(
     env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
       id, company_id, provider, board_id, careers_url, enabled, discovery_status,
       first_discovered_at, consecutive_failures, review_notes
-    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 0, 'Automatically detected and canonically verified')`)
+    ) SELECT ?, ?, ?, ?, ?, ?, 'active', ?, 0, 'Automatically detected and canonically verified'
+      WHERE EXISTS (SELECT 1 FROM companies WHERE id=?)`)
       .bind(canonicalSourceId, companyId, detection.provider, detection.boardId,
-        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now),
+        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now, companyId),
     env.DB.prepare(`INSERT OR IGNORE INTO company_investors (
       company_id, investor_source_id, first_discovered_at, evidence_url
     ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
-      FROM discovery_queue_investors WHERE candidate_id=?`).bind(companyId, candidate.id),
+      FROM discovery_queue_investors WHERE candidate_id=?
+      AND EXISTS (SELECT 1 FROM companies WHERE id=?)`).bind(companyId, candidate.id, companyId),
     env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
       last_outcome='activated', discovery_version=?, next_attempt_at=NULL,
-      review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
-      .bind(DISCOVERY_PIPELINE_VERSION, candidate.id),
+      review_notes='Canonical source verified with US-eligible open jobs.'
+      WHERE id=? AND EXISTS (SELECT 1 FROM companies WHERE id=?)`)
+      .bind(DISCOVERY_PIPELINE_VERSION, candidate.id, companyId),
     env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
       review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
       career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
-      WHERE canonical_domain=?`).bind(
+      WHERE canonical_domain=? AND EXISTS (SELECT 1 FROM companies WHERE id=?)`).bind(
       companyId,
       detection.careersUrl,
       detection.provider,
@@ -350,9 +361,15 @@ export async function activateDiscoveredCandidate(
       careerFingerprint(detection.provider, detection.boardId, detection.careersUrl),
       now,
       now,
-      candidate.normalizedDomain
+      candidate.normalizedDomain,
+      companyId
     ),
   ]);
+  const persisted = await env.DB.prepare("SELECT id FROM companies WHERE id=?")
+    .bind(companyId).first<{ id: string }>();
+  if (!persisted) {
+    throw new Error("company_row_missing_after_activation");
+  }
   return { companyId, canonicalSourceId };
 }
 

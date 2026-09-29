@@ -93,3 +93,33 @@ export function discoveryRetryAt(
 export function discoveryActivationDueAt(verifiedAt: string) {
   return new Date(Date.parse(verifiedAt) + DISCOVERY_ACTIVATION_DEFER_MS).toISOString();
 }
+
+/** Public company slugs collapse every non-alphanumeric run to `-`. */
+export function companySlugFromDomain(domain: string) {
+  return domain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function slugDisambiguator(domain: string) {
+  let hash = 2166136261;
+  for (const character of domain) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * `acme.co.uk` and `acme-co.uk` share a slug. Reusing it makes
+ * `INSERT OR IGNORE INTO companies` a no-op while sources still write
+ * against the never-created second id.
+ */
+export function resolveDiscoveredCompanySlug(
+  domain: string,
+  occupant: { domain: string } | null
+) {
+  const base = companySlugFromDomain(domain);
+  const suffix = slugDisambiguator(domain);
+  if (!base) return `company-${suffix}`;
+  if (!occupant || occupant.domain.toLowerCase() === domain.toLowerCase()) return base;
+  return `${base}-${suffix}`;
+}
