@@ -5,6 +5,7 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  TEST_FIXED_CLOCK?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -25,8 +26,29 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
+let clockFrozen = false;
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Only the local test binding freezes Workerd before D1 bootstrap. Production
+    // deploy configuration never supplies it; real timestamps remain untouched.
+    if (env.TEST_FIXED_CLOCK && !clockFrozen) {
+      const NativeDate = Date;
+      const fixed = NativeDate.parse(env.TEST_FIXED_CLOCK);
+      if (!Number.isFinite(fixed)) throw new Error("Invalid local test clock.");
+      globalThis.Date = new Proxy(NativeDate, {
+        construct(target, args, newTarget) {
+          return Reflect.construct(target, args.length ? args : [fixed], newTarget);
+        },
+        apply() {
+          return new NativeDate(fixed).toString();
+        },
+        get(target, key, receiver) {
+          return key === "now" ? () => fixed : Reflect.get(target, key, receiver);
+        },
+      });
+      clockFrozen = true;
+    }
     const url = new URL(request.url);
     const isPublicAgentRoute =
       url.pathname === "/llms.txt" ||

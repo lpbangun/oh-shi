@@ -23,6 +23,8 @@ if (!/^[0-9a-f]{40}$/i.test(deployedSha)) {
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localVars: Record<string, string> = {};
 if (process.env.INGEST_TOKEN) localVars.INGEST_TOKEN = process.env.INGEST_TOKEN;
+// Local-only characterization clock; never expose it in the deploy config.
+if (process.env.OHSHI_E2E_FIXED_CLOCK) localVars.TEST_FIXED_CLOCK = process.env.OHSHI_E2E_FIXED_CLOCK;
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -47,7 +49,10 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ command }) => {
+  if (command === "build" && (process.env.OHSHI_E2E_FIXED_CLOCK || process.env.OHSHI_E2E_STATE_DIR)) {
+    throw new Error("E2E-only clock/state cannot be used in builds.");
+  }
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -70,6 +75,9 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,
+        ...(process.env.OHSHI_E2E_STATE_DIR
+          ? { persistState: { path: process.env.OHSHI_E2E_STATE_DIR } }
+          : {}),
       }),
     ],
   };

@@ -17,6 +17,7 @@ const VIEW_PARAMETERS: Record<IntelligenceView, Set<string>> = {
     "investor",
     "new_since",
     "sort",
+    "fields",
   ]),
   companies: new Set([...COMMON, "sector", "investor", "provider", "min_signal", "min_confidence"]),
   movements: new Set([
