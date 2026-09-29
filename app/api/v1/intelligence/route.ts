@@ -27,6 +27,7 @@ import {
 import { getCoverageMetrics, listChanges, listCompanies, listJobs, searchJobs } from "@/lib/data";
 import { conditionalJsonResponse } from "@/lib/conditional-cache";
 import { JobSearchError, parseJobSearch } from "@/lib/job-search";
+import { parseJobFields, projectJob } from "@/lib/job-fields";
 import { ROLE_FAMILIES, ROLE_FAMILY_ALIASES } from "@/lib/job-normalization";
 import { EMPLOYMENT_TYPES } from "@/lib/natural-language-job-search";
 import { isBoardTracked } from "@/lib/tracked-boards";
@@ -62,6 +63,7 @@ const capabilities = {
         "sort",
         "limit",
         "cursor",
+        "fields",
       ],
       filter_availability: {
         investor: "See availability.investorFiltering; unavailable means the filter returns no matches.",
@@ -254,6 +256,7 @@ export async function GET(request: Request) {
 
     if (view === "jobs") {
       const changeFeedStart = new Date().toISOString();
+      const fields = parseJobFields(url.searchParams);
       const query = parseJobSearch(url.searchParams, { defaultLimit: 25 });
       const [result, coverage] = await Promise.all([searchJobs(query), getCoverageMetrics()]);
       const dataAsOf = coverage.lastCanonicalRefresh || latestTimestamp([], result.jobs, []);
@@ -272,7 +275,7 @@ export async function GET(request: Request) {
           new_since: query.newSince,
           sort: query.sort,
           limit: query.limit,
-        }, result.jobs, {
+        }, fields ? result.jobs.map((job) => projectJob(job, fields)) : result.jobs, {
           limit: result.limit,
           returned: result.jobs.length,
           next_cursor: result.nextOffset === null ? null : `v2.jobs.${result.nextOffset}`,
@@ -287,7 +290,8 @@ export async function GET(request: Request) {
       };
       return conditionalJsonResponse(request, payload, {
         cacheControl: "public, max-age=180, s-maxage=600",
-        validator: JSON.stringify({ query, result, coverage, dataAsOf }),
+        validator: JSON.stringify({ query, result, coverage, dataAsOf,
+          ...(fields ? { fields: fields.tokens } : {}) }),
       });
     }
 

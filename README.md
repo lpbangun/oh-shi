@@ -93,7 +93,7 @@ matching total in `page.total`.
 | --- | --- |
 | [`/api/v1/intelligence`](https://ohshi.work/api/v1/intelligence) | Preferred filtered API and capability discovery |
 | [`/api/v1/companies`](https://ohshi.work/api/v1/companies) | Company collection and compatibility API |
-| [`/api/v1/jobs`](https://ohshi.work/api/v1/jobs) | Job collection; pass `include_closed=true` for history |
+| [`/api/v1/jobs`](https://ohshi.work/api/v1/jobs) | Job collection; pass `include_closed=true` for history or `fields=id,title` for compact rows |
 | [`/api/v1/changes`](https://ohshi.work/api/v1/changes) | Incremental change feed |
 | [`/api/v1/coverage`](https://ohshi.work/api/v1/coverage) | Freshness and source coverage |
 | [`/api/v1/signals`](https://ohshi.work/api/v1/signals) | Active off-board hiring signals |
@@ -110,7 +110,12 @@ blocked or failed probes, canonical fetch failures, empty U.S. boards, verified
 boards awaiting activation, and activated companies.
 
 Individual company and job records are available at
-`/api/v1/companies/:id` and `/api/v1/jobs/:id`.
+`/api/v1/companies/:id` and `/api/v1/jobs/:id`. Both job endpoints and the jobs
+view accept an optional `fields=` parameter that projects each record to the
+seven core keys (`id`, `provider`, `sourceId`, `canonicalUrl`, `title`, `status`,
+`summary`), adding `description` only when it is requested. Omitting `fields=`
+keeps the existing full response unchanged; invalid or repeated tokens return
+HTTP 400, and the dashboard endpoint rejects the parameter.
 
 ### Jobsss and other incremental consumers
 
