@@ -9,6 +9,8 @@ Notable changes to OH SHI are recorded here. The format follows
 ### Added
 
 - Deterministic natural-language job search across the public API and job board.
+- An optional `fields=` projection on the job list, job detail, and intelligence jobs
+  view so agents can request compact rows instead of full records.
 - A persistent GitHub repository link in the site header.
 
 ### Fixed

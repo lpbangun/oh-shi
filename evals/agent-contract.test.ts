@@ -77,6 +77,8 @@ test("agent instructions use the actual public field casing and query recipes", 
   assert.match(llms, /HTTP 400/);
   assert.match(llms, /sector=Healthcare&min_confidence=80/);
   assert.doesNotMatch(llms, /sector=Health&/);
+  assert.match(llms, /fields=id,description/);
+  assert.match(llms, /dashboard\/jobs endpoint rejects fields/);
 });
 
 test("API envelopes remain versioned, incremental, and licensed", async () => {
