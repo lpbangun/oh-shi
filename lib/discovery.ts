@@ -27,6 +27,7 @@ import {
   discoveryRetryAt,
   discoveryRunnableSql,
   isTransientDiscoveryError,
+  planDiscoveredCompanyActivation,
 } from "./discovery-policy";
 import { normalizeSector } from "./types";
 
@@ -298,9 +299,17 @@ export async function activateDiscoveredCandidate(
   const existingCompany = await env.DB.prepare(
     "SELECT id FROM companies WHERE lower(domain)=? LIMIT 1"
   ).bind(candidate.normalizedDomain).first<{ id: string }>();
-  const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
-  const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
   const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
+  const boardOwner = await env.DB.prepare(
+    "SELECT company_id as companyId FROM company_sources WHERE provider=? AND board_id=? LIMIT 1"
+  ).bind(detection.provider, detection.boardId).first<{ companyId: string }>();
+  const plan = planDiscoveredCompanyActivation({
+    existingCompanyId: existingCompany?.id,
+    boardOwnerCompanyId: boardOwner?.companyId,
+    newCompanyId: hashId("company", candidate.normalizedDomain),
+  });
+  const companyId = plan.companyId;
+  const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
   // Discovery has no permitted source industry field. Keep that absence honest,
   // but use strong labels in the already-persisted company name/domain as
   // context so an AI, fintech, or robotics startup is not stranded in Other.
@@ -309,8 +318,8 @@ export async function activateDiscoveredCandidate(
     name: candidate.companyName,
     domain: candidate.normalizedDomain,
   });
-  await env.DB.batch([
-    env.DB.prepare(`INSERT OR IGNORE INTO companies (
+  const statements = [
+    ...(plan.insertCompany ? [env.DB.prepare(`INSERT OR IGNORE INTO companies (
       id, slug, name, domain, description, founded_year, headquarters, employee_range,
       industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
       evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
@@ -320,17 +329,17 @@ export async function activateDiscoveredCandidate(
       'Not published', 'active', 0, 0, 'Not published', NULL, ?, ?, 0, ?)`)
       .bind(companyId, slug, candidate.companyName, candidate.normalizedDomain,
         discoveredIndustry, discoveredSector,
-        detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now),
+        detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now)] : []),
     env.DB.prepare(`UPDATE companies SET sector=? WHERE id=?
       AND lower(trim(industry)) IN ('', 'other', 'unknown', 'not published',
         'not specified', 'unspecified', 'n/a', 'na', 'none', 'general')`)
       .bind(discoveredSector, companyId),
-    env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
+    ...(plan.insertSource ? [env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
       id, company_id, provider, board_id, careers_url, enabled, discovery_status,
       first_discovered_at, consecutive_failures, review_notes
     ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 0, 'Automatically detected and canonically verified')`)
       .bind(canonicalSourceId, companyId, detection.provider, detection.boardId,
-        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now),
+        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now)] : []),
     env.DB.prepare(`INSERT OR IGNORE INTO company_investors (
       company_id, investor_source_id, first_discovered_at, evidence_url
     ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
@@ -352,7 +361,14 @@ export async function activateDiscoveredCandidate(
       now,
       candidate.normalizedDomain
     ),
-  ]);
+  ];
+  await env.DB.batch(statements);
+  const attached = await env.DB.prepare(
+    "SELECT company_id as companyId FROM company_sources WHERE provider=? AND board_id=? LIMIT 1"
+  ).bind(detection.provider, detection.boardId).first<{ companyId: string }>();
+  if (attached?.companyId !== companyId) {
+    throw new Error("canonical_source_missing_after_activation");
+  }
   return { companyId, canonicalSourceId };
 }
 

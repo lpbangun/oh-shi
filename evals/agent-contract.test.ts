@@ -140,6 +140,9 @@ test("discovery backlog exposes actionable stages and rechecks stale detector re
   assert.match(discovery, /discoveryQueueOrderSql/);
   assert.match(discovery, /discoveryPromotionOrderSql/);
   assert.match(discovery, /discoveryRetryAt/);
+  assert.match(policy, /planDiscoveredCompanyActivation/);
+  assert.match(discovery, /planDiscoveredCompanyActivation/);
+  assert.match(discovery, /canonical_source_missing_after_activation/);
   assert.match(discovery, /DEFAULT_PROCESS_LIMIT = 10/);
   assert.match(schema, /discoveryVersion: text\("discovery_version"\)/);
   assert.match(schema, /nextAttemptAt: text\("next_attempt_at"\)/);

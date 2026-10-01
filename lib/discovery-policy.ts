@@ -93,3 +93,36 @@ export function discoveryRetryAt(
 export function discoveryActivationDueAt(verifiedAt: string) {
   return new Date(Date.parse(verifiedAt) + DISCOVERY_ACTIVATION_DEFER_MS).toISOString();
 }
+
+export type DiscoveredCompanyActivationPlan = {
+  companyId: string;
+  insertCompany: boolean;
+  insertSource: boolean;
+};
+
+/**
+ * `company_sources` is unique on (provider, board_id), so one canonical board
+ * can belong to only one company. A second domain that resolves to the same
+ * board must join that owner. Inserting another company and INSERT OR IGNORE
+ * on the source leaves a published empty employer while discovery stays active.
+ */
+export function planDiscoveredCompanyActivation(input: {
+  existingCompanyId?: string | null;
+  boardOwnerCompanyId?: string | null;
+  newCompanyId: string;
+}): DiscoveredCompanyActivationPlan {
+  const existingCompanyId = input.existingCompanyId || null;
+  const boardOwnerCompanyId = input.boardOwnerCompanyId || null;
+  if (boardOwnerCompanyId) {
+    return {
+      companyId: boardOwnerCompanyId,
+      insertCompany: false,
+      insertSource: false,
+    };
+  }
+  return {
+    companyId: existingCompanyId || input.newCompanyId,
+    insertCompany: !existingCompanyId,
+    insertSource: true,
+  };
+}
