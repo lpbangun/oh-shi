@@ -212,7 +212,9 @@ export function fundingDiscoveryFromPage(input: {
   if (!input.metadata.publishedAt) return null;
   if (!FUNDING_ACTION.test(combined) || !FUNDING_OBJECT.test(combined) || SPECULATIVE.test(combined)) return null;
   if (input.sourceKind === "official" && !officialHost(input.company, input.sourceUrl)) return null;
-  if (input.sourceKind === "reputable" && !companyMentioned(input.company, combined)) return null;
+  if (input.sourceKind === "reputable" && !companyIsFundingSubject(input.company, input.metadata.title)) {
+    return null;
+  }
   const occurred = Date.parse(input.metadata.publishedAt);
   const now = Date.parse(input.now);
   if (!Number.isFinite(occurred) || !Number.isFinite(now)) return null;
@@ -245,7 +247,10 @@ export function fundingDiscoveryFromPage(input: {
 }
 
 export function companyNameFromFundingTitle(title: string) {
-  const cleaned = title.replace(/\s+/g, " ").trim();
+  const cleaned = title
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:breaking|exclusive|update|heard)\s*[:|–—-]\s*/i, "");
   const match = cleaned.match(
     /^(.{2,80}?)\s+(?:raises?|raised|secures?|secured|closes?|closed|lands?|landed|announces?|announced)\b/i
   );
@@ -253,6 +258,16 @@ export function companyNameFromFundingTitle(title: string) {
   if (!name || /^(breaking|exclusive|how|why|what|the)\b/i.test(name)) return null;
   if (name.split(/\s+/).length > 8) return null;
   return name;
+}
+
+/**
+ * Reputable news often names a watchlist company as an investor, customer,
+ * or alumni employer — or uses a seed name as a common verb ("ramp up").
+ * Attribution must use the raise subject, not a mention anywhere in the page.
+ */
+function companyIsFundingSubject(company: Company, title: string) {
+  const subject = companyNameFromFundingTitle(title);
+  return Boolean(subject && companyMentioned(company, subject));
 }
 
 function considerCompanyWebsite(href: string, pageUrl: string, found: Map<string, string>) {
@@ -427,7 +442,7 @@ export async function discoverFundingUpdates(
 
       const matchesKnown = (link: { url: string; label: string }) => boundCompany
         ? companyMentioned(boundCompany, link.label) || officialHost(boundCompany, link.url)
-        : companies.some((company) => companyMentioned(company, link.label));
+        : companies.some((company) => companyIsFundingSubject(company, link.label));
       const knownLinks = links.filter(matchesKnown)
         .slice(0, source.kind === "reputable" ? 20 : 4);
       const unmatchedLinks = source.kind === "reputable" && !boundCompany
@@ -442,7 +457,7 @@ export async function discoverFundingUpdates(
           const metadata = pageMetadata(html);
           const matchedCompanies = boundCompany
             ? [boundCompany]
-            : companies.filter((company) => companyMentioned(company, `${link.label} ${metadata.title} ${metadata.description}`));
+            : companies.filter((company) => companyIsFundingSubject(company, metadata.title));
           const discoveries = matchedCompanies.flatMap((company) => {
             const discovery = fundingDiscoveryFromPage({
               company,
