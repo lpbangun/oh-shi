@@ -20,6 +20,15 @@ test("role classification covers the core startup hiring lanes", () => {
   assert.equal(classifyRole("Office Barista"), "Other");
 });
 
+test("existing canonical ingest retains nontechnical roles and US eligibility boundaries", () => {
+  assert.equal(classifyRole("Customer Success Manager"), "GTM");
+  assert.equal(classifyRole("Curriculum Engineer"), "Other");
+  assert.equal(classifyRole("Classroom Teacher"), "Other");
+  assert.equal(isUsEligible({ title: "Teacher", location: "Boston, MA" }), true);
+  assert.equal(isUsEligible({ title: "Teacher", location: "Berlin, Germany",
+    isRemote: true }), false);
+});
+
 test("industry normalization distinguishes common startup categories", () => {
   const cases: Array<[string, string]> = [
     ["AI / ML", "Artificial Intelligence"],

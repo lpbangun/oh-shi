@@ -8,6 +8,7 @@ import {
   fundingLeadEvidenceInput,
   fundingLinksFromHtml,
   pageMetadata,
+  registerFundingCompanyLeads,
 } from "../lib/funding-discovery";
 import { fundingMovements } from "../lib/derive";
 import { persistFundingDiscoveryRecords } from "../lib/funding-store";
@@ -57,6 +58,99 @@ test("funding pages convert into source-cited, company-scored movements", () => 
   assert.equal(movement.hiringScore, company.hiringScore);
   assert.deepEqual(movement.sourceUrls, [discovery.sourceUrl]);
   assert.equal(movement.href, "/company/higharc");
+});
+
+test("D1 announcement survives a conflicting optional lead and later lead persists", async (t) => {
+  const miniflare = new Miniflare({ modules: true,
+    script: "export default { fetch() { return new Response('ok') } }",
+    compatibilityDate: "2026-05-22",
+    d1Databases: { DB: "funding-lead-isolation" } });
+  t.after(() => miniflare.dispose());
+  const database = await miniflare.getD1Database("DB") as unknown as D1Database;
+  await database.batch([
+    database.prepare(`CREATE TABLE companies (id TEXT PRIMARY KEY,
+      latest_funding_label TEXT NOT NULL, latest_funding_date TEXT,
+      stage TEXT NOT NULL, funding_mode TEXT NOT NULL)`),
+    database.prepare(`CREATE TABLE changes (id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, change_type TEXT NOT NULL,
+      title TEXT NOT NULL, description TEXT NOT NULL, occurred_at TEXT NOT NULL,
+      source_url TEXT NOT NULL)`),
+    database.prepare("CREATE TABLE leads (domain TEXT PRIMARY KEY, evidence_url TEXT NOT NULL)"),
+    database.prepare(`INSERT INTO companies VALUES (?, 'Not published', NULL,
+      'Not published', 'Venture-backed')`).bind(company.id),
+  ]);
+  const discovery = fundingDiscoveryFromPage({ company,
+    sourceUrl: "https://techcrunch.com/2026/08/01/higharc-raises/",
+    sourceKind: "reputable", publisher: "TechCrunch",
+    metadata: { title: "Higharc raises $10M Series A", description: "Financing closed.",
+      publishedAt: "2026-08-01T14:30:00Z" }, now: NOW })!;
+  const persisted = await persistFundingDiscoveryRecords(database, [discovery]);
+  assert.equal(persisted.announcementsAdded, 1);
+  const leads = ["first", "conflict", "rejected", "last"].map((name) => ({
+    companyName: name, websiteUrl: `https://${name}.example/`,
+    evidenceUrl: `https://techcrunch.com/${name}`, publisher: "TechCrunch",
+    observedAt: NOW,
+  }));
+  const result = await registerFundingCompanyLeads(leads, async (input) => {
+    if (input.websiteUrl.includes("conflict")) throw new Error("alias_identity_conflict");
+    if (input.websiteUrl.includes("rejected")) return { accepted: 0 };
+    const stored = await database.prepare("INSERT INTO leads VALUES (?, ?)")
+      .bind(new URL(input.websiteUrl).hostname, input.evidenceUrl).run();
+    return { accepted: Number(stored.meta.changes || 0) };
+  });
+  assert.equal(result.registered, 2);
+  assert.deepEqual(result.failures.map((failure) => failure.error),
+    ["alias_identity_conflict", "registry_rejected_lead"]);
+  assert.equal((await database.prepare("SELECT COUNT(*) as count FROM changes")
+    .first<{ count: number }>())?.count, 1);
+  assert.equal((await database.prepare("SELECT COUNT(*) as count FROM leads")
+    .first<{ count: number }>())?.count, 2);
+});
+
+test("reputable news does not attribute another company's raise to a mentioned watchlist firm", () => {
+  const ramp = seedCompanies.find((item) => item.id === "company_ramp")!;
+  const investorMention = fundingDiscoveryFromPage({
+    company: ramp,
+    sourceUrl: "https://techcrunch.com/2026/08/01/novacorp-raises-from-ramp/",
+    sourceKind: "reputable",
+    publisher: "TechCrunch",
+    metadata: {
+      title: "NovaCorp raises $20M Series A from Ramp",
+      description: "The round was led by Ramp and other existing operators.",
+      publishedAt: "2026-08-01T14:30:00.000Z",
+    },
+    now: NOW,
+  });
+  assert.equal(investorMention, null, "an investor mention must not rewrite Ramp's funding facts");
+
+  const verbInBody = fundingDiscoveryFromPage({
+    company: ramp,
+    sourceUrl: "https://techcrunch.com/2026/08/01/startup-raises-to-ramp-up/",
+    sourceKind: "reputable",
+    publisher: "TechCrunch",
+    metadata: {
+      title: "Northwind raises $10M seed to ramp up hiring",
+      description: "The company will ramp hiring after the close.",
+      publishedAt: "2026-08-01T14:30:00.000Z",
+    },
+    now: NOW,
+  });
+  assert.equal(verbInBody, null, "the verb 'ramp up' must not match company Ramp");
+
+  const exclusiveSubject = fundingDiscoveryFromPage({
+    company,
+    sourceUrl: "https://techcrunch.com/2026/08/01/higharc-raises-series-d/",
+    sourceKind: "reputable",
+    publisher: "TechCrunch",
+    metadata: {
+      title: "Exclusive: Higharc raises $120M Series D",
+      description: "Higharc secured fresh financing.",
+      publishedAt: "2026-08-01T14:30:00.000Z",
+    },
+    now: NOW,
+  });
+  assert.ok(exclusiveSubject, "a prefixed headline must still match the raise subject");
+  assert.equal(exclusiveSubject.companyId, company.id);
 });
 
 test("discovery rejects speculative, stale, and uncited funding claims", () => {
@@ -122,7 +216,7 @@ test("unmatched raise articles become company leads when one website is named", 
   assert.equal(lead.websiteUrl, "https://novacorp.com/");
   const evidence = fundingLeadEvidenceInput(lead);
   assert.equal(evidence.sourceKind, "funding-news");
-  assert.equal(evidence.permissionStatus, "permitted");
+  assert.equal(evidence.permissionStatus, "awaiting_permission");
   assert.equal(evidence.reviewStatus, "pending");
   assert.equal(fundingCompanyLeadFromPage({
     sourceUrl: "https://techcrunch.com/2026/08/01/novacorp-raises/",
@@ -161,6 +255,35 @@ test("funding discovery fetches unmatched headlines and records them as leads", 
   assert.equal(result.leads[0].websiteUrl, "https://novacorp.com/");
   const techcrunch = result.receipts.find((receipt) => receipt.sourceId === "techcrunch-venture");
   assert.equal(techcrunch?.leadsFound, 1);
+});
+
+test("an investor mention does not steal the raise or block the unmatched lead", async () => {
+  const ramp = seedCompanies.find((item) => item.id === "company_ramp")!;
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/robots.txt")) return new Response("", { status: 404 });
+    if (url.includes("techcrunch.com/category/venture")) {
+      return new Response(
+        `<a href="https://techcrunch.com/2026/08/01/novacorp-raises/">NovaCorp raises $4M seed from Ramp</a>`,
+        { headers: { "content-type": "text/html" } }
+      );
+    }
+    if (url.includes("novacorp-raises")) {
+      return new Response(`
+        <html><head>
+          <meta property="og:title" content="NovaCorp raises $4M seed from Ramp">
+          <meta property="og:description" content="Ramp participated in the seed round.">
+          <meta property="article:published_time" content="2026-08-01T14:30:00Z">
+        </head>
+        <body><a href="https://novacorp.com/">NovaCorp</a></body></html>`);
+    }
+    return new Response("missing", { status: 404 });
+  };
+  const result = await discoverFundingUpdates([ramp], { fetcher: fetchImpl, now: NOW });
+  assert.equal(result.discoveries.length, 0, "Ramp must not receive NovaCorp's raise");
+  assert.equal(result.leads.length, 1);
+  assert.equal(result.leads[0].companyName, "NovaCorp");
+  assert.equal(result.leads[0].websiteUrl, "https://novacorp.com/");
 });
 
 test("funding landing pages yield only definitive HTTPS announcement links", () => {

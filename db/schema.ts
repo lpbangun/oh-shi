@@ -401,6 +401,7 @@ export const startupDomainEvidence = sqliteTable("startup_domain_evidence", {
   evidenceUrl: text("evidence_url").notNull(),
   permissionStatus: text("permission_status").notNull(),
   sourceTermsUrl: text("source_terms_url"),
+  permissionProvenanceJson: text("permission_provenance_json"),
   observedAt: text("observed_at").notNull(),
   observedWebsiteUrlsJson: text("observed_website_urls_json").notNull().default("[]"),
 }, (table) => [

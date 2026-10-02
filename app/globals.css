@@ -107,7 +107,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.06; }
 
 /* ── breadth and freshness ─────────────────────────── */
 .coverage-strip { border-bottom: 1px solid var(--line); background: var(--bg); }
-.coverage-grid { display: grid; grid-template-columns: repeat(6, 1fr); padding-top: 14px; padding-bottom: 11px; }
+.coverage-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding-top: 14px; padding-bottom: 11px; }
 .coverage-grid > div { min-width: 0; padding: 0 14px; border-left: 1px solid var(--line); }
 .coverage-grid > div:first-child { padding-left: 0; border-left: 0; }
 .coverage-grid b { display: block; font: 600 21px/1 var(--font-plex-mono), monospace; }

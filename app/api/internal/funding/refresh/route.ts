@@ -64,6 +64,8 @@ export async function POST(request: Request) {
       const discovery = await discoverFundingUpdates(companies);
       const persisted = await persistFundingDiscoveries(discovery.discoveries, discovery.leads);
       const failedSources = discovery.receipts.filter((receipt) => receipt.status === "failed").length;
+      const failedDocuments = discovery.receipts.reduce((count, receipt) =>
+        count + (receipt.documentErrors?.length || 0), 0);
       const body = {
         contract_version: "1.0",
         discovery_version: discovery.version,
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
         status:
           failedSources === discovery.receipts.length
             ? "failed"
-            : failedSources > 0
+            : failedSources > 0 || failedDocuments > 0 || persisted.leadFailures.length > 0
               ? "partial_success"
               : "success",
         sources: {
@@ -82,6 +84,8 @@ export async function POST(request: Request) {
         },
         candidates_found: discovery.discoveries.length,
         company_leads_added: persisted.leadsRegistered,
+        lead_failures: persisted.leadFailures,
+        document_failures: failedDocuments,
         announcements_added: persisted.announcementsAdded,
         companies_updated: persisted.companiesUpdated,
         scores_recomputed: persisted.scoresUpdated,

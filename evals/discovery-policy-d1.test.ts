@@ -33,7 +33,8 @@ test("discovery retry metadata migrates and runnable work is permission- and tim
     last_attempted_at TEXT, discovery_version TEXT
   )`).run();
   await database.prepare(`CREATE TABLE startup_domain_evidence (
-    canonical_domain TEXT NOT NULL, permission_status TEXT NOT NULL
+    canonical_domain TEXT NOT NULL, permission_status TEXT NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'other', permission_provenance_json TEXT
   )`).run();
   await database.prepare(`CREATE TABLE discovery_candidate_reviews (
     candidate_id TEXT NOT NULL, status TEXT NOT NULL
@@ -142,14 +143,14 @@ test("discovery queue processes never-attempted newest leads before older misses
     company_name TEXT, website_url TEXT,
     status TEXT NOT NULL, first_discovered_at TEXT NOT NULL,
     attempt_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT,
-    discovery_version TEXT, last_attempted_at TEXT
+    discovery_version TEXT, last_attempted_at TEXT, last_outcome TEXT
   )`).run();
   await database.prepare(`CREATE TABLE discovery_queue_investors (
     candidate_id TEXT NOT NULL, investor_source_id TEXT, evidence_url TEXT
   )`).run();
   await database.prepare(`CREATE TABLE startup_domain_evidence (
     canonical_domain TEXT NOT NULL, permission_status TEXT NOT NULL,
-    source_kind TEXT
+    source_kind TEXT, permission_provenance_json TEXT
   )`).run();
   await database.prepare(`CREATE TABLE discovery_candidate_reviews (
     candidate_id TEXT NOT NULL, status TEXT NOT NULL

@@ -1,9 +1,11 @@
 export const DISCOVERY_RETRY_BASE_MS = 6 * 60 * 60 * 1_000;
 export const DISCOVERY_RETRY_MAX_MS = 7 * 24 * 60 * 60 * 1_000;
 export const DISCOVERY_ACTIVATION_DEFER_MS = 2 * 60 * 60 * 1_000;
+export const DISCOVERY_CLASSIFICATION_VERSION = "2";
 
 export type DiscoveryOutcome =
   | "activated"
+  | "activation_write_race"
   | "ambiguous"
   | "canonical_fetch_failed"
   | "canonical_source_found"
@@ -13,13 +15,24 @@ export type DiscoveryOutcome =
   | "probe_failed"
   | "unsupported";
 
+export function discoveryEvidencePermissionSql(alias = "permission_evidence") {
+  if (!/^[a-z][a-z0-9_]*$/i.test(alias)) throw new Error("invalid_sql_alias");
+  return `${alias}.permission_status='permitted' AND (
+    ${alias}.source_kind!='curated_cohort' OR (
+      CASE WHEN json_valid(${alias}.permission_provenance_json)=1
+        THEN json_extract(${alias}.permission_provenance_json, '$.scope')
+        ELSE NULL END='automated_access_and_reuse'
+    )
+  )`;
+}
+
 /** Evidence must explicitly permit automated access before a candidate is fetched. */
 export function discoveryPermissionSql(queueAlias = "q") {
   if (!/^[a-z][a-z0-9_]*$/i.test(queueAlias)) throw new Error("invalid_sql_alias");
   return `EXISTS (
     SELECT 1 FROM startup_domain_evidence permission_evidence
     WHERE permission_evidence.canonical_domain=${queueAlias}.normalized_domain
-      AND permission_evidence.permission_status='permitted'
+      AND ${discoveryEvidencePermissionSql("permission_evidence")}
   )`;
 }
 
@@ -34,6 +47,9 @@ export function discoveryRunnableSql(queueAlias = "q") {
       ${queueAlias}.status IN ('discovered','canonical_source_found')
       OR (${queueAlias}.status='needs_review'
         AND COALESCE(${queueAlias}.discovery_version, '') <> ?)
+      OR (${queueAlias}.status='needs_review'
+        AND ${queueAlias}.last_outcome='no_us_openings'
+        AND ${queueAlias}.next_attempt_at IS NOT NULL)
       OR (${queueAlias}.status='resolving' AND (
         ${queueAlias}.last_attempted_at IS NULL OR ${queueAlias}.last_attempted_at < ?
       ))
@@ -74,7 +90,7 @@ export function isTransientDiscoveryError(error: unknown) {
       candidate.status === 429 || candidate.status >= 500;
   }
   return typeof candidate.message === "string" &&
-    /timeout|timed out|abort|network|fetch failed|robots|429|5\d\d/i.test(candidate.message);
+    /timeout|timed out|abort|network|fetch failed|robots|subrequests?|429|5\d\d/i.test(candidate.message);
 }
 
 export function discoveryRetryAt(
@@ -92,4 +108,26 @@ export function discoveryRetryAt(
 
 export function discoveryActivationDueAt(verifiedAt: string) {
   return new Date(Date.parse(verifiedAt) + DISCOVERY_ACTIVATION_DEFER_MS).toISOString();
+}
+
+export function discoveryEmptyBoardRecheckAt(attemptedAt: string, attemptCount: number) {
+  const weeks = Math.min(4, 2 ** Math.max(0, Math.trunc(attemptCount) - 1));
+  return new Date(Date.parse(attemptedAt) + weeks * 7 * 86_400_000).toISOString();
+}
+
+export function companySlugFromDomain(domain: string) {
+  return domain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export function resolveDiscoveredCompanySlug(domain: string, occupantDomain: string | null) {
+  const base = companySlugFromDomain(domain);
+  if (base && (!occupantDomain || occupantDomain.toLowerCase() === domain.toLowerCase())) {
+    return base;
+  }
+  let hash = 2166136261;
+  for (const character of domain) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${base || "company"}-${(hash >>> 0).toString(36)}`;
 }

@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     for (const name of params.keys()) {
-      if (!JOB_SEARCH_PARAMETERS.has(name) || ["view", "include_closed"].includes(name)) {
+      if (!JOB_SEARCH_PARAMETERS.has(name) || ["view", "include_closed", "fields"].includes(name)) {
         throw new JobSearchError(`Unknown dashboard job parameter "${name}".`);
       }
     }

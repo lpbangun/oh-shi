@@ -7,7 +7,9 @@ export type DiscoverySourceReceipt = {
   access_mode: string;
   status: DiscoveryReceiptStatus;
   fetched: boolean;
+  attempted?: boolean;
   discovered_count: number;
+  processed_count?: number;
   error?: string;
 };
 

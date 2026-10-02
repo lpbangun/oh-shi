@@ -1,6 +1,7 @@
 import { ATS_ADAPTER_VERSION, ATS_DETECTION_VERSION } from "./ats-adapters";
 import { CANONICAL_SOURCE_PROBE_VERSION } from "./canonical-source-discovery";
-import { ATS_SLUG_PROBE_VERSION } from "./ats-slug-probe";
+import { ATS_SLUG_CORROBORATION_VERSION, ATS_SLUG_PROBE_VERSION } from "./ats-slug-probe";
+import { DISCOVERY_CLASSIFICATION_VERSION } from "./discovery-policy";
 import { STRUCTURED_CAREER_ADAPTER_VERSION } from "./structured-career-page";
 
 /**
@@ -14,4 +15,6 @@ export const DISCOVERY_PIPELINE_VERSION = [
   `canonical-probe-${CANONICAL_SOURCE_PROBE_VERSION}`,
   `ats-slug-probe-${ATS_SLUG_PROBE_VERSION}`,
   `structured-adapter-${STRUCTURED_CAREER_ADAPTER_VERSION}`,
+  `error-classification-${DISCOVERY_CLASSIFICATION_VERSION}`,
+  `slug-corroboration-${ATS_SLUG_CORROBORATION_VERSION}`,
 ].join(":");

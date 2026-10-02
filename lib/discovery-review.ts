@@ -481,7 +481,10 @@ export async function activateDiscoveryReviewCandidates(options: {
         status: "canonical_source_found",
         investorSourceId: row.investorSourceId,
         evidenceUrl: row.evidenceUrl,
-      }, detection, now, { sourceEnabled: false });
+      }, detection, now, {
+        sourceEnabled: false,
+        approvedReviewBatchId: options.batchId,
+      });
       await env.DB.batch([
         env.DB.prepare(`UPDATE discovery_candidate_reviews SET
           status='activated', reviewed_at=?, review_reason=?, observed_at=?,

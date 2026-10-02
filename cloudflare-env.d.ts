@@ -6,3 +6,4 @@ declare namespace Cloudflare {
 }
 
 declare const __DEPLOYED_SHA__: string;
+declare const __OHSHI_E2E__: boolean;

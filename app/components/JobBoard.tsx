@@ -404,10 +404,10 @@ export function JobBoard({
       <div className="strip">
         <div className="wrap">
           <div className="strip-top">
-            <h1>Startup jobs, <em>verified every two hours.</em></h1>
+            <h1>Startup jobs, <em>checked on a two-hour schedule.</em></h1>
             <Link href="/about" className="strip-more">How this works →</Link>
           </div>
-          <p>We recheck each active canonical board every two hours and write down exactly what moved.</p>
+          <p>We schedule active canonical boards for rechecks and show the fleet freshness below.</p>
         </div>
       </div>
 
@@ -423,11 +423,14 @@ export function JobBoard({
           <div><b>{coverage.providerCount}</b><span>ATS providers</span></div>
         </div>
         <div className="wrap coverage-freshness">
-          Last canonical refresh: {coverage.lastCanonicalRefresh
+          {coverage.indexedCompanies} indexed profiles{" · "}
+          Latest canonical success: {coverage.lastCanonicalRefresh
             ? new Date(coverage.lastCanonicalRefresh).toISOString()
               .replace("T", " ")
               .replace(/\.\d{3}Z$/, " UTC")
             : "awaiting first scheduled run"}
+          {" · "}{coverage.sourceCoverage.healthy}/{coverage.sourceCoverage.configured} sources healthy
+          {" · "}{coverage.sourceCoverage.stale} stale; {coverage.sourceCoverage.failed} failed
         </div>
       </section>
 

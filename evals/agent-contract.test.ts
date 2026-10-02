@@ -77,6 +77,8 @@ test("agent instructions use the actual public field casing and query recipes", 
   assert.match(llms, /HTTP 400/);
   assert.match(llms, /sector=Healthcare&min_confidence=80/);
   assert.doesNotMatch(llms, /sector=Health&/);
+  assert.match(llms, /fields=id,description/);
+  assert.match(llms, /dashboard\/jobs endpoint rejects fields/);
 });
 
 test("API envelopes remain versioned, incremental, and licensed", async () => {
@@ -119,9 +121,10 @@ test("public capability surfaces report live availability and support conditiona
 });
 
 test("discovery backlog exposes actionable stages and rechecks stale detector results", async () => {
-  const [data, discovery, policy, schema, migration, retryMigration] = await Promise.all([
+  const [data, discovery, scheduler, policy, schema, migration, retryMigration] = await Promise.all([
     read("lib/data.ts"),
     read("lib/discovery.ts"),
+    read("lib/discovery-scheduler.ts"),
     read("lib/discovery-policy.ts"),
     read("db/schema.ts"),
     read("drizzle/0012_discovery_probe_version.sql"),
@@ -137,7 +140,12 @@ test("discovery backlog exposes actionable stages and rechecks stale detector re
   assert.match(policy, /permission_status='permitted'/);
   assert.match(policy, /first_discovered_at DESC/);
   assert.match(policy, /first_seen_at DESC/);
-  assert.match(discovery, /discoveryQueueOrderSql/);
+  // Candidate ordering moved into the bounded fair scheduler. Check both
+  // fresh and retry slots instead of the old single queue sort.
+  assert.match(discovery, /selectDiscoveryCandidates/);
+  assert.match(scheduler, /freshQuota/);
+  assert.match(scheduler, /retryQuota/);
+  assert.match(scheduler, /claimDiscoveryCandidate/);
   assert.match(discovery, /discoveryPromotionOrderSql/);
   assert.match(discovery, /discoveryRetryAt/);
   assert.match(discovery, /DEFAULT_PROCESS_LIMIT = 10/);

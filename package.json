@@ -32,16 +32,16 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.2",
-    "next": "16.3.5",
+    "drizzle-orm": "0.45.3",
+    "next": "16.3.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "tldts": "7.4.13"
+    "tldts": "7.4.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "5.20260723.1",
-    "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.62.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
@@ -51,7 +51,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.3.6",
     "miniflare": "4.20260515.0",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",

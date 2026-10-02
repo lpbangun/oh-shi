@@ -34,6 +34,12 @@ export type StartupDomainEvidenceInput = {
   evidenceUrl: string;
   permissionStatus: DomainPermissionStatus;
   sourceTermsUrl?: string;
+  permissionProvenance?: {
+    evidenceUrl: string;
+    scope: "automated_access_and_reuse";
+    reviewedAt: string;
+    reviewer: string;
+  };
   observedAt: string;
   activityState?: DomainActivityState;
   reviewStatus?: DomainReviewStatus;
@@ -46,6 +52,7 @@ export type StartupDomainEvidence = {
   evidenceUrl: string;
   permissionStatus: DomainPermissionStatus;
   sourceTermsUrl: string | null;
+  permissionProvenance: StartupDomainEvidenceInput["permissionProvenance"] | null;
   observedAt: string;
   observedWebsiteUrls: string[];
 };
@@ -136,6 +143,8 @@ function normalizedRecord(
   const website = httpsUrl(input.websiteUrl);
   const evidence = httpsUrl(input.evidenceUrl);
   const terms = input.sourceTermsUrl ? httpsUrl(input.sourceTermsUrl) : null;
+  const provenance = input.permissionProvenance;
+  const permissionEvidence = provenance ? httpsUrl(provenance.evidenceUrl) : null;
   const sourceId = input.sourceId.trim().slice(0, 200);
   const sourceKind = input.sourceKind.trim().slice(0, 100);
   const sourceClassification = input.sourceClassification.trim().slice(0, 100);
@@ -148,6 +157,15 @@ function normalizedRecord(
     !evidence ||
     (input.sourceTermsUrl !== undefined && !terms) ||
     (input.permissionStatus === "permitted" && !terms) ||
+    (provenance && (!permissionEvidence ||
+      provenance.scope !== "automated_access_and_reuse" ||
+      !provenance.reviewer.trim() ||
+      !Number.isFinite(Date.parse(provenance.reviewedAt)))) ||
+    (input.sourceKind === "curated_cohort" && input.permissionStatus === "permitted" &&
+      (!provenance || !permissionEvidence ||
+        provenance.scope !== "automated_access_and_reuse" ||
+        !provenance.reviewer.trim() ||
+        !Number.isFinite(Date.parse(provenance.reviewedAt)))) ||
     !sourceId ||
     !sourceKind ||
     !sourceClassification ||
@@ -233,6 +251,11 @@ function normalizedRecord(
       evidenceUrl: evidence.href,
       permissionStatus: input.permissionStatus,
       sourceTermsUrl: terms?.href || null,
+      permissionProvenance: provenance ? {
+        ...provenance,
+        evidenceUrl: permissionEvidence!.href,
+        reviewedAt: new Date(provenance.reviewedAt).toISOString(),
+      } : null,
       observedAt: observedAt.toISOString(),
       observedWebsiteUrls: [...new Set(observedWebsiteUrls)].sort(),
     }],

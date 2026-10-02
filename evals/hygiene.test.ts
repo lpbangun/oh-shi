@@ -150,7 +150,10 @@ test("two-hour discovery and refresh schedule proves reconciled source receipts 
   assert.match(refreshRunner, /jobsAddedLast24Hours/);
   assert.match(refreshRunner, /Canonical source failure/);
   assert.match(refreshRunner, /Company growth warning/);
-  assert.match(homepage, /verified every two hours/);
+  // The schedule remains two-hourly; UI now reports fleet freshness rather
+  // than implying every board succeeded in its most recent run.
+  assert.match(homepage, /checked on a two-hour schedule/);
+  assert.match(homepage, /sourceCoverage\.stale/);
   assert.match(ticker, /setUTCHours\(next\.getUTCHours\(\) \+ 2\)/);
   assert.match(ticker, /Math\.max\(180, ranked\.length \* 12\)/);
   assert.match(ticker, /Pause live ticker/);

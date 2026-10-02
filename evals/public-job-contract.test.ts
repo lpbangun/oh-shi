@@ -7,6 +7,8 @@ import {
   JobSearchError,
   parseJobSearch,
 } from "../lib/job-search";
+import { parseJobFields, projectJob } from "../lib/job-fields";
+import { seedJobs } from "../lib/seed";
 import {
   dedupeNormalizedJobs,
   isCompleteProviderPayload,
@@ -28,6 +30,17 @@ test("job search defaults open and builds bounded deterministic SQL", () => {
     () => parseJobSearch(new URLSearchParams("sort=random")),
     JobSearchError
   );
+});
+
+test("requested description retains the full job's null-or-string contract", () => {
+  const fields = parseJobFields(new URLSearchParams("fields=description"));
+  assert.ok(fields);
+  const existing = seedJobs[0];
+  for (const description of [null, "Full posting text."]) {
+    const job = { ...existing, description };
+    const projected = projectJob(job, fields);
+    assert.equal(projected.description, job.description);
+  }
 });
 
 test("role-family aliases normalize and unknown values fail closed", () => {

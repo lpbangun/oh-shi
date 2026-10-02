@@ -2,33 +2,36 @@ import { env } from "cloudflare:workers";
 import { CanonicalHttpError, fetchCanonicalBoard, type AtsDetection } from "./ats-adapters";
 import { probeCanonicalSource } from "./canonical-source-discovery";
 import { probeAtsBySlug } from "./ats-slug-probe";
+import { registryProbeSlugs } from "./discovery-evidence-slugs";
 import { YC_SOURCE_KIND } from "./startup-directory";
 import {
   ensureDatabase,
   registerStartupDomainEvidence,
 } from "./data";
 import {
-  careerFingerprint,
   registrableDomain,
   type DomainPermissionStatus,
 } from "./domain-registry";
-import { portfolioWindow, processSequentiallyIsolated } from "./ingestion-core";
+import { portfolioWindow } from "./ingestion-core";
+import { checkpointPortfolioCandidates } from "./discovery-source-checkpoint";
+import { persistDiscoverySourcePage } from "./discovery-source-store";
+import { claimDiscoveryCandidate, selectDiscoveryCandidates } from "./discovery-scheduler";
 import {
   summarizeDiscoveryReceipts,
   type DiscoverySourceReceipt,
 } from "./refresh-contract";
 import { linksFromHtml, permittedFetch } from "./public-web";
-import { normalizeDomain, sourceKey } from "./source-registry";
+import { normalizeDomain } from "./source-registry";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import {
   discoveryActivationDueAt,
+  discoveryEmptyBoardRecheckAt,
+  discoveryEvidencePermissionSql,
   discoveryPromotionOrderSql,
-  discoveryQueueOrderSql,
   discoveryRetryAt,
-  discoveryRunnableSql,
   isTransientDiscoveryError,
 } from "./discovery-policy";
-import { normalizeSector } from "./types";
+import { ActivationIdentityConflict, ActivationWriteRace, activateDiscoveredCandidateInDatabase } from "./discovery-activation";
 
 export type Candidate = {
   id: string;
@@ -163,6 +166,7 @@ async function discoverInvestorSource(source: {
   if (source.accessMode !== "public_page") {
     return {
       discovered: 0,
+      processed: 0,
       nextCursor: source.discoveryCursor,
       status: source.accessMode === "manual_import" ? "manual" as const : "blocked" as const,
     };
@@ -180,9 +184,10 @@ async function discoverInvestorSource(source: {
   const { items: detailLinks, nextCursor } = portfolioWindow(
     allDetailLinks,
     source.discoveryCursor,
-    20
+    5
   );
   const externalLinks: Array<{ websiteUrl: string; name: string; evidenceUrl: string }> = [];
+  const itemFailures: Array<{ url: string; error: string }> = [];
   // Many official portfolios link to an internal company profile rather than
   // directly to the company. Follow a bounded single hop, never a crawl.
   for (let index = 0; index < detailLinks.length; index += 5) {
@@ -204,7 +209,9 @@ async function discoverInvestorSource(source: {
           name: companyNameFromProfile(detailHtml, normalizeDomain(websiteUrl)),
           evidenceUrl: link,
         }));
-      } catch {
+      } catch (error) {
+        itemFailures.push({ url: link,
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 500) });
         return [];
       }
     }));
@@ -216,15 +223,13 @@ async function discoverInvestorSource(source: {
       domain: normalizeDomain(candidate.websiteUrl),
     }))
     .filter(({ domain }) => !excludedDiscoveryDomain(domain, sourceDomain));
-  let discovered = 0;
-  for (const candidate of candidates.slice(0, 250)) {
-    const result = await enqueueCandidate({
-      name: candidate.name, websiteUrl: candidate.websiteUrl,
-      investorSourceId: source.id, evidenceUrl: candidate.evidenceUrl,
-    }, now);
-    if (result.created) discovered += 1;
-  }
-  return { discovered, nextCursor, status: "completed" as const };
+  return checkpointPortfolioCandidates(
+    candidates.slice(0, 250), source.discoveryCursor, nextCursor, itemFailures,
+    (candidate) => enqueueCandidate({
+        name: candidate.name, websiteUrl: candidate.websiteUrl,
+        investorSourceId: source.id, evidenceUrl: candidate.evidenceUrl,
+      }, now)
+  );
 }
 
 async function resolveCanonicalSourceResult(
@@ -241,10 +246,12 @@ async function resolveCanonicalSourceResult(
   if (probe.detectionStatus === "ambiguous") {
     return { detection: null, outcome: "ambiguous" };
   }
+  const registrySlugs = await registryBoardSlugs(candidate.normalizedDomain);
   const slugMatch = await probeAtsBySlug(
     candidate.normalizedDomain,
     candidate.companyName,
-    { fetcher, extraSlugs: await registryBoardSlugs(candidate.normalizedDomain) }
+    { fetcher, extraSlugs: registrySlugs.candidates,
+      corroboratingSlugs: registrySlugs.corroborating }
   );
   if (!slugMatch || slugMatch.provider === "manual") {
     const allWebsiteFetchesBlocked = probe.pages.length > 0 && probe.pages.every(
@@ -281,79 +288,26 @@ export async function resolveCanonicalSource(
  * better slug guess than the domain label whenever the two differ.
  */
 async function registryBoardSlugs(domain: string) {
-  const evidence = await env.DB.prepare(`SELECT source_id as sourceId
+  const evidence = await env.DB.prepare(`SELECT source_id as sourceId,
+    source_kind as sourceKind, source_classification as sourceClassification,
+    permission_status as permissionStatus, evidence_url as evidenceUrl
+    ,permission_provenance_json as permissionProvenanceJson
     FROM startup_domain_evidence WHERE canonical_domain=?`)
-    .bind(domain).all<{ sourceId: string }>();
-  return evidence.results
-    .map((row) => row.sourceId.includes(":") ? row.sourceId.split(":").pop() || "" : "")
-    .filter(Boolean);
+    .bind(domain).all<{
+      sourceId: string; sourceKind: string; sourceClassification: string;
+      permissionStatus: string; evidenceUrl: string;
+      permissionProvenanceJson: string | null;
+    }>();
+  return registryProbeSlugs(evidence.results);
 }
 
 export async function activateDiscoveredCandidate(
   candidate: Candidate,
   detection: AtsDetection,
   now: string,
-  options: { sourceEnabled?: boolean } = {}
+  options: { sourceEnabled?: boolean; approvedReviewBatchId?: string } = {}
 ) {
-  const existingCompany = await env.DB.prepare(
-    "SELECT id FROM companies WHERE lower(domain)=? LIMIT 1"
-  ).bind(candidate.normalizedDomain).first<{ id: string }>();
-  const companyId = existingCompany?.id || hashId("company", candidate.normalizedDomain);
-  const slug = candidate.normalizedDomain.replace(/[^a-z0-9]+/g, "-");
-  const canonicalSourceId = sourceKey(detection.provider, detection.boardId);
-  // Discovery has no permitted source industry field. Keep that absence honest,
-  // but use strong labels in the already-persisted company name/domain as
-  // context so an AI, fintech, or robotics startup is not stranded in Other.
-  const discoveredIndustry = "Not published";
-  const discoveredSector = normalizeSector(discoveredIndustry, {
-    name: candidate.companyName,
-    domain: candidate.normalizedDomain,
-  });
-  await env.DB.batch([
-    env.DB.prepare(`INSERT OR IGNORE INTO companies (
-      id, slug, name, domain, description, founded_year, headquarters, employee_range,
-      industry, sector, stage, funding_mode, lifecycle_status, hiring_score,
-      evidence_confidence, latest_funding_label, latest_funding_date, careers_url,
-      source_url, open_job_count, last_verified_at
-    ) VALUES (?, ?, ?, ?, 'Profile discovered from an official investor portfolio; industry not published.',
-      NULL, 'Not published', 'Not published', ?, ?, 'Not published',
-      'Not published', 'active', 0, 0, 'Not published', NULL, ?, ?, 0, ?)`)
-      .bind(companyId, slug, candidate.companyName, candidate.normalizedDomain,
-        discoveredIndustry, discoveredSector,
-        detection.careersUrl, candidate.evidenceUrl || candidate.websiteUrl, now),
-    env.DB.prepare(`UPDATE companies SET sector=? WHERE id=?
-      AND lower(trim(industry)) IN ('', 'other', 'unknown', 'not published',
-        'not specified', 'unspecified', 'n/a', 'na', 'none', 'general')`)
-      .bind(discoveredSector, companyId),
-    env.DB.prepare(`INSERT OR IGNORE INTO company_sources (
-      id, company_id, provider, board_id, careers_url, enabled, discovery_status,
-      first_discovered_at, consecutive_failures, review_notes
-    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 0, 'Automatically detected and canonically verified')`)
-      .bind(canonicalSourceId, companyId, detection.provider, detection.boardId,
-        detection.careersUrl, options.sourceEnabled === false ? 0 : 1, now),
-    env.DB.prepare(`INSERT OR IGNORE INTO company_investors (
-      company_id, investor_source_id, first_discovered_at, evidence_url
-    ) SELECT ?, investor_source_id, first_discovered_at, evidence_url
-      FROM discovery_queue_investors WHERE candidate_id=?`).bind(companyId, candidate.id),
-    env.DB.prepare(`UPDATE discovery_queue SET status='active', last_error=NULL,
-      last_outcome='activated', discovery_version=?, next_attempt_at=NULL,
-      review_notes='Canonical source verified with US-eligible open jobs.' WHERE id=?`)
-      .bind(DISCOVERY_PIPELINE_VERSION, candidate.id),
-    env.DB.prepare(`UPDATE startup_domains SET company_id=?, activity_state='active',
-      review_status='verified', careers_url=?, ats_provider=?, ats_board_id=?,
-      career_fingerprint=?, last_discovery_attempt_at=?, last_seen_at=?
-      WHERE canonical_domain=?`).bind(
-      companyId,
-      detection.careersUrl,
-      detection.provider,
-      detection.boardId,
-      careerFingerprint(detection.provider, detection.boardId, detection.careersUrl),
-      now,
-      now,
-      candidate.normalizedDomain
-    ),
-  ]);
-  return { companyId, canonicalSourceId };
+  return activateDiscoveredCandidateInDatabase(env.DB, candidate, detection, now, options);
 }
 
 async function processCandidate(
@@ -362,10 +316,9 @@ async function processCandidate(
   now: string,
   allowActivation: boolean
 ) {
-  const attemptCount = Number(candidate.attemptCount || 0) + 1;
-  await env.DB.prepare(`UPDATE discovery_queue SET status='resolving',
-    last_attempted_at=?, attempt_count=?, next_attempt_at=NULL WHERE id=?`)
-    .bind(now, attemptCount, candidate.id).run();
+  const attemptCount = await claimDiscoveryCandidate(env.DB, candidate.id, now);
+  if (!attemptCount) return { activated: false, boardDetected: false,
+    attempted: false, outcome: "deferred" as const };
   await env.DB.prepare(`UPDATE startup_domains SET
     last_discovery_attempt_at=?, last_seen_at=? WHERE canonical_domain=?`)
     .bind(now, now, candidate.normalizedDomain).run();
@@ -388,7 +341,8 @@ async function processCandidate(
           : "Automatic board discovery was blocked or failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, attempted: true,
+      outcome: blocked ? "blocked" as const : retryable ? "deferred" as const : "review" as const };
   }
   const detection = resolution.detection;
   if (!detection) {
@@ -410,17 +364,19 @@ async function processCandidate(
               ? "Official website linked to an external career system without a supported canonical adapter."
             : "Official website checked; no supported public ATS or actionable first-party career page was detected.",
           candidate.id).run();
-    return { activated: false, boardDetected: false };
+    return { activated: false, boardDetected: false, attempted: true,
+      outcome: "review" as const };
   }
   try {
     const canonical = await fetchCanonicalBoard(detection.provider, detection.boardId, fetcher);
     if (!canonical.jobs.length) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
-        discovery_version=?, last_outcome='no_us_openings', next_attempt_at=NULL,
+        discovery_version=?, last_outcome='no_us_openings', next_attempt_at=?,
         last_error='no_verified_us_open_jobs', review_notes=? WHERE id=?`)
-        .bind(DISCOVERY_PIPELINE_VERSION,
+        .bind(DISCOVERY_PIPELINE_VERSION, discoveryEmptyBoardRecheckAt(now, attemptCount),
           "Canonical board fetched successfully but had no US-eligible open roles.", candidate.id).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, attempted: true,
+        outcome: "empty" as const };
     }
     if (!allowActivation) {
       await env.DB.prepare(`UPDATE discovery_queue SET status='canonical_source_found',
@@ -432,20 +388,31 @@ async function processCandidate(
           discoveryActivationDueAt(now),
           candidate.id
         ).run();
-      return { activated: false, boardDetected: true };
+      return { activated: false, boardDetected: true, attempted: true,
+        outcome: "deferred" as const };
     }
     await activateDiscoveredCandidate(candidate, detection, now);
-    return { activated: true, boardDetected: true };
+    return { activated: true, boardDetected: true, attempted: true,
+      outcome: candidate.status === "needs_review" ? "recovered" as const : "activated" as const };
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
-    const retryable = isTransientDiscoveryError(error);
+    if (error instanceof ActivationIdentityConflict) {
+      await env.DB.prepare(`UPDATE discovery_queue SET status='needs_review',
+        discovery_version=?, last_outcome='ambiguous', next_attempt_at=NULL,
+        last_error=?, review_notes='Activation identity conflict; explicit review required.'
+        WHERE id=?`).bind(DISCOVERY_PIPELINE_VERSION, message, candidate.id).run();
+      return { activated: false, boardDetected: true, attempted: true,
+        outcome: "review" as const };
+    }
+    const retryable = error instanceof ActivationWriteRace || isTransientDiscoveryError(error);
     const retryAfter = error instanceof CanonicalHttpError ? error.retryAfterMs : null;
     await env.DB.prepare(`UPDATE discovery_queue SET status=?,
-      discovery_version=?, last_outcome='canonical_fetch_failed', next_attempt_at=?, last_error=?,
+      discovery_version=?, last_outcome=?, next_attempt_at=?, last_error=?,
       review_notes=? WHERE id=?`)
       .bind(
         retryable ? "discovered" : "needs_review",
         DISCOVERY_PIPELINE_VERSION,
+        error instanceof ActivationWriteRace ? "activation_write_race" : "canonical_fetch_failed",
         retryable ? discoveryRetryAt(now, attemptCount, retryAfter) : null,
         message,
         retryable
@@ -453,7 +420,8 @@ async function processCandidate(
           : "ATS detected but canonical verification failed non-transiently; manual review required.",
         candidate.id
       ).run();
-    return { activated: false, boardDetected: true };
+    return { activated: false, boardDetected: true, attempted: true,
+      outcome: retryable ? "deferred" as const : "review" as const };
   }
 }
 
@@ -473,6 +441,8 @@ export const DEFAULT_ACTIVATION_LIMIT = 25;
 
 /** How many registry domains are moved into the queue per run. */
 export const DEFAULT_PROMOTION_LIMIT = 150;
+export const DEFAULT_DISCOVERY_REQUEST_LIMIT = 40;
+export const DEFAULT_DISCOVERY_WORK_MS = 35_000;
 
 /**
  * The domain registry used to be a dead end: imports populated `startup_domains`
@@ -497,7 +467,7 @@ export async function promoteRegistryDomains(
       ON evidence.canonical_domain=domains.canonical_domain
     LEFT JOIN discovery_queue queue
       ON queue.normalized_domain=domains.canonical_domain
-    WHERE evidence.permission_status='permitted'
+    WHERE ${discoveryEvidencePermissionSql("evidence")}
       AND domains.review_status='pending'
       AND domains.company_id IS NULL
       AND queue.id IS NULL
@@ -527,11 +497,27 @@ export async function runDiscovery(options: {
   processLimit?: number;
   activationLimit?: number;
   promotionLimit?: number;
+  requestLimit?: number;
+  workBudgetMs?: number;
 } = {}) {
   await ensureDatabase();
-  const fetcher = options.fetcher || fetch;
+  const rawFetcher = options.fetcher || fetch;
+  const started = performance.now();
+  const workBudgetMs = Math.min(45_000, Math.max(0, options.workBudgetMs ?? DEFAULT_DISCOVERY_WORK_MS));
+  const requestLimit = Math.min(40, Math.max(0, Math.trunc(options.requestLimit ?? DEFAULT_DISCOVERY_REQUEST_LIMIT)));
+  let requests = 0;
+  const withinBudget = () => performance.now() - started < workBudgetMs && requests < requestLimit;
+  const fetcher = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (!withinBudget()) throw new TypeError("discovery_invocation_budget_exhausted");
+    requests += 1;
+    const remainingMs = Math.max(1, workBudgetMs - (performance.now() - started));
+    const signal = init?.signal
+      ? AbortSignal.any([init.signal, AbortSignal.timeout(remainingMs)])
+      : AbortSignal.timeout(remainingMs);
+    return rawFetcher(input, { ...init, signal });
+  }) as typeof fetch;
   const now = new Date().toISOString();
-  const runId = hashId("discovery", now);
+  const runId = `discovery_${crypto.randomUUID()}`;
   await env.DB.prepare(`INSERT INTO ingestion_runs (id, started_at, status, metrics_json)
     VALUES (?, ?, 'running', '{}')`).bind(runId, now).run();
   const configured = await env.DB.prepare(`SELECT id, portfolio_url as portfolioUrl,
@@ -541,34 +527,31 @@ export async function runDiscovery(options: {
   let candidatesDiscovered = 0;
   const failedSources: Array<{ id: string; error: string }> = [];
   const blockedSources: string[] = [];
+  const deferredSources: string[] = [];
   const receipts: DiscoverySourceReceipt[] = [];
-  for (const source of configured.results) {
+  for (let index = 0; index < configured.results.length; index += 1) {
+    if (!withinBudget()) {
+      deferredSources.push(...configured.results.slice(index).map((source) => source.id));
+      break;
+    }
+    const source = configured.results[index];
     const attemptedAt = new Date().toISOString();
     try {
       const result = await discoverInvestorSource(source, fetcher, attemptedAt);
       candidatesDiscovered += result.discovered;
       if (result.status === "blocked") blockedSources.push(source.id);
-      const sourceUpdate = result.status === "completed"
-        ? env.DB.prepare(`UPDATE investor_sources SET last_attempted_at=?,
-            last_successful_at=?, last_error=NULL, discovery_cursor=? WHERE id=?`)
-            .bind(attemptedAt, attemptedAt, result.nextCursor, source.id)
-        : env.DB.prepare(`UPDATE investor_sources SET last_attempted_at=?,
-            last_error='awaiting_permission_or_manual_import' WHERE id=?`).bind(attemptedAt, source.id);
-      await env.DB.batch([
-        sourceUpdate,
-        env.DB.prepare(`INSERT INTO ingestion_source_results (
-          run_id, source_kind, source_id, status, attempted_at, completed_at, discovered_count
-        ) VALUES (?, 'investor', ?, ?, ?, ?, ?)`).bind(
-          runId, source.id, result.status, attemptedAt, attemptedAt, result.discovered
-        ),
-      ]);
+      await persistDiscoverySourcePage(env.DB, runId, source.id, attemptedAt, result);
       receipts.push({
         source_id: source.id,
         access_mode: source.accessMode,
         status: result.status,
-        fetched: source.accessMode === "public_page",
+        attempted: source.accessMode === "public_page",
+        fetched: result.status === "completed" || result.status === "failed",
         discovered_count: result.discovered,
+        processed_count: result.processed,
+        ...("error" in result && result.error ? { error: result.error } : {}),
       });
+      if (result.status === "failed") failedSources.push({ id: source.id, error: result.error || "source_page_incomplete" });
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       failedSources.push({ id: source.id, error: message });
@@ -576,8 +559,10 @@ export async function runDiscovery(options: {
         source_id: source.id,
         access_mode: source.accessMode,
         status: "failed",
-        fetched: source.accessMode === "public_page",
+        attempted: source.accessMode === "public_page",
+        fetched: false,
         discovered_count: 0,
+        processed_count: 0,
         error: message,
       });
       await env.DB.batch([
@@ -591,67 +576,74 @@ export async function runDiscovery(options: {
     }
   }
 
-  const promoted = await promoteRegistryDomains(
-    options.promotionLimit ?? DEFAULT_PROMOTION_LIMIT,
-    now
+  const promotionDeferred = !withinBudget();
+  const promoted = promotionDeferred ? 0 : await promoteRegistryDomains(
+    options.promotionLimit ?? DEFAULT_PROMOTION_LIMIT, now
   );
   candidatesDiscovered += promoted;
 
-  const runnableSql = discoveryRunnableSql("q");
-  const queued = await env.DB.prepare(`SELECT q.id, q.normalized_domain as normalizedDomain,
-    q.company_name as companyName, q.website_url as websiteUrl, q.status,
-    q.attempt_count as attemptCount,
-    qi.investor_source_id as investorSourceId, qi.evidence_url as evidenceUrl
-    FROM discovery_queue q LEFT JOIN discovery_queue_investors qi ON qi.candidate_id=q.id
-    WHERE ${runnableSql}
-    GROUP BY q.id
-    ORDER BY ${discoveryQueueOrderSql("q")} LIMIT ?`)
-    .bind(
-      DISCOVERY_PIPELINE_VERSION,
-      new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
-      now,
-      options.processLimit || DEFAULT_PROCESS_LIMIT
-    ).all<Candidate>();
+  const processLimit = Math.min(25, Math.max(0, Math.trunc(options.processLimit ?? DEFAULT_PROCESS_LIMIT)));
+  const candidateSelectionDeferred = !withinBudget();
+  const queued = candidateSelectionDeferred
+    ? [] : await selectDiscoveryCandidates(env.DB, now, processLimit);
   let canonicalBoardsDetected = 0;
   let companiesActivated = 0;
-  const processed = await processSequentiallyIsolated(
-    queued.results,
-    async (candidate) => {
-      const result = await processCandidate(
-        candidate, fetcher, new Date().toISOString(),
-        companiesActivated < (options.activationLimit || DEFAULT_ACTIVATION_LIMIT)
-      );
+  let candidatesAttempted = 0;
+  let candidatesDeferred = 0;
+  let candidatesReviewGated = 0;
+  let candidatesRecovered = 0;
+  const candidateReceipts: Array<{ id: string; outcome: string; attempted: boolean;
+    retried: boolean; error?: string }> = [];
+  const failedCandidates: Array<{ id: string; error: string }> = [];
+  for (const candidate of queued) {
+    if (!withinBudget()) {
+      candidatesDeferred += 1;
+      candidateReceipts.push({ id: candidate.id, outcome: "deferred_budget",
+        attempted: false, retried: Number(candidate.attemptCount || 0) > 0 });
+      continue;
+    }
+    const attemptedAt = new Date().toISOString();
+    try {
+      const result = await processCandidate(candidate, fetcher, attemptedAt,
+        companiesActivated < (options.activationLimit ?? DEFAULT_ACTIVATION_LIMIT));
+      if (result.attempted) candidatesAttempted += 1;
       if (result.boardDetected) canonicalBoardsDetected += 1;
       if (result.activated) companiesActivated += 1;
-      return result;
-    },
-    async (candidate, error) => {
+      if (result.outcome === "recovered") candidatesRecovered += 1;
+      if (result.outcome === "deferred") candidatesDeferred += 1;
+      if (result.outcome === "review") candidatesReviewGated += 1;
+      candidateReceipts.push({ id: candidate.id, outcome: result.outcome,
+        attempted: result.attempted, retried: Number(candidate.attemptCount || 0) > 0 });
+    } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
-      const attemptCount = Number(candidate.attemptCount || 0) + 1;
-      await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
-        discovery_version=?, last_outcome='probe_failed', attempt_count=MAX(attempt_count, ?),
-        next_attempt_at=?,
-        last_error=?, review_notes='Transient candidate processing failure; retry deferred with exponential backoff.'
-        WHERE id=?`).bind(
-          DISCOVERY_PIPELINE_VERSION,
-          attemptCount,
-          discoveryRetryAt(new Date().toISOString(), attemptCount),
-          message,
-          candidate.id
-        ).run();
+      failedCandidates.push({ id: candidate.id, error: message });
+      candidateReceipts.push({ id: candidate.id, outcome: "failed", attempted: true,
+        retried: Number(candidate.attemptCount || 0) > 0, error: message });
+      // A mutation may have committed before an unrelated response failed. Only
+      // a still-owned resolving lease can be returned to the retry queue.
+      const current = await env.DB.prepare(`SELECT attempt_count as attemptCount
+        FROM discovery_queue WHERE id=? AND status='resolving' AND last_attempted_at=?`)
+        .bind(candidate.id, attemptedAt).first<{ attemptCount: number }>();
+      if (current) {
+        await env.DB.prepare(`UPDATE discovery_queue SET status='discovered',
+          discovery_version=?, last_outcome='probe_failed', next_attempt_at=?,
+          last_error=?, review_notes='Candidate processing failed; retry deferred with backoff.'
+          WHERE id=? AND status='resolving' AND last_attempted_at=?`).bind(
+            DISCOVERY_PIPELINE_VERSION,
+            discoveryRetryAt(new Date().toISOString(), current.attemptCount),
+            message, candidate.id, attemptedAt
+          ).run();
+      }
     }
-  );
-  const failedCandidates = processed.failures.map(({ value, error }) => ({
-    id: value.id,
-    error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-  }));
+  }
   const completedAt = new Date().toISOString();
   const sourceCounts = summarizeDiscoveryReceipts(receipts);
   const allFetchedSourcesFailed =
-    sourceCounts.fetched > 0 && sourceCounts.failed === sourceCounts.fetched;
-  const overallStatus = allFetchedSourcesFailed
+    sourceCounts.failed > 0 && sourceCounts.completed === 0;
+  const overallStatus = allFetchedSourcesFailed && candidatesAttempted === 0
     ? "failed"
-    : failedSources.length || failedCandidates.length
+    : failedSources.length || failedCandidates.length || candidatesDeferred ||
+      deferredSources.length || promotionDeferred || candidateSelectionDeferred
       ? "partial_success"
       : "success";
   const metrics = {
@@ -659,10 +651,19 @@ export async function runDiscovery(options: {
     source_counts: sourceCounts,
     receipts,
     candidates_discovered: candidatesDiscovered,
-    candidates_processed: Math.min(queued.results.length, options.processLimit || DEFAULT_PROCESS_LIMIT),
+    candidates_processed: candidatesAttempted,
+    candidates_selected: queued.length,
+    candidates_deferred: candidatesDeferred,
+    candidates_review_gated: candidatesReviewGated,
+    candidates_recovered: candidatesRecovered,
+    candidate_receipts: candidateReceipts,
+    requests_used: requests,
     canonical_boards_detected: canonicalBoardsDetected,
     companies_activated: companiesActivated,
     failed_sources: failedSources,
+    deferred_sources: deferredSources,
+    registry_promotion_deferred: promotionDeferred,
+    candidate_selection_deferred: candidateSelectionDeferred,
     failed_candidates: failedCandidates,
     blocked_sources: blockedSources,
   };

@@ -57,6 +57,15 @@ the complete alias map. Unknown role families return HTTP 400.
 The compatibility /api/v1/jobs endpoint is bounded to 100 records per response
 (100 by default). Use its cursor or, preferably, the incremental flow below; do
 not plan for a whole-dataset response.
+Job records can be requested compactly. Pass fields= with a comma-separated
+subset of id, provider, sourceId, canonicalUrl, title, status, summary, and
+description. The seven core keys are always returned and description is the
+only optional key, so fields=id,title returns the core row and
+fields=id,description adds the full posting text. Omitting fields= returns the
+unchanged full record. A projection carries its own ETag, so a cached full
+response or a different token set is never treated as a cache match. Unknown
+tokens, blank tokens, and a repeated fields parameter return HTTP 400; the
+compatibility /api/v1/dashboard/jobs endpoint rejects fields.
 The after movement filter is exclusive; use the exact ISO-8601 boundary you want
 excluded.
 

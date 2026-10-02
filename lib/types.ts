@@ -649,6 +649,7 @@ export type OffBoardVerifiedOpening = {
 
 export type CoverageMetrics = {
   verifiedOpenJobs: number;
+  indexedCompanies: number;
   activeHiringSignals: number;
   offBoardVerifiedOpenings: number;
   offBoardVerifiedCompanies: number;
@@ -724,6 +725,8 @@ export type CoverageMetrics = {
     failed: number;
     stale: number;
     quarantined: number;
+    oldestAttemptAt: string | null;
+    oldestSuccessAt: string | null;
   };
   sourceFailures: Array<{
     sourceId: string;

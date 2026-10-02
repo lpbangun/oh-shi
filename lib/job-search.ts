@@ -63,7 +63,7 @@ function boundedInteger(
 export const JOB_SEARCH_PARAMETERS = new Set([
   "q", "status", "company", "sector", "role_family", "location",
   "remote_status", "employment_type", "provider", "investor", "new_since", "sort",
-  "limit", "offset", "page", "cursor", "include_closed", "view",
+  "limit", "offset", "page", "cursor", "include_closed", "view", "fields",
 ]);
 
 export function parseJobSearch(

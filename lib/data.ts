@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { companyDiverseJobs } from "./derive";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
-import { discoveryPermissionSql, discoveryRunnableSql } from "./discovery-policy";
+import { discoveryEvidencePermissionSql, discoveryPermissionSql, discoveryRunnableSql } from "./discovery-policy";
 import {
   buildStartupDomainPilot,
   careerFingerprint,
@@ -12,7 +12,7 @@ import {
 } from "./domain-registry";
 import { companyScoreReceipts } from "./hiring-score";
 import type { FundingCompanyLead, FundingDiscovery } from "./funding-discovery";
-import { fundingLeadEvidenceInput } from "./funding-discovery";
+import { registerFundingCompanyLeads } from "./funding-discovery";
 import { persistFundingDiscoveryRecords } from "./funding-store";
 import type { HiringSignalImport } from "./hiring-signals";
 import { prepareSeedJobStatement } from "./job-store";
@@ -360,6 +360,7 @@ async function initializeDatabase() {
       canonical_domain TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT NOT NULL,
       source_classification TEXT NOT NULL, evidence_url TEXT NOT NULL,
       permission_status TEXT NOT NULL, source_terms_url TEXT, observed_at TEXT NOT NULL,
+      permission_provenance_json TEXT,
       observed_website_urls_json TEXT NOT NULL DEFAULT '[]',
       PRIMARY KEY(canonical_domain, source_kind, source_id, evidence_url)
     )`),
@@ -554,6 +555,9 @@ async function initializeDatabase() {
   const registryEvidenceInfo = await env.DB.prepare(
     "PRAGMA table_info(startup_domain_evidence)"
   ).all<{ name: string }>();
+  if (!registryEvidenceInfo.results.some((column) => column.name === "permission_provenance_json")) {
+    await env.DB.prepare("ALTER TABLE startup_domain_evidence ADD COLUMN permission_provenance_json TEXT").run();
+  }
   if (
     !registryEvidenceInfo.results.some(
       (column) => column.name === "observed_website_urls_json"
@@ -973,14 +977,15 @@ export async function persistStartupDomainPilot(entries: StartupDomainEntry[]) {
       statements.push(env.DB.prepare(`INSERT INTO startup_domain_evidence (
         canonical_domain, source_kind, source_id, source_classification,
         evidence_url, permission_status, source_terms_url, observed_at,
-        observed_website_urls_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        observed_website_urls_json, permission_provenance_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(canonical_domain, source_kind, source_id, evidence_url) DO UPDATE SET
         source_classification=excluded.source_classification,
         permission_status=excluded.permission_status,
         source_terms_url=excluded.source_terms_url,
         observed_at=excluded.observed_at,
-        observed_website_urls_json=excluded.observed_website_urls_json`).bind(
+        observed_website_urls_json=excluded.observed_website_urls_json,
+        permission_provenance_json=excluded.permission_provenance_json`).bind(
         entry.canonicalDomain,
         item.sourceKind,
         item.sourceId,
@@ -989,7 +994,8 @@ export async function persistStartupDomainPilot(entries: StartupDomainEntry[]) {
         item.permissionStatus,
         item.sourceTermsUrl,
         item.observedAt,
-        JSON.stringify(item.observedWebsiteUrls)
+        JSON.stringify(item.observedWebsiteUrls),
+        item.permissionProvenance ? JSON.stringify(item.permissionProvenance) : null
       ));
     }
     for (const alias of entry.aliases) {
@@ -1219,11 +1225,12 @@ async function listMovementJobs(since: string): Promise<MovementJob[]> {
 }
 
 export type HomepageCoverageMetrics = Pick<CoverageMetrics,
-  "verifiedOpenJobs" | "activeCompanies" | "companiesAddedLast7Days" |
+  "verifiedOpenJobs" | "indexedCompanies" | "activeCompanies" | "companiesAddedLast7Days" |
   "jobsAddedLast24Hours" | "lastCanonicalRefresh"
 > & {
   investorSourceCount: number;
   providerCount: number;
+  sourceCoverage: Pick<CoverageMetrics["sourceCoverage"], "configured" | "healthy" | "failed" | "stale">;
 };
 
 async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMetrics> {
@@ -1231,8 +1238,10 @@ async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMe
   const nowIso = now.toISOString();
   const dayAgo = new Date(now.valueOf() - 86_400_000).toISOString();
   const weekAgo = new Date(now.valueOf() - 7 * 86_400_000).toISOString();
+  const sixHoursAgo = new Date(now.valueOf() - 6 * 3_600_000).toISOString();
   const row = await env.DB.prepare(`SELECT
     (SELECT COUNT(*) FROM jobs WHERE status='verified_open') as verifiedOpenJobs,
+    (SELECT COUNT(*) FROM companies) as indexedCompanies,
     (SELECT COUNT(DISTINCT company_id) FROM jobs WHERE status='verified_open') as activeCompanies,
     (SELECT COUNT(DISTINCT company_id) FROM company_sources
       WHERE discovery_status='active' AND first_discovered_at >= ?) as companiesAddedLast7Days,
@@ -1242,16 +1251,33 @@ async function getHomepageCoverageMetrics(now: Date): Promise<HomepageCoverageMe
     (SELECT COUNT(DISTINCT provider) FROM company_sources
       WHERE enabled=1 AND discovery_status='active') as providerCount,
     (SELECT MAX(last_successful_at) FROM company_sources
-      WHERE enabled=1 AND discovery_status='active') as lastCanonicalRefresh`
-  ).bind(weekAgo, dayAgo, nowIso).first<HomepageCoverageMetrics>();
+      WHERE enabled=1 AND discovery_status='active') as lastCanonicalRefresh,
+    (SELECT COUNT(*) FROM company_sources WHERE enabled=1) as configuredSources,
+    (SELECT COUNT(*) FROM company_sources WHERE enabled=1 AND discovery_status='active'
+      AND last_error IS NULL AND last_successful_at >= ?) as healthySources,
+    (SELECT COUNT(*) FROM company_sources WHERE enabled=1 AND last_error IS NOT NULL)
+      as failedSources,
+    (SELECT COUNT(*) FROM company_sources WHERE enabled=1
+      AND (last_successful_at IS NULL OR last_successful_at < ?)) as staleSources`
+  ).bind(weekAgo, dayAgo, nowIso, sixHoursAgo, sixHoursAgo).first<HomepageCoverageMetrics & {
+    configuredSources: number; healthySources: number;
+    failedSources: number; staleSources: number;
+  }>();
   return {
     verifiedOpenJobs: Number(row?.verifiedOpenJobs || 0),
+    indexedCompanies: Number(row?.indexedCompanies || 0),
     activeCompanies: Number(row?.activeCompanies || 0),
     companiesAddedLast7Days: Number(row?.companiesAddedLast7Days || 0),
     jobsAddedLast24Hours: Number(row?.jobsAddedLast24Hours || 0),
     investorSourceCount: Number(row?.investorSourceCount || 0),
     providerCount: Number(row?.providerCount || 0),
     lastCanonicalRefresh: row?.lastCanonicalRefresh || null,
+    sourceCoverage: {
+      configured: Number(row?.configuredSources || 0),
+      healthy: Number(row?.healthySources || 0),
+      failed: Number(row?.failedSources || 0),
+      stale: Number(row?.staleSources || 0),
+    },
   };
 }
 
@@ -1364,15 +1390,25 @@ export async function persistFundingDiscoveries(
   leads: FundingCompanyLead[] = []
 ) {
   await ensureDatabase();
-  let leadsRegistered = 0;
-  for (const lead of leads) {
-    const receipt = await registerStartupDomainEvidence(fundingLeadEvidenceInput(lead), "funding-news");
-    leadsRegistered += receipt.accepted;
+  // Persist verified announcements before optional news leads. Lead
+  // registration can throw on an existing-alias identity conflict; that must
+  // not drop the day's funding movements for companies already on the board.
+  const persisted = discoveries.length
+    ? await persistFundingDiscoveryRecords(env.DB, discoveries)
+    : { announcementsAdded: 0, companiesUpdated: 0, affectedCompanyIds: [] as string[] };
+  const leadResult = await registerFundingCompanyLeads(
+    leads,
+    registerStartupDomainEvidence
+  );
+  if (!persisted.affectedCompanyIds.length) {
+    return {
+      announcementsAdded: persisted.announcementsAdded,
+      companiesUpdated: persisted.companiesUpdated,
+      scoresUpdated: 0,
+      leadsRegistered: leadResult.registered,
+      leadFailures: leadResult.failures,
+    };
   }
-  if (!discoveries.length) {
-    return { announcementsAdded: 0, companiesUpdated: 0, scoresUpdated: 0, leadsRegistered };
-  }
-  const persisted = await persistFundingDiscoveryRecords(env.DB, discoveries);
 
   const [companies, jobs, changes] = await Promise.all([
     env.DB.prepare(`SELECT ${companyColumns} FROM companies`).all<Company>(),
@@ -1400,7 +1436,8 @@ export async function persistFundingDiscoveries(
     announcementsAdded: persisted.announcementsAdded,
     companiesUpdated: persisted.companiesUpdated,
     scoresUpdated: scoreStatements.length,
-    leadsRegistered,
+    leadsRegistered: leadResult.registered,
+    leadFailures: leadResult.failures,
   };
 }
 
@@ -1469,10 +1506,11 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
     staleResolvingCutoff,
     nowIso,
   ] as const;
-  const [totals, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, outcomeCounts, sourceCoverage] =
+  const [totals, indexed, activeSignals, offBoardVerified, recentCompanies, recentDayCompanies, recentJobs, investors, providers, failures, discoveryFailures, discovery, refresh, latestCompany, registry, discoveryQueue, reviewReasons, outcomeCounts, sourceCoverage] =
     await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as jobs, COUNT(DISTINCT company_id) as companies
         FROM jobs WHERE status='verified_open'`).first<{ jobs: number; companies: number }>(),
+      env.DB.prepare("SELECT COUNT(*) as count FROM companies").first<{ count: number }>(),
       env.DB.prepare(`SELECT COUNT(*) as count FROM hiring_signals
         WHERE status='active' AND expires_at > ?`)
         .bind(nowIso).first<{ count: number }>(),
@@ -1526,24 +1564,24 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         SUM(CASE WHEN review_status='pending' AND company_id IS NULL
           AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
           WHERE evidence.canonical_domain=startup_domains.canonical_domain
-            AND evidence.permission_status='permitted') THEN 1 ELSE 0 END) as eligibleForPromotion,
+            AND ${discoveryEvidencePermissionSql("evidence")}) THEN 1 ELSE 0 END) as eligibleForPromotion,
         SUM(CASE WHEN review_status='pending' AND company_id IS NULL
           AND NOT EXISTS (SELECT 1 FROM startup_domain_evidence evidence
           WHERE evidence.canonical_domain=startup_domains.canonical_domain
-            AND evidence.permission_status='permitted') THEN 1 ELSE 0 END) as permissionExcluded,
+            AND ${discoveryEvidencePermissionSql("evidence")}) THEN 1 ELSE 0 END) as permissionExcluded,
         SUM(CASE WHEN review_status='pending' AND company_id IS NULL
           AND NOT EXISTS (SELECT 1 FROM discovery_queue queue
             WHERE queue.normalized_domain=startup_domains.canonical_domain)
           AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
             WHERE evidence.canonical_domain=startup_domains.canonical_domain
-              AND evidence.permission_status='permitted') THEN 1 ELSE 0 END)
+              AND ${discoveryEvidencePermissionSql("evidence")}) THEN 1 ELSE 0 END)
           as eligibleNeverQueued,
         SUM(CASE WHEN review_status='pending' AND company_id IS NULL
           AND EXISTS (SELECT 1 FROM discovery_queue queue
             WHERE queue.normalized_domain=startup_domains.canonical_domain)
           AND EXISTS (SELECT 1 FROM startup_domain_evidence evidence
             WHERE evidence.canonical_domain=startup_domains.canonical_domain
-              AND evidence.permission_status='permitted') THEN 1 ELSE 0 END)
+              AND ${discoveryEvidencePermissionSql("evidence")}) THEN 1 ELSE 0 END)
           as eligibleQueued
         FROM startup_domains`).first<{
           total: number;
@@ -1629,12 +1667,16 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
         SUM(CASE WHEN last_error IS NOT NULL THEN 1 ELSE 0 END) as failed,
         SUM(CASE WHEN last_successful_at IS NULL OR last_successful_at < ? THEN 1 ELSE 0 END) as stale,
         SUM(CASE WHEN discovery_status='quarantined' THEN 1 ELSE 0 END) as quarantined
+        ,MIN(last_attempted_at) as oldestAttemptAt
+        ,MIN(last_successful_at) as oldestSuccessAt
         FROM company_sources WHERE enabled=1`).bind(sixHoursAgo, sixHoursAgo).first<{
           configured: number;
           healthy: number;
           failed: number;
           stale: number;
           quarantined: number;
+          oldestAttemptAt: string | null;
+          oldestSuccessAt: string | null;
         }>(),
     ]);
   const daysWithoutGrowth = latestCompany?.value
@@ -1647,6 +1689,7 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
   const offBoardOpeningCount = Number(offBoardVerified?.openings || 0);
   return {
     verifiedOpenJobs: Number(totals?.jobs || 0),
+    indexedCompanies: Number(indexed?.count || 0),
     activeHiringSignals: signalCount,
     offBoardVerifiedOpenings: offBoardOpeningCount,
     offBoardVerifiedCompanies: Number(offBoardVerified?.companies || 0),
@@ -1732,6 +1775,8 @@ export async function getCoverageMetrics(now = new Date()): Promise<CoverageMetr
       failed: Number(sourceCoverage?.failed || 0),
       stale: Number(sourceCoverage?.stale || 0),
       quarantined: Number(sourceCoverage?.quarantined || 0),
+      oldestAttemptAt: sourceCoverage?.oldestAttemptAt || null,
+      oldestSuccessAt: sourceCoverage?.oldestSuccessAt || null,
     },
     sourceFailures: failures.results,
     discoverySourceFailures: discoveryFailures.results,
