@@ -147,8 +147,12 @@ export type EngineCounts = {
   usHqUnknown: number;
   nonUsExcluded: number;
   newCompaniesPersisted: number;
-  newFundingEventsNewCompanies: number;
-  newFundingEventsExistingCompanies: number;
+  /** All retained events, including pending-HQ companies; not verified-US counts. */
+  fundingEventsNewCompanies: number;
+  fundingEventsExistingCompanies: number;
+  verifiedFundingEventsNewCompanies: number;
+  verifiedFundingEventsExistingCompanies: number;
+  pendingHqFundingEvents: number;
   fundingEventsWithoutDate: number;
   speculativeExcluded: number;
   falsePositivesExcluded: number;

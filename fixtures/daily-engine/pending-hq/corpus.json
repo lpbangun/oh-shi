@@ -1,0 +1,16 @@
+{
+  "label": "FIXTURE",
+  "now": "2026-10-18T12:00:00.000Z",
+  "sources": [{
+    "id": "fixture-us-customers-not-hq",
+    "permission": "permitted",
+    "documents": [{
+      "url": "https://uscustomers.example/funding",
+      "website": "https://uscustomers.example/",
+      "name": "Uscustomers",
+      "status": 200,
+      "contentType": "text/html",
+      "body": "<!doctype html><title>Uscustomers raised seed funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>FIXTURE synthetic evidence: serves US customers, raised in USD, with an office in San Francisco.</p><p>Uscustomers raised seed funding.</p>"
+    }]
+  }]
+}

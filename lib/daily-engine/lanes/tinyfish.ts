@@ -45,7 +45,7 @@ export async function tinyfishSources(options: {
         if (!permittedDocument(hit.url, hit.website)) continue;
         const result = await call(fetchUrl!, { url: hit.url }, false);
         if (typeof result.value?.html !== "string") throw malformed(result.doc);
-        const c = pageCandidate({ url: hit.url, website: hit.website, name: hit.name, status: 200, contentType: "text/html", body: result.value.html }, context.now);
+        const c = pageCandidate({ url: hit.url, website: hit.website, name: hit.name, status: 200, contentType: "text/html", body: result.value.html });
         documentsChecked++;
         if (c) candidates.push(c);
       }

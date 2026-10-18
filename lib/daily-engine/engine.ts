@@ -110,6 +110,9 @@ export async function runEngine(options: {
   const all = [...records.values()];
   const domains = new Set(assessments.flatMap(a => a.domain ? [a.domain] : []));
   const uniqueFunding = [...new Map(assessments.flatMap(a => a.funding && ["accepted", "pending_hq"].includes(a.disposition) ? [[a.funding.id,a.funding] as const] : [])).values()];
+  const verifiedDomains = new Set(all.filter(r => r.company.hqStatus === "verified_us").map(r => r.company.domain));
+  const pendingDomains = new Set(all.filter(r => r.company.hqStatus === "unknown").map(r => r.company.domain));
+  const verifiedFunding = uniqueFunding.filter(e => verifiedDomains.has(e.companyDomain));
   const counts: EngineCounts = {
     candidatesAcquired: assessments.length, distinctDomains: domains.size,
     duplicatesSkipped: assessments.filter(a => a.disposition === "duplicate").length,
@@ -118,8 +121,11 @@ export async function runEngine(options: {
     usHqUnknown: all.filter(r => r.company.hqStatus === "unknown").length,
     nonUsExcluded: new Set(assessments.filter(a => a.disposition === "non_us").map(a => a.domain)).size,
     newCompaniesPersisted: options.dryRun ? 0 : all.filter(r => r.isNewCompany && r.company.hqStatus === "verified_us" && !existing.has(r.company.domain)).length,
-    newFundingEventsNewCompanies: uniqueFunding.filter(e => !e.companyExisting).length,
-    newFundingEventsExistingCompanies: uniqueFunding.filter(e => e.companyExisting).length,
+    fundingEventsNewCompanies: uniqueFunding.filter(e => !e.companyExisting).length,
+    fundingEventsExistingCompanies: uniqueFunding.filter(e => e.companyExisting).length,
+    verifiedFundingEventsNewCompanies: verifiedFunding.filter(e => !e.companyExisting).length,
+    verifiedFundingEventsExistingCompanies: verifiedFunding.filter(e => e.companyExisting).length,
+    pendingHqFundingEvents: uniqueFunding.filter(e => pendingDomains.has(e.companyDomain)).length,
     fundingEventsWithoutDate: uniqueFunding.filter(e => !e.occurredAt).length,
     speculativeExcluded: assessments.filter(a => a.disposition === "speculative").length,
     falsePositivesExcluded: assessments.filter(a => a.disposition === "unsupported").length,

@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runEngine, type Baseline } from "../lib/daily-engine/engine";
+import { runEngine, type DailyRun, type Baseline } from "../lib/daily-engine/engine";
 import { openLocalStore } from "../lib/daily-engine/local";
 import { listDailyCompanies, readRecords } from "../lib/daily-engine/persist";
 import { directSources } from "../lib/daily-engine/lanes/direct";
@@ -58,7 +58,7 @@ test("daily gate 3: baseline company funding is maintenance; domain and event du
   const r = await runEngine({...base,sources:await sources(),db:store.db});
   assert.equal(r.counts.baselineKnownSkipped,1);
   assert.equal(r.counts.newCompaniesPersisted,3); // zerojobs, dateless, sprout; not Vanta
-  assert.equal(r.counts.newFundingEventsExistingCompanies,1);
+  assert.equal(r.counts.fundingEventsExistingCompanies,1);
   assert.equal(r.counts.duplicatesSkipped,1);
   assert.equal(r.records.filter(r=>r.company.domain==="zerojobs.example").length,1);
   assert.equal(r.records.find(r=>r.company.domain==="vanta.com")?.isNewCompany,false);
@@ -159,7 +159,7 @@ test("daily gate 10: comparison derives matching fixture metrics and refuses mis
   assert.equal(comparison.lanes[0].metrics.recentVerifiedFundingEvents,3);
   assert.equal(comparison.lanes[0].metrics.cost,"UNKNOWN");
   assert.equal(comparison.lanes[0].metrics.historicalNovelty,"UNKNOWN-limited");
-  assert.equal(comparison.verdict,"inconclusive"); assert.equal(comparison.liveComparison.sharedBaseline,"OK");
+  assert.equal(comparison.verdict,"inconclusive"); assert.match(comparison.liveComparison.sharedBaseline,/Same fixture baseline inputs.*UNVERIFIED/);
   const html=comparisonHtml(comparison);
   assert.ok(html.includes('name="viewport"')); assert.ok(!/<(?:script[^>]+src|link|img)\b/i.test(html));
   assert.match(html,/LIVE-BLOCKED/); assert.match(html,/zerojobs/);
@@ -175,4 +175,76 @@ test("daily gate 10: comparison derives matching fixture metrics and refuses mis
   const narrowB=await runEngine({...base,lane:"tinyfish",sources:await tinyfishSources({fixtures:"fixtures/daily-engine/tinyfish"}),dryRun:true,lookbackDays:1});
   const narrow=buildComparison([{report:narrowA,records:narrowA.records,path:"a"},{report:narrowB,records:narrowB.records,path:"b"}],baseline);
   assert.equal(narrow.lanes[0].metrics.recentVerifiedFundingEvents,0);
+});
+
+test("daily D2: retained pending-HQ funding is separate from verified-US funding counters", async t => {
+  const store = await storeFor(t);
+  const current = await runEngine({...base,sources:await sources(),dryRun:true});
+  const pending = await directSources({fixtures:"fixtures/daily-engine/pending-hq",existing:[]});
+  const r = await runEngine({...base,sources:[...await sources(),...pending],db:store.db});
+  const record = r.records.find(r=>r.company.domain==="uscustomers.example")!;
+  assert.equal(record.company.hqStatus,"unknown"); assert.equal(record.fundingEvents.length,1);
+  assert.ok(r.assessments.some(a=>a.domain==="uscustomers.example" && a.disposition==="pending_hq" && a.funding));
+  assert.ok((await readRecords(store.db)).some(r=>r.company.domain==="uscustomers.example" && r.fundingEvents.length===1));
+  assert.equal(r.counts.fundingEventsNewCompanies,current.counts.fundingEventsNewCompanies+1);
+  assert.equal(r.counts.fundingEventsExistingCompanies,current.counts.fundingEventsExistingCompanies);
+  assert.equal(r.counts.verifiedFundingEventsNewCompanies,current.counts.verifiedFundingEventsNewCompanies);
+  assert.equal(r.counts.verifiedFundingEventsExistingCompanies,current.counts.verifiedFundingEventsExistingCompanies);
+  assert.equal(r.counts.pendingHqFundingEvents,current.counts.pendingHqFundingEvents+1);
+  assert.ok(r.counts.pendingHqFundingEvents>=1);
+  assert.equal(r.counts.fundingEventsNewCompanies+r.counts.fundingEventsExistingCompanies,
+    r.counts.verifiedFundingEventsNewCompanies+r.counts.verifiedFundingEventsExistingCompanies+r.counts.pendingHqFundingEvents);
+});
+
+async function retainedComparison() {
+  const inputs = await Promise.all(["lane-a","lane-b"].map(async lane => {
+    const report = JSON.parse(await readFile(`outputs/${lane}/run-report.json`,"utf8")) as DailyRun;
+    const records = JSON.parse(await readFile(`outputs/${lane}/records.json`,"utf8"));
+    return {report,records,path:`../${lane}`};
+  }));
+  const blocked = {report:JSON.parse(await readFile("outputs/tinyfish-blocked/run-report.json","utf8")) as DailyRun,path:"../tinyfish-blocked"};
+  return {inputs,blocked,data:buildComparison(inputs,baseline,blocked)};
+}
+
+test("daily D1: retained per-side verdicts, live blockers and friendly metric labels are receipt-derived", async () => {
+  const {inputs,blocked,data}=await retainedComparison();
+  const html=comparisonHtml(data);
+  for(const lane of data.lanes) {
+    const report=inputs.find(i=>i.report.lane===lane.lane)!.report;
+    assert.match(lane.functionalVerdict,/FIXTURE MECHANICS: ISSUES REPORTED/);
+    for(const stage of report.stageReceipts.filter(s=>!s.ok)) assert.ok(lane.functionalVerdict.includes(stage.stage));
+    for(const status of ["completed","failed","blocked"] as const) assert.ok(lane.functionalVerdict.includes(`${report.sourceReceipts.filter(r=>r.status===status).length} ${status==="completed"?"sources completed":status}`));
+    assert.ok(html.includes(lane.functionalVerdict.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")));
+    assert.equal(lane.liveYield,"UNKNOWN");
+    assert.equal(lane.metricLabels.baselineKnown,"Baseline-known companies");
+    assert.match(html,/New verified US companies \(absent from limited baseline\)/);
+    assert.match(html,/<small>recentVerifiedFundingEvents<\/small>/);
+    assert.equal(lane.metrics.recentVerifiedFundingEvents,lane.metrics.recentFundingExistingCompanies+lane.metrics.recentFundingNewCompanies);
+  }
+  assert.match(data.lanes[0].liveStatus,/LIVE: NOT RUN.*0 external requests/);
+  assert.match(data.lanes[1].liveStatus,/LIVE: BLOCKED — credentials\/configuration missing/);
+  const exact=blocked.report.sourceReceipts[0].missingPrerequisite!;
+  assert.equal(data.lanes[1].missingPrerequisite,exact); assert.ok(html.includes(exact));
+  assert.ok(html.includes('href="../tinyfish-blocked/run-report.json"'));
+  await stat(join("outputs/comparison",data.lanes[1].blockedReceiptPath!));
+  assert.match(data.recommendation,/mechanics tie.*No live evidence.*NOT evidence either lane is causally faster/);
+  const unavailable=buildComparison(inputs,baseline);
+  assert.match(unavailable.lanes[1].liveStatus,/prerequisite receipt unavailable/);
+  assert.equal(unavailable.lanes[1].blockedReceiptPath,null);
+  assert.ok(!unavailable.lanes[1].missingPrerequisite?.includes("Missing TINYFISH_API_KEY"));
+  const healthy=inputs.map(i=>({...i,report:{...i.report,stageReceipts:i.report.stageReceipts.map(s=>({...s,ok:true})),sourceReceipts:i.report.sourceReceipts.map(s=>({...s,status:"completed" as const}))}}));
+  assert.match(buildComparison(healthy,baseline).lanes[0].functionalVerdict,/FIXTURE MECHANICS: PASS/);
+});
+
+test("daily D3: baseline provenance separates unverified binding identity from limited coverage", async () => {
+  const {data}=await retainedComparison();
+  for(const content of [JSON.stringify(data),comparisonHtml(data)]) {
+    assert.match(content,/general-jobs-index/); assert.match(content,/UNVERIFIED/);
+    assert.match(content,/site-creator-d1/); assert.match(content,/Separate coverage limitation/);
+    assert.ok(!content.includes("Read-only frozen production board_sources export"));
+    assert.match(content,/absence from this limited baseline is not proof of novelty/);
+  }
+  assert.notEqual(data.liveComparison.sharedBaseline,"OK");
+  assert.match(data.liveComparison.sharedBaseline,/fixture baseline inputs.*production binding identity UNVERIFIED/);
+  assert.ok(!data.recommendation.includes("shared-baseline OK"));
 });

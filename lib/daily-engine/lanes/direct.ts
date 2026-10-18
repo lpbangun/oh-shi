@@ -42,11 +42,11 @@ export async function directSources(options: { fixtures?: string; existing: Cont
       const index = await fetchedDocument(session, feed.url, feed.website, feed.name);
       const candidates = [];
       let documentsChecked = 1;
-      if (feed.website) { const c = pageCandidate(index, context.now); if (c) candidates.push(c); }
+      if (feed.website) { const c = pageCandidate(index); if (c) candidates.push(c); }
       for (const link of fundingLinksFromHtml(index.body, feed.url).filter(l => permittedDocument(l.url, feed.website)).slice(0, 8)) {
         const doc = await fetchedDocument(session, link.url, feed.website, feed.name);
         documentsChecked++;
-        const c = pageCandidate(doc, context.now); if (c) candidates.push(c);
+        const c = pageCandidate(doc); if (c) candidates.push(c);
       }
       return { candidates, receipt: { sourceId: feed.id, lane: "direct", status: "completed", requests: context.caps.fetchRequests - before, documentsChecked, candidatesFound: candidates.length } };
     },

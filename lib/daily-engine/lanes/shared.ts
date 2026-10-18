@@ -33,7 +33,7 @@ export async function readCorpus(dir: string): Promise<Corpus> {
 export function malformed(doc: FixtureDocument): Error {
   return new Error("malformed_response status=" + doc.status + " content-type=" + doc.contentType + " excerpt=" + doc.body.slice(0, 180).replace(/\s+/g, " "));
 }
-export function pageCandidate(doc: FixtureDocument, now: string): AcquisitionCandidate | null {
+export function pageCandidate(doc: FixtureDocument): AcquisitionCandidate | null {
   if (doc.status < 200 || doc.status >= 300) throw new Error("source_http_" + doc.status);
   if (!/text\/html/i.test(doc.contentType)) throw malformed(doc);
   const metadata = pageMetadata(doc.body);
@@ -106,7 +106,7 @@ export function fixtureUnits(corpus: Corpus, lane: "direct" | "tinyfish"): Sourc
         if (/json/i.test(doc.contentType) || doc.url.includes("query.wikidata.org")) candidates.push(...sparqlCandidates(doc, corpus.now));
         else {
           if (!permittedDocument(doc.url, doc.website)) throw new Error("document_permission_denied");
-          const candidate = pageCandidate(doc, corpus.now);
+          const candidate = pageCandidate(doc);
           if (candidate) candidates.push(candidate);
         }
       }

@@ -11,7 +11,14 @@ const inputs = await Promise.all([get("--direct","outputs/lane-a"),get("--tinyfi
   records: JSON.parse(await readFile(path+"/records.json","utf8")),
   path: relative(out,resolve(path)),
 })));
-const data = buildComparison(inputs,baseline);
+const blockedDir = get("--blocked","outputs/tinyfish-blocked");
+let blocked;
+try {
+  blocked = { report: JSON.parse(await readFile(blockedDir+"/run-report.json","utf8")), path: relative(out,resolve(blockedDir)) };
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+const data = buildComparison(inputs,baseline,blocked);
 await mkdir(out,{recursive:true});
 await writeFile(out+"/comparison.json",JSON.stringify(data,null,2)+"\n");
 await writeFile(out+"/comparison.html",comparisonHtml(data));
