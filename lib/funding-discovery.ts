@@ -54,7 +54,7 @@ type PageMetadata = {
   publishedAt: string | null;
 };
 
-const REPUTABLE_SOURCES: FundingSource[] = [
+export const REPUTABLE_SOURCES: FundingSource[] = [
   {
     id: "techcrunch-venture",
     url: "https://techcrunch.com/category/venture/",

@@ -1,0 +1,166 @@
+{
+  "label": "FIXTURE",
+  "now": "2026-10-18T12:00:00.000Z",
+  "sources": [
+    {
+      "id": "zero-jobs",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://zerojobs.example/funding",
+          "website": "https://zerojobs.example/",
+          "name": "Zerojobs",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Zerojobs raised seed funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>Zerojobs is headquartered in Austin, United States.</p><p>Zerojobs raised seed funding.</p><a href=\"https://zerojobs.example/\">Zerojobs</a>"
+        }
+      ]
+    },
+    {
+      "id": "source-failure",
+      "permission": "permitted",
+      "error": "fixture_connection_reset",
+      "documents": []
+    },
+    {
+      "id": "unknown-hq",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://cloudlead.example/funding",
+          "website": "https://cloudlead.example/",
+          "name": "Cloudlead",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Cloudlead announces funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>US customers and USD billing. US office in Boston.</p><p>Cloudlead announces funding.</p><a href=\"https://cloudlead.example/\">Cloudlead</a>"
+        }
+      ]
+    },
+    {
+      "id": "non-us",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://maplefirm.example/funding",
+          "website": "https://maplefirm.example/",
+          "name": "Maplefirm",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Maplefirm closed seed funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>Maplefirm is headquartered in Toronto, Canada.</p><p>Maplefirm closed seed funding.</p><a href=\"https://maplefirm.example/\">Maplefirm</a>"
+        }
+      ]
+    },
+    {
+      "id": "baseline-known",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://vanta.com/funding",
+          "website": "https://vanta.com/",
+          "name": "Vanta",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Vanta announced funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>Vanta is headquartered in San Francisco, United States.</p><p>Vanta announced funding.</p><a href=\"https://vanta.com/\">Vanta</a>"
+        }
+      ]
+    },
+    {
+      "id": "missing-date",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://dateless.example/funding",
+          "website": "https://dateless.example/",
+          "name": "Dateless",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Dateless announces funding</title><p>Dateless is headquartered in Seattle, United States.</p><p>Dateless announces funding.</p><a href=\"https://dateless.example/\">Dateless</a>"
+        }
+      ]
+    },
+    {
+      "id": "speculative",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://maybe.example/funding",
+          "website": "https://maybe.example/",
+          "name": "Maybe",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Maybe announces plans to raise funding</title><p>Maybe is headquartered in Seattle, United States.</p><p>Maybe announces plans to raise funding.</p><a href=\"https://maybe.example/\">Maybe</a>"
+        }
+      ]
+    },
+    {
+      "id": "same-company",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://zerojobs.example/funding",
+          "website": "https://zerojobs.example/",
+          "name": "Zerojobs",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Zerojobs raised seed funding</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>Zerojobs is headquartered in Austin, United States.</p><p>Zerojobs raised seed funding.</p><a href=\"https://zerojobs.example/\">Zerojobs</a>"
+        },
+        {
+          "url": "https://zerojobs.example/second-round",
+          "website": "https://zerojobs.example/",
+          "name": "Zerojobs",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Zerojobs announces funding</title><meta property=\"article:published_time\" content=\"2026-10-16\"><p>Zerojobs is headquartered in Austin, United States.</p><p>Zerojobs announces funding.</p><a href=\"https://zerojobs.example/\">Zerojobs</a>"
+        }
+      ]
+    },
+    {
+      "id": "malformed-json",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://query.wikidata.org/sparql",
+          "status": 200,
+          "contentType": "application/json",
+          "body": "<html>upstream proxy login</html>"
+        }
+      ]
+    },
+    {
+      "id": "awaiting-investor",
+      "permission": "awaiting_permission",
+      "documents": []
+    },
+    {
+      "id": "blocked-investor",
+      "permission": "blocked",
+      "documents": []
+    },
+    {
+      "id": "unsupported-lead",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://unproven.example/funding",
+          "website": "https://unproven.example/",
+          "name": "Unproven",
+          "status": 200,
+          "contentType": "text/html",
+          "body": "<!doctype html><title>Unproven grows customers</title><meta property=\"article:published_time\" content=\"2026-10-17T09:00:00Z\"><p>Unproven is headquartered in Austin, United States.</p><p>Unproven grows customers.</p><a href=\"https://unproven.example/\">Unproven</a>"
+        }
+      ]
+    },
+    {
+      "id": "startup-identity",
+      "permission": "permitted",
+      "documents": [
+        {
+          "url": "https://query.wikidata.org/sparql",
+          "status": 200,
+          "contentType": "application/sparql-results+json",
+          "body": "{\"results\":{\"bindings\":[{\"company\":{\"value\":\"http://www.wikidata.org/entity/Q999999999\"},\"companyLabel\":{\"value\":\"Sprout\"},\"website\":{\"value\":\"https://sprout.example/\"},\"countryLabel\":{\"value\":\"United States\"}}]}}"
+        }
+      ]
+    }
+  ]
+}

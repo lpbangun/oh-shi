@@ -32,3 +32,4 @@ import "./discovery-source-checkpoint-d1.test";
 import "./discovery-evidence-slugs.test";
 import "./discovery-slug-corroboration.test";
 import "./cohort-staging.test";
+import "./daily-engine.test";
