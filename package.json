@@ -32,11 +32,11 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.2",
-    "next": "16.3.5",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "tldts": "7.4.13"
+    "drizzle-orm": "0.45.4",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tldts": "7.4.18"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
