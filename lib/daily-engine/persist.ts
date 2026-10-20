@@ -52,8 +52,11 @@ export async function commitSource(db: D1Database, id: string, snapshot: SourceS
         stage,funding_mode,lifecycle_status,hiring_score,evidence_confidence,latest_funding_label,
         latest_funding_date,careers_url,source_url,open_job_count,last_verified_at
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET latest_funding_label=excluded.latest_funding_label,
-      latest_funding_date=excluded.latest_funding_date,last_verified_at=excluded.last_verified_at`).bind(
+      ON CONFLICT(id) DO UPDATE SET
+      latest_funding_label=CASE WHEN COALESCE(julianday(excluded.latest_funding_date),0)>=COALESCE(julianday(companies.latest_funding_date),0) AND excluded.latest_funding_label<>'' THEN excluded.latest_funding_label ELSE companies.latest_funding_label END,
+      latest_funding_date=CASE WHEN COALESCE(julianday(excluded.latest_funding_date),0)>=COALESCE(julianday(companies.latest_funding_date),0) THEN excluded.latest_funding_date ELSE companies.latest_funding_date END,
+      stage=CASE WHEN COALESCE(julianday(excluded.latest_funding_date),0)>=COALESCE(julianday(companies.latest_funding_date),0) AND excluded.stage<>'' THEN excluded.stage ELSE companies.stage END,
+      last_verified_at=CASE WHEN COALESCE(julianday(excluded.last_verified_at),0)>=COALESCE(julianday(companies.last_verified_at),0) THEN excluded.last_verified_at ELSE companies.last_verified_at END`).bind(
         c.id,c.slug,c.name,c.domain,c.description,c.foundedYear,c.headquarters,c.employeeRange,c.industry,"Not published",
         c.stage,c.fundingMode,c.lifecycleStatus,0,0,c.latestFundingLabel,c.latestFundingDate,c.careersUrl,c.sourceUrl,c.openJobCount,c.lastCheckedAt
       ));

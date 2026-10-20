@@ -16,7 +16,12 @@ export function verifyFunding(c: AcquisitionCandidate, domain: string, existing:
   const reputable = REPUTABLE_SOURCES.some(s => new URL(s.url).hostname === url.hostname);
   if (url.protocol !== "https:" || (!official && !reputable)) return { event: null, reason: "unsupported_source" };
   const text = doc.title + ". " + doc.text;
-  if (/\b(?:in talks|seeking|seeks|plans? to raise|reportedly raising|targeting|may raise)\b/i.test(text)) {
+  // "Targeting" a disease/customer is not an unclosed financing claim.
+  // Keep legacy lane semantics; the captured intake requires financial context.
+  const speculative = c.announcementEvidence
+    ? /\b(?:in talks|seeking|seeks|plans? to raise|reportedly raising|may raise)\b|\btargeting\s+(?:a\s+)?(?:[$€£]\s*\d|(?:USD|EUR|GBP)\s*\d|\d[\d,.]*(?:\s*(?:million|billion|[mbk]))?\s+(?:in\s+)?(?:funding|financing)|funding|financing|series\b|seed\b|round\b)/i
+    : /\b(?:in talks|seeking|seeks|plans? to raise|reportedly raising|targeting|may raise)\b/i;
+  if (speculative.test(text)) {
     return { event: null, reason: "speculative" };
   }
   const subject = companyNameFromFundingTitle(doc.title);
@@ -30,11 +35,14 @@ export function verifyFunding(c: AcquisitionCandidate, domain: string, existing:
   const status = /\b(?:raised|secured|closed|landed)\b/i.test(doc.title) ? "completed" : "announced";
   // Missing fields remain unpublished; a headline amount/stage is not inferred.
   return { reason: null, event: {
-    id: "funding_" + stableId(domain + ":" + url.href),
+    // Captured announcements dedupe a company/day/round across publisher URLs.
+    // Legacy acquisition retains its accepted URL identity unchanged.
+    id: "funding_" + stableId(c.announcementEvidence ? [domain, occurredAt.slice(0, 10), c.funding?.stage || "unpublished-round"].join(":") : domain + ":" + url.href),
     companyName: c.companyName, companyDomain: domain, companyExisting: existing,
     title: doc.title, description: doc.text, occurredAt, discoveredAt: now, lastCheckedAt: now,
     sourceUrl: url.href, sourceKind: official ? "official" : "reputable", publisher: c.publisher,
     latestFundingLabel: c.funding?.label || "", stage: c.funding?.stage || null, status,
     evidenceGaps: occurredAt ? [] : ["announcement_date_missing"],
+    ...(c.announcementEvidence ? { captureEvidence: c.announcementEvidence } : {}),
   } };
 }

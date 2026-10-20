@@ -537,6 +537,7 @@ export type Company = {
   openJobCount: number;
   lastVerifiedAt: string;
   firstDiscoveredAt?: string | null;
+  discoveryEvidence?: import("./daily-engine/public-evidence").PublicDiscoveryEvidence;
   investors?: string[];
   providers?: string[];
 };

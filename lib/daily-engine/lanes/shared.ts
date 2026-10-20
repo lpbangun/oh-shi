@@ -1,3 +1,4 @@
+import { capturedRequest, redirectLocations, type CaptureRecorder } from "../capture";
 import { readFile } from "node:fs/promises";
 import { boundedText, PublicWebSession } from "../../public-web";
 import { companyNameFromFundingTitle, companyWebsiteFromFundingHtml, pageMetadata, REPUTABLE_SOURCES } from "../../funding-discovery";
@@ -74,17 +75,21 @@ export function permittedDocument(url: string, website?: string): boolean {
   } catch { return false; }
 }
 /** Every actual request, including robots and redirects, spends the shared cap. No retries. */
-export function budgetFetcher(caps: CapCounter, fetcher: typeof fetch = fetch): typeof fetch {
+export function budgetFetcher(caps: CapCounter, fetcher: typeof fetch = fetch, units = 1, capture?: CaptureRecorder, lane: "direct" | "tinyfish" = "direct"): typeof fetch {
   return async (input, init) => {
-    if (caps.fetchRequests >= caps.maxFetchRequests || Date.now() >= caps.deadlineAt) {
+    const before = caps.fetchRequests;
+    const perform = async () => {
+    if (caps.fetchRequests + units > caps.maxFetchRequests || Date.now() >= caps.deadlineAt) {
       caps.exceeded = true; throw new Error("request_or_time_cap");
     }
-    caps.fetchRequests++;
+    caps.fetchRequests += units;
     return fetcher(input, { ...init, signal: AbortSignal.timeout(Math.max(1, Math.min(15000, caps.deadlineAt - Date.now()))) });
+    };
+    return capture ? capturedRequest(capture, lane, input, init, perform, () => caps.fetchRequests - before) : perform();
   };
 }
-export function webSession(caps: CapCounter, fetcher?: typeof fetch) {
-  return new PublicWebSession(budgetFetcher(caps, fetcher), "OH-SHI/1.0 daily-discovery (https://ohshi.work/about)");
+export function webSession(caps: CapCounter, fetcher?: typeof fetch, capture?: CaptureRecorder) {
+  return new PublicWebSession(budgetFetcher(caps, fetcher, 1, capture), "OH-SHI/1.0 daily-discovery (https://ohshi.work/about)", response => redirectLocations.get(response) ?? response.headers.get("location"));
 }
 export async function fetchedDocument(session: PublicWebSession, url: string, website?: string, name?: string): Promise<FixtureDocument> {
   const response = await session.fetch(url);

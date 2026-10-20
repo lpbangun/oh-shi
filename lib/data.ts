@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { discoveryEvidenceByCompany } from "./daily-engine/public-evidence";
 import { companyDiverseJobs } from "./derive";
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
 import { discoveryEvidencePermissionSql, discoveryPermissionSql, discoveryRunnableSql } from "./discovery-policy";
@@ -1137,7 +1138,7 @@ export async function completeRefreshRun<T>(
 
 export async function listCompanies(): Promise<Company[]> {
   await ensureDatabase();
-  const [result, investors, providers, discovered] = await Promise.all([
+  const [result, investors, providers, discovered, discoveryEvidence] = await Promise.all([
     env.DB.prepare(
     `SELECT ${companyColumns} FROM companies ORDER BY hiring_score DESC, name ASC`
     ).all<Company>(),
@@ -1148,12 +1149,14 @@ export async function listCompanies(): Promise<Company[]> {
       WHERE enabled=1 ORDER BY provider`).all<{ companyId: string; provider: string }>(),
     env.DB.prepare(`SELECT company_id as companyId, MIN(first_discovered_at) as firstDiscoveredAt
       FROM company_sources GROUP BY company_id`).all<{ companyId: string; firstDiscoveredAt: string }>(),
+    discoveryEvidenceByCompany(env.DB),
   ]);
   return result.results.map((company) => ({
     ...company,
     investors: investors.results.filter((item) => item.companyId === company.id).map((item) => item.name),
     providers: providers.results.filter((item) => item.companyId === company.id).map((item) => item.provider),
-    firstDiscoveredAt: discovered.results.find((item) => item.companyId === company.id)?.firstDiscoveredAt || null,
+    firstDiscoveredAt: discovered.results.find((item) => item.companyId === company.id)?.firstDiscoveredAt || discoveryEvidence.get(company.id)?.firstSeenAt || null,
+    ...(discoveryEvidence.has(company.id) ? { discoveryEvidence: discoveryEvidence.get(company.id) } : {}),
   }));
 }
 
@@ -1443,16 +1446,18 @@ export async function persistFundingDiscoveries(
 
 export async function getCompanyBySlug(slug: string): Promise<Company | null> {
   await ensureDatabase();
-  return env.DB.prepare(`SELECT ${companyColumns} FROM companies WHERE slug = ?`)
+  const company = await env.DB.prepare(`SELECT ${companyColumns} FROM companies WHERE slug = ?`)
     .bind(slug)
     .first<Company>();
+  return company ? { ...company, discoveryEvidence: (await discoveryEvidenceByCompany(env.DB)).get(company.id) } : null;
 }
 
 export async function getCompanyById(id: string): Promise<Company | null> {
   await ensureDatabase();
-  return env.DB.prepare(`SELECT ${companyColumns} FROM companies WHERE id = ?`)
+  const company = await env.DB.prepare(`SELECT ${companyColumns} FROM companies WHERE id = ?`)
     .bind(id)
     .first<Company>();
+  return company ? { ...company, discoveryEvidence: (await discoveryEvidenceByCompany(env.DB)).get(company.id) } : null;
 }
 
 export async function getJobsForCompany(companyId: string): Promise<Job[]> {

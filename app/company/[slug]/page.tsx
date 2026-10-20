@@ -30,7 +30,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
             <span className="industry-label">Source industry: {company.industry}</span>
           </div>
           <h1 id="company-name">{company.name}</h1><p>{company.description}</p>
-          <div className="detail-actions"><a href={company.careersUrl} target="_blank" rel="noreferrer" className="primary-cta">Canonical careers</a><Link href={`/api/v1/companies/${company.id}`} className="secondary-cta">JSON record</Link></div>
+          <div className="detail-actions">{company.careersUrl && <a href={company.careersUrl} target="_blank" rel="noreferrer" className="primary-cta">Canonical careers</a>}<Link href={`/api/v1/companies/${company.id}`} className="secondary-cta">JSON record</Link></div>
         </div>
         <div className="big-signal"><strong>{receipts.hiring.value}</strong><span>Hiring momentum score (0-100)</span><small>Evidence confidence {receipts.evidence.value}/100</small></div>
       </section>
@@ -80,7 +80,12 @@ export default async function CompanyPage({ params }: { params: Promise<{ slug: 
       </div>
       <section className="company-timeline" aria-labelledby="evidence-trail-heading">
         <div className="section-heading compact"><h2 id="evidence-trail-heading">Evidence trail</h2></div>
-        {changes.length ? changes.map((change) => <article key={change.id}><time>{new Date(change.occurredAt).toLocaleDateString("en-US", { timeZone: "UTC" })}</time><div><strong>{change.title}</strong><p>{change.description}</p></div><a href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a></article>) : <p className="empty-state">No recorded changes for this company yet.</p>}
+        {company.discoveryEvidence && <>
+          <p>First seen: {company.discoveryEvidence.firstSeenAt} · Indexed: {company.discoveryEvidence.indexedAt || "Not recorded"} · Captured evidence last checked: {company.discoveryEvidence.lastCheckedAt}</p>
+          <p>US headquarters: <a href={company.discoveryEvidence.headquarters.evidenceUrl || company.sourceUrl} target="_blank" rel="noreferrer">Independent source</a></p>
+          {company.discoveryEvidence.fundingEvents.map(event => <article key={event.id}><time>{event.occurredAt.slice(0, 10)}</time><div><strong>{event.title}</strong><p>Announcement date from source. First seen {event.discoveredAt}; indexed {event.indexedAt || "Not recorded"}; last checked {event.lastCheckedAt}.</p></div><a href={event.sourceUrl} target="_blank" rel="noreferrer">Announcement</a></article>)}
+        </>}
+        {changes.length ? changes.map((change) => <article key={change.id}><time>{new Date(change.occurredAt).toLocaleDateString("en-US", { timeZone: "UTC" })}</time><div><strong>{change.title}</strong><p>{change.description}</p></div><a href={change.sourceUrl} target="_blank" rel="noreferrer">Source</a></article>) : !company.discoveryEvidence?.fundingEvents.length ? <p className="empty-state">No recorded changes for this company yet.</p> : null}
       </section>
     </main>
   );

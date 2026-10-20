@@ -127,6 +127,7 @@ export function pageMetadata(html: string): PageMetadata {
       "parsely-pub-date",
     ]) ||
     html.match(/["']datePublished["']\s*:\s*["']([^"']+)["']/i)?.[1] ||
+    html.match(/<time\b[^>]*\bdatetime\s*=\s*["']([^"']+)["']/i)?.[1] ||
     "";
   const parsed = Date.parse(decodeHtml(published));
   return {
@@ -172,8 +173,8 @@ function officialHost(company: Company, sourceUrl: string) {
   }
 }
 
-function fundingLabel(value: string) {
-  const amount = value.match(/[$€£]\s?\d+(?:[.,]\d+)?\s?(?:[kmb]|million|billion)?\+?/i)?.[0]
+export function fundingLabel(value: string) {
+  const amount = value.match(/[$€£]\s?\d+(?:[.,]\d+)?\s?(?:million|billion|[kmb])?\+?/i)?.[0]
     ?.replace(/\s+/g, " ");
   const round = value.match(/\b(?:pre[- ]?seed|seed|series\s+[a-h]|growth)(?:\s+(?:round|funding))?\b/i)?.[0];
   if (amount && round) return `${amount} ${round.replace(/\b\w/g, (letter) => letter.toUpperCase())}`;
@@ -182,7 +183,7 @@ function fundingLabel(value: string) {
   return "Funding announced";
 }
 
-function stageFromText(value: string) {
+export function stageFromText(value: string) {
   const series = value.match(/\bseries\s+([a-h])\b/i)?.[1];
   if (series) return `Series ${series.toUpperCase()}`;
   if (/\bpre[- ]?seed\b/i.test(value)) return "Pre-seed";
@@ -253,7 +254,7 @@ export function companyNameFromFundingTitle(title: string) {
     .trim()
     .replace(/^(?:breaking|exclusive|update|heard)\s*[:|–—-]\s*/i, "");
   const match = cleaned.match(
-    /^(.{2,80}?)\s+(?:raises?|raised|secures?|secured|closes?|closed|lands?|landed|announces?|announced)\b/i
+    /^(.{2,80}?)\s+(?:raises?|raised|secures?|secured|closes?|closed|lands?|landed|announces?|announced|launch(?:es|ed)? with(?=\s+[$€£]\s*\d))\b/i
   );
   const name = match?.[1]?.replace(/^[\s:;|–—-]+|[\s:;|–—-]+$/g, "").trim() || "";
   if (!name || /^(breaking|exclusive|how|why|what|the)\b/i.test(name)) return null;

@@ -1,5 +1,13 @@
 import { DISCOVERY_PIPELINE_VERSION } from "./discovery-version";
-import { discoveryRunnableSql } from "./discovery-policy";
+import { discoveryLeaseCutoff, discoveryRunnableSql } from "./discovery-policy";
+
+export const DISCOVERY_SCHEDULE_MAX_ITEMS = 25;
+
+/** Invalid/non-finite limits fail closed rather than leaking NaN/Infinity to SQL. */
+export function boundedDiscoveryScheduleLimit(requestedLimit: number) {
+  return Number.isFinite(requestedLimit)
+    ? Math.min(DISCOVERY_SCHEDULE_MAX_ITEMS, Math.max(0, Math.trunc(requestedLimit))) : 0;
+}
 
 export type ScheduledCandidate = {
   id: string;
@@ -13,11 +21,10 @@ export type ScheduledCandidate = {
 };
 
 const runnable = discoveryRunnableSql("q");
-const staleCutoff = (now: string) => new Date(Date.parse(now) - 60 * 60 * 1_000).toISOString();
 
 /** Reserve a share of each bounded page for retries so fresh arrivals cannot starve them. */
 export async function selectDiscoveryCandidates(database: D1Database, now: string, requestedLimit: number) {
-  const limit = Math.min(25, Math.max(0, Math.trunc(requestedLimit)));
+  const limit = boundedDiscoveryScheduleLimit(requestedLimit);
   if (!limit) return [] as ScheduledCandidate[];
   const load = (fresh: boolean) => database.prepare(`SELECT q.id,
     q.normalized_domain as normalizedDomain, q.company_name as companyName,
@@ -29,7 +36,7 @@ export async function selectDiscoveryCandidates(database: D1Database, now: strin
     ORDER BY ${fresh
       ? "q.first_discovered_at DESC, q.id DESC"
       : "COALESCE(q.next_attempt_at, q.first_discovered_at) ASC, q.id ASC"}
-    LIMIT ?`).bind(DISCOVERY_PIPELINE_VERSION, staleCutoff(now), now, limit)
+    LIMIT ?`).bind(DISCOVERY_PIPELINE_VERSION, discoveryLeaseCutoff(now), now, limit)
     .all<ScheduledCandidate>();
   const [fresh, retry] = await Promise.all([load(true), load(false)]);
   const freshQuota = Math.max(1, Math.ceil(limit * 0.7));
@@ -52,7 +59,7 @@ export async function claimDiscoveryCandidate(
   const result = await database.prepare(`UPDATE discovery_queue AS q SET
     status='resolving', last_attempted_at=?, attempt_count=attempt_count+1,
     next_attempt_at=NULL WHERE id=? AND ${runnable}`)
-    .bind(now, candidateId, DISCOVERY_PIPELINE_VERSION, staleCutoff(now), now).run();
+    .bind(now, candidateId, DISCOVERY_PIPELINE_VERSION, discoveryLeaseCutoff(now), now).run();
   if (Number(result.meta.changes || 0) !== 1) return null;
   const claimed = await database.prepare("SELECT attempt_count as attemptCount FROM discovery_queue WHERE id=?")
     .bind(candidateId).first<{ attemptCount: number }>();

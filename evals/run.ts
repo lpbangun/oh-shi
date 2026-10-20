@@ -33,3 +33,5 @@ import "./discovery-evidence-slugs.test";
 import "./discovery-slug-corroboration.test";
 import "./cohort-staging.test";
 import "./daily-engine.test";
+import "./announcement-pipeline.test";
+import "./announcement-scheduler.test";

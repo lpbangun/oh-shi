@@ -17,7 +17,7 @@ export async function directSources(options: { fixtures?: string; existing: Cont
       const url = new URL("https://query.wikidata.org/sparql");
       url.searchParams.set("query", WIKIDATA_QUERY); url.searchParams.set("format", "json");
       const before = context.caps.fetchRequests;
-      const response = await budgetFetcher(context.caps, options.fetcher)(url, {
+      const response = await budgetFetcher(context.caps, options.fetcher, 1, context.capture)(url, {
         redirect: "error", headers: { Accept: "application/sparql-results+json", "User-Agent": "OH-SHI/1.0 daily-discovery (https://ohshi.work/about)" },
       });
       const doc = { url: url.href, status: response.status, contentType: response.headers.get("content-type") || "", body: await boundedText(response, 1_000_000) };
@@ -38,7 +38,7 @@ export async function directSources(options: { fixtures?: string; existing: Cont
     id: feed.id, permission: "permitted",
     async acquire(context) {
       const before = context.caps.fetchRequests;
-      const session = webSession(context.caps, options.fetcher);
+      const session = webSession(context.caps, options.fetcher, context.capture);
       const index = await fetchedDocument(session, feed.url, feed.website, feed.name);
       const candidates = [];
       let documentsChecked = 1;

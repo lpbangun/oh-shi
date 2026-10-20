@@ -24,7 +24,10 @@ export type AcquisitionCandidate = {
     evidenceUrl: string;
   } | null;
   /** Retained fetched document, never a search snippet. Permission is checked by adapters. */
-  document?: { title: string; text: string; publishedAt: string; permission: "permitted" };
+  document?: { title: string; text: string; publishedAt: string; permission: "permitted"; retention?: "facts_only" };
+  /** Independently captured first-party HQ pages, not an acquisition/search hint. */
+  headquartersDocuments?: Array<{ url: string; text: string; capturedAt: string; sha256: string; permission: "permitted" }>;
+  announcementEvidence?: { capturedAt: string; sha256: string; permission: { status: string; basis: string; scope?: string; evidenceUrl: string; passage: string; evidenceSha256?: string; evidenceCapturedAt?: string } };
   /** For funding_event candidates. */
   funding?: {
     label: string | null;
@@ -44,6 +47,8 @@ export type SourceReceipt = {
   error?: string;
   /** Exact prerequisite text when status=blocked (e.g. missing credentials). */
   missingPrerequisite?: string;
+  fetchEnvelopes?: number;
+  documentsSkipped?: number;
   documentErrors?: Array<{ url: string; error: string }>;
 };
 
@@ -87,6 +92,8 @@ export type VerifiedFundingEvent = {
   /** Announcement date from the source; empty string when the source omits it. */
   occurredAt: string;
   discoveredAt: string;
+  /** First persistence time; separate from announcement and first observation. */
+  indexedAt?: string;
   lastCheckedAt: string;
   sourceUrl: string;
   sourceKind: "official" | "reputable";
@@ -95,6 +102,7 @@ export type VerifiedFundingEvent = {
   stage: string | null;
   status: "announced" | "completed";
   evidenceGaps: string[];
+  captureEvidence?: AcquisitionCandidate["announcementEvidence"];
 };
 
 /** A verified company record. Companies may exist with zero open jobs. */
@@ -108,6 +116,7 @@ export type EngineCompanyRecord = {
   hqStatus: HQStatus;
   hqEvidenceUrl: string | null;
   hqMethod: string | null;
+  hqCapture?: { capturedAt: string; sha256: string };
   foundedYear: number | null;
   employeeRange: string;
   industry: string;
@@ -121,6 +130,7 @@ export type EngineCompanyRecord = {
   evidenceUrl: string;
   openJobCount: number;
   discoveredAt: string;
+  indexedAt?: string;
   lastCheckedAt: string;
   lane: LaneId;
 };
@@ -184,6 +194,8 @@ export type AcquisitionLane = {
   id: LaneId;
   /** Acquire raw candidates per source, resuming from checkpoint, honoring caps. */
   acquire(context: {
+    capture?: import("./capture").CaptureRecorder;
+    lane?: LaneId;
     now: string;
     lookbackDays: number;
     caps: CapCounter;

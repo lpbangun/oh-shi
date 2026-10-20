@@ -129,7 +129,8 @@ export class PublicWebSession {
 
   constructor(
     private fetcher: typeof fetch = fetch,
-    private userAgent = USER_AGENT
+    private userAgent = USER_AGENT,
+    private redirectLocation = (response: Response): string | null => response.headers.get("location")
   ) {}
 
   async robotsFor(origin: string) {
@@ -144,7 +145,7 @@ export class PublicWebSession {
         signal: AbortSignal.timeout(10_000),
       });
       if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
+        const location = this.redirectLocation(response);
         if (!location) {
           await discardResponseBody(response);
           throw new Error("robots_redirect_missing_location");
@@ -186,7 +187,7 @@ export class PublicWebSession {
         signal: AbortSignal.timeout(15_000),
       });
       if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
+        const location = this.redirectLocation(response);
         if (!location) {
           await discardResponseBody(response);
           throw new Error("discovery_redirect_missing_location");

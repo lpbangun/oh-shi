@@ -1,3 +1,20 @@
+export const DISCOVERY_LEASE_MS = 60 * 60 * 1_000;
+
+export function discoveryLeaseCutoff(now: string) {
+  return new Date(Date.parse(now) - DISCOVERY_LEASE_MS).toISOString();
+}
+
+/** Same due/lease boundary as discoveryRunnableSql; callers validate timestamps. */
+export function discoveryAttemptDue(now: string, nextAttemptAt?: string, resolving = false, lastAttemptedAt?: string) {
+  return (!nextAttemptAt || Date.parse(nextAttemptAt) <= Date.parse(now)) &&
+    (!resolving || !lastAttemptedAt || Date.parse(lastAttemptedAt) < Date.parse(discoveryLeaseCutoff(now)));
+}
+
+export function discoveryDueSql(queueAlias: string) {
+  if (!/^[a-z][a-z0-9_]*$/i.test(queueAlias)) throw new Error("invalid_sql_alias");
+  return `(${queueAlias}.next_attempt_at IS NULL OR ${queueAlias}.next_attempt_at <= ?)`;
+}
+
 export const DISCOVERY_RETRY_BASE_MS = 6 * 60 * 60 * 1_000;
 export const DISCOVERY_RETRY_MAX_MS = 7 * 24 * 60 * 60 * 1_000;
 export const DISCOVERY_ACTIVATION_DEFER_MS = 2 * 60 * 60 * 1_000;
@@ -55,7 +72,7 @@ export function discoveryRunnableSql(queueAlias = "q") {
       ))
     )
     AND ${permission}
-    AND (${queueAlias}.next_attempt_at IS NULL OR ${queueAlias}.next_attempt_at <= ?)
+    AND ${discoveryDueSql(queueAlias)}
     AND NOT EXISTS (
       SELECT 1 FROM discovery_candidate_reviews active_review
       WHERE active_review.candidate_id=${queueAlias}.id

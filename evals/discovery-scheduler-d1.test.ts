@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import { claimDiscoveryCandidate, selectDiscoveryCandidates } from "../lib/discovery-scheduler";
-import { discoveryEmptyBoardRecheckAt } from "../lib/discovery-policy";
+import { discoveryAttemptDue, discoveryEmptyBoardRecheckAt } from "../lib/discovery-policy";
 
 const now = "2026-09-30T12:00:00.000Z";
 let serial = 0;
@@ -77,6 +77,24 @@ test("bounded selection gives due retries room and respects permission and revie
   assert.equal(selected.filter((row) => row.id.startsWith("fresh-")).length, 7);
   assert.equal(selected.filter((row) => row.id.startsWith("retry-")).length, 3);
   assert.equal(selected.some((row) => row.id === "denied" || row.id === "reviewed"), false);
+});
+
+test("shared local tick due/lease decisions match D1 claims and finite selection", async t => {
+  const db = await setup(t);
+  for (const [id, next, last, resolving] of [
+    ["due", now, undefined, false],
+    ["future", "2026-10-01T00:00:00.000Z", undefined, false],
+    ["leased", undefined, now, true],
+    ["boundary", undefined, "2026-09-30T11:00:00.000Z", true],
+    ["stale", undefined, "2026-09-30T10:59:59.999Z", true],
+  ] as const) {
+    await add(db, id, { next, last, status: resolving ? "resolving" : "discovered" });
+    const due = discoveryAttemptDue(now, next, resolving, last);
+    assert.equal((await claimDiscoveryCandidate(db, id, now)) !== null, due, id);
+  }
+  for (let index = 0; index < 30; index++) await add(db, `cap-${index}`);
+  assert.equal((await selectDiscoveryCandidates(db, now, 999)).length, 25);
+  for (const limit of [NaN, Infinity, -1, 0]) assert.equal((await selectDiscoveryCandidates(db, now, limit)).length, 0);
 });
 
 test("empty boards recheck on due date only and explicit reviews still block", async (t) => {
